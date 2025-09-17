@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Variables de color para modos claro y oscuro */
+.dark-mode {
+    --bg-primary: linear-gradient(135deg, #1a2332, #2d3748);
+    --bg-secondary: linear-gradient(135deg, #2d3748, #1a2332);
+    --bg-chat: linear-gradient(135deg, #374151, #4a5568);
+    --bg-contacts: #374151;
+    --text-primary: #ffffff;
+    --text-secondary: #14B8A6;
+    --border-color: #0D9488;
+    --accent-gradient: linear-gradient(135deg, #14B8A6, #0D9488);
+}
+
+.light-mode {
+    --bg-primary: linear-gradient(135deg, #f0fdfa, #ecfdf5);
+    --bg-secondary: linear-gradient(135deg, #ccfbf1, #d1fae5);
+    --bg-chat: linear-gradient(135deg, #a7f3d0, #99f6e4);
+    --bg-contacts: #ffffff;
+    --text-primary: #134E4A;
+    --text-secondary: #115E59;
+    --border-color: #14B8A6;
+    --accent-gradient: linear-gradient(135deg, #14B8A6, #0D9488);
+}
+
+.theme-bg-primary { background: var(--bg-primary); }
+.theme-bg-secondary { background: var(--bg-secondary); }
+.theme-bg-chat { background: var(--bg-chat); }
+.theme-text-primary { color: var(--text-primary); }
+.theme-text-secondary { color: var(--text-secondary); }
+.theme-border { border-color: var(--border-color); }
+
+/* Estilos de mensajes */
+.message-sent {
+    background: #f1f3f4;
+    color: #1a365d;
+}
+
+.dark-mode .message-sent {
+    background: #374151;
+    color: #ffffff;
+}
+
+.message-received {
+    background: linear-gradient(135deg, #0f766e, #0d9488);
+    color: #ffffff;
+}
+
+/* Manejo del scroll y altura */
+.scroll-smooth {
+    scroll-behavior: smooth;
+}
+
+.chat-container {
+    height: calc(100vh - 140px);
+}
+
+/* Responsive para el sidebar */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+}
