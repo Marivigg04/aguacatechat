@@ -1,0 +1,668 @@
+/* Estilos fundamentales para asegurar que la aplicación ocupe toda la altura de la ventana */
+html, body, #root, .App {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden; /* Evita el scroll horizontal no deseado */
+}
+
+/* auth-wrapper: Contenedor principal para centrar el 'auth-container' */
+.auth-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'Poppins', sans-serif;
+  overflow: hidden;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* auth-container: La "caja" principal que contiene los formularios y el overlay */
+.auth-container {
+  background-color: #f0f0f0; /* Un gris claro neutro, para que los paneles de color destaquen más */
+  border-radius: 12px;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22);
+  position: relative;
+  overflow: hidden;
+  width: 900px; /* Ancho del contenedor */
+  max-width: 95%;
+  min-height: 550px; /* Altura mínima del contenedor */
+}
+
+/* form-container: Contenedor para cada formulario (Login o Register) */
+.form-container {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 50%; /* Cada formulario ocupa la mitad del contenedor */
+  background-color: #f7fafd; /* Mantengo este blanco/gris muy claro para los formularios */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0 40px; /* Padding horizontal para el contenido del formulario */
+  box-sizing: border-box;
+  transition: all 0.6s ease-in-out; /* Transición para el movimiento y opacidad */
+}
+
+/* Posición y visibilidad inicial del formulario de inicio de sesión */
+.sign-in-container {
+  left: 0; /* Siempre en la mitad izquierda */
+  transform: translateX(0%); /* No se mueve inicialmente */
+  z-index: 3; /* Z-index alto para estar por encima del overlay cuando está activo */
+  opacity: 1; /* Visible por defecto */
+}
+
+/* Posición y visibilidad inicial del formulario de registro */
+.sign-up-container {
+  left: 50%; /* CRÍTICO: Siempre en la mitad derecha */
+  transform: translateX(100%); /* CRÍTICO: Lo empuja completamente a la derecha, fuera de vista */
+  z-index: 1; /* Z-index bajo para estar detrás del overlay cuando está inactivo */
+  opacity: 0; /* Oculto por defecto */
+}
+
+/* auth-container.right-panel-active: CLASE QUE CONTROLA LA ANIMACIÓN GLOBAL */
+
+/* Mueve el formulario de inicio de sesión fuera de vista y lo oculta */
+.auth-container.right-panel-active .sign-in-container {
+  transform: translateX(-100%); /* Lo mueve completamente a la izquierda */
+  opacity: 0; /* Oculta */
+  z-index: 1; /* Lo pone por debajo */
+}
+
+/* Mueve el formulario de registro a la vista y lo hace visible */
+.auth-container.right-panel-active .sign-up-container {
+  transform: translateX(0%); /* CRÍTICO: Lo mueve de vuelta a la posición 0% (visible en la mitad derecha) */
+  opacity: 1; /* Lo hace visible */
+  z-index: 3; /* Lo pone por encima */
+}
+
+/* overlay-container: Contenedor para el panel lateral que se desliza */
+.overlay-container {
+  position: absolute;
+  top: 0;
+  left: 50%; /* Empieza en la mitad derecha del auth-container */
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+  transition: transform 0.6s ease-in-out; /* Transición para el movimiento */
+  z-index: 2; /* Z-index intermedio, entre formularios activos e inactivos */
+}
+
+/* CAMBIO CLAVE: Mueve el overlay-container a la izquierda cuando right-panel-active está presente */
+.auth-container.right-panel-active .overlay-container {
+  transform: translateX(-100%);
+}
+
+/* overlay: El panel interno que se desliza dentro del overlay-container */
+.overlay {
+  background: linear-gradient(to right, #115E59, #14B8A6); /* Degradado con tus nuevos colores */
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: 0 0;
+  color: #fff;
+  position: relative;
+  left: -100%; /* Empieza 100% a la izquierda de su propio contenedor */
+  height: 100%;
+  width: 200%; /* El doble de ancho para contener ambos overlay-panels */
+  transform: translateX(0);
+  transition: transform 0.6s ease-in-out;
+  display: flex;
+}
+
+/* CAMBIO CLAVE: Mueve el overlay interno a la derecha cuando right-panel-active está presente */
+.auth-container.right-panel-active .overlay {
+  transform: translateX(50%);
+}
+
+/* overlay-panel: Los paneles individuales dentro del overlay */
+.overlay-panel {
+  display: flex;
+  justify-content: center; /* Centra verticalmente */
+  flex-direction: column;
+  padding: 0 60px; /* Padding horizontal para dar espacio a los lados */
+  height: 100%;
+  width: 50%; /* Cada panel ocupa la mitad del overlay (que es 200% del contenedor) */
+  transition: all 0.6s ease-in-out; /* Transición para opacidad y visibilidad */
+
+  /* Centrado horizontal para el contenido de los paneles */
+  align-items: center;
+  text-align: center;
+}
+
+/* Posición y visibilidad de los paneles del overlay */
+.overlay-left {
+  opacity: 0; /* Oculto inicialmente */
+  z-index: 1;
+}
+
+.overlay-right {
+  opacity: 1; /* Visible inicialmente */
+  z-index: 2;
+}
+
+/* auth-container.right-panel-active: Cambia la visibilidad de los paneles del overlay */
+.auth-container.right-panel-active .overlay-left {
+  opacity: 1; /* Lo hace visible */
+  z-index: 2;
+}
+
+.auth-container.right-panel-active .overlay-right {
+  opacity: 0; /* Lo oculta */
+  z-index: 1;
+}
+
+
+/* Estilos para los h2 de los formularios */
+.auth-form h2 {
+  font-size: 1.5rem;
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  color: #115E59; /* Color de texto para los títulos de formulario */
+}
+
+.login-form h2 {
+  color: #202841; /* Color principal de acento para el título de Login */
+}
+
+.register-form h2 {
+  color: #202841; /* Color principal de acento para el título de Register */
+}
+
+/* Estilos para los inputs (todos los inputs, incluyendo contraseña por defecto) */
+.auth-form input {
+  width: 100%;
+  padding: 0.65rem;
+  margin-bottom: 0.65rem; /* Margen estándar para los inputs */
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  font-size: 1rem;
+  outline: none;
+  font-family: 'Poppins', sans-serif;
+  box-sizing: border-box;
+  background-color: #eee;
+  color: #514f4f; /* Color de texto para inputs */
+}
+
+/* Estilo de foco genérico para CUALQUIER input cuando está activo */
+.auth-form input:focus {
+  border-color: #0D9488; /* Borde de foco con tu color principal */
+  box-shadow: 0 0 0 3px #14B8A688; /* Sombra de foco con tu color principal */
+}
+
+.auth-form input.valid {
+  color: #2ed573; /* Mantener color verde para "válido" */
+}
+
+.auth-form input.invalid {
+  color: #ee3c23; /* Tu nuevo rojo para "inválido" */
+}
+
+/* Estilos para los labels */
+.auth-form label {
+  text-align: left;
+  width: 100%;
+  margin-top: 10px;
+  margin-bottom: 3px;
+  color: #514f4f; /* Color de texto para labels */
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+/* Estilos para los botones de submit en los formularios */
+.auth-form button[type="submit"] {
+  width: 100%;
+  background-color: #14645b; /* Tu color principal */
+  color: white;
+  border: none;
+  padding: 0.8rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  font-family: 'Poppins', sans-serif;
+  margin-top: 20px;
+}
+
+.auth-form button[type="submit"]:hover {
+  background-color: #514f4f; /* Tu color secundario al pasar el mouse */
+  transform: scale(1.02);
+}
+
+/* Estilos para el botón "fantasma" del overlay */
+.ghost-button {
+  background-color: transparent;
+  border: 1px solid #fff;
+  color: #fff;
+  padding: 12px 45px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  margin-top: 24px;
+  transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+}
+
+.ghost-button:hover {
+  background-color: #fff;
+  color: #202841; /* Al pasar el mouse, toma tu color principal */
+}
+
+/* Estilos para el contenido del overlay */
+.overlay-content {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 0px;
+}
+
+.overlay-content h2 {
+  font-size: 28px;
+  margin-bottom: 15px;
+  max-width: 250px;
+  word-wrap: break-word;
+  white-space: normal;
+  overflow-wrap: break-word;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+.overlay-content p {
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  margin: 15px 0 25px;
+  max-width: 280px;
+  word-wrap: break-word;
+  white-space: normal;
+  overflow-wrap: break-word;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.overlay-panel .ghost-button {
+  margin-top: 20px; /* Espacio encima del botón */
+}
+
+/* Ocultamos los botones de alternar dentro de los formularios */
+.auth-form .switch-button {
+  display: none;
+}
+
+/* -- INICIO: Estilos de Lottie en Formularios -- */
+.login-lottie-icon,
+.register-lottie-icon {
+  margin-bottom: 20px; /* Espacio entre el icono Lottie y el h2 del formulario */
+  pointer-events: none;
+  cursor: default;
+}
+/* -- FIN: Estilos de Lottie en Formularios -- */
+
+/* -- INICIO: Estilos de Contraseña y Fortaleza (COMO MENSAJE EMERGENTE CON ANIMACIÓN MANUAL) -- */
+
+/* Estilo base para el input de contraseña */
+.auth-form input.password-input {
+  border: 1px solid #ccc; /* Borde gris claro por defecto para el input de contraseña */
+}
+
+/* Colores para el BORDE del input de contraseña según la fortaleza (estos NO se cambian) */
+.auth-form input.password-strength-border-low,
+.auth-form input.password-strength-border-low:focus {
+  border-color: #ff4757 !important;
+  box-shadow: 0 0 0 3px rgba(255, 71, 87, 0.25) !important;
+}
+.auth-form input.password-strength-border-medium,
+.auth-form input.password-strength-border-medium:focus {
+  border-color: #ffa502 !important;
+  box-shadow: 0 0 0 3px rgba(255, 165, 2, 0.25) !important;
+}
+.auth-form input.password-strength-border-strong,
+.auth-form input.password-strength-border-strong:focus {
+  border-color: #2ed573 !important;
+  box-shadow: 0 0 0 3px rgba(46, 213, 115, 0.25) !important;
+}
+.auth-form input.password-strength-border-very-strong,
+.auth-form input.password-strength-border-very-strong:focus {
+  border-color: #1e90ff !important;
+  box-shadow: 0 0 0 3px rgba(30, 144, 255, 0.25) !important;
+}
+
+/* Estilos para el contenedor del input de contraseña y el icono */
+/* CAMBIO CLAVE AQUÍ: Aumentamos la especificidad para asegurar que esta regla prevalezca */
+.auth-form.register-form .password-input-container {
+  position: relative;
+  width: 100%;
+  margin-bottom: 3px !important; /* Valor más negativo y !important */
+}
+
+/* Asegura que el input tenga suficiente espacio a la derecha para el icono */
+.password-input-container input {
+  padding-right: 45px;
+}
+
+/* Estilos para el icono de mostrar/ocultar contraseña */
+.password-toggle-icon {
+  position: absolute;
+  right: 8px;
+  top: 40%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  color: #115E59; /* Color del ojo con tu nueva paleta */
+  font-size: 1rem;
+  z-index: 10;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.2s ease-in-out;
+}
+
+.password-toggle-icon:hover {
+  color: #14B8A6; /* Color al pasar el mouse con tu nueva paleta */
+  background-color: rgba(32, 40, 65, 0.1); /* Sombra al pasar el mouse */
+}
+
+/* ESTILOS PARA EL FEEDBACK DE FORTALEZA (COMO MENSAJE EMERGENTE CON ANIMACIÓN MANUAL) */
+.password-strength-feedback {
+  position: absolute;
+  top: calc(100% - 5px);
+  left: 0;
+  width: 100%;
+  z-index: 20;
+
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 10px 15px;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.password-strength-feedback.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Estilos para el TEXTO del indicador de fortaleza */
+.password-strength-text {
+  font-size: 0.75rem;
+  font-weight: bold;
+  transition: color 0.3s ease-in-out;
+  margin-bottom: 0px;
+  text-align: left;
+}
+
+/* Colores para el TEXTO del indicador de fortaleza (estos NO se cambian) */
+.password-strength-text-none { color: #888; }
+.password-strength-text-low { color: #ff4757; }
+.password-strength-text-medium { color: #ffa502; }
+.password-strength-text-strong { color: #2ed573; }
+.password-strength-text-very-strong { color: #1e90ff; }
+
+/* Contenedor de la barra de fortaleza */
+.password-strength-bar-container {
+  width: 100%;
+  height: 5px;
+  background-color: #e0e0e0;
+  border-radius: 2.5px;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+/* La barra de fortaleza que se llena (estos NO se cambian) */
+.password-strength-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 2.5px;
+  transition: width 0.3s ease-in-out, background-color 0.3s ease-in-out;
+}
+
+.password-strength-bar-none {
+  width: 0%;
+  background-color: #e0e0e0;
+}
+.password-strength-bar-low {
+  width: 25%;
+  background-color: #ff4757;
+}
+.password-strength-bar-medium {
+  width: 50%;
+  background-color: #ffa502;
+}
+.password-strength-bar-strong {
+  width: 75%;
+  background-color: #2ed573;
+}
+.password-strength-bar-very-strong {
+  width: 100%;
+  background-color: #1e90ff;
+}
+
+/* FIN DE LOS ESTILOS DE CONTRASEÑA Y FORTALEZA */
+
+/* INICIO: ESTILOS PARA EL MENSAJE DE ERROR DE CONTRASEÑA NO COINCIDENTE */
+.password-error-message {
+  position: absolute;
+  top: calc(100% - -5px);
+  left: 0;
+  width: 100%;
+  z-index: 21;
+
+  background-color: #ffe0e6;
+  border: 1px solid #ee3c23;
+  color: #ee3c23;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 10px 15px;
+  box-sizing: border-box;
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: bold;
+
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.password-error-message.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* --- NUEVOS ESTILOS PARA EL CONTENEDOR DEL ICONO CHECKMARK (Lottie) --- */
+.checkmark-icon-container {
+  position: absolute;
+  right: 14px;
+  top: 40%;
+  transform: translateY(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* END: NUEVOS ESTILOS PARA EL CONTENEDOR DEL ICONO CHECKMARK */
+
+/* --- NUEVA CLASE PARA OCULTAR ELEMENTOS --- */
+.hidden {
+  visibility: hidden;
+  opacity: 0;
+  transition: visibility 0s 0.3s, opacity 0.3s linear;
+}
+/* END: NUEVA CLASE PARA OCULTAR ELEMENTOS */
+
+/* NUEVO ESTILO PARA EL ENLACE DE "OLVIDÉ MI CONTRASEÑA" */
+.forgot-password-link {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 10px;
+  color: #202841; /* Tu color principal para enlaces */
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.3s ease;
+}
+
+.forgot-password-link:hover {
+  color: #007bff; /* Color azul cuando el usuario pasa el cursor */
+}
+
+/* AJUSTE CLAVE: Reducido el margen superior para el label de confirmar contraseña */
+/* Aumentamos especificidad para que esta regla prevalezca */
+.auth-form.register-form label[for="register-confirm-password"] {
+    margin-top: 0px !important; /* Asegura que no haya margen superior en este label */
+}
+
+/* Adaptación responsiva para pantallas pequeñas */
+@media (max-width: 768px) {
+  .auth-container {
+    width: 100%;
+    min-height: 600px;
+    flex-direction: column;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .form-container, .overlay-container {
+    width: 100%;
+    position: relative;
+    left: 0;
+    transform: none !important;
+    padding: 20px;
+  }
+
+  .overlay-container {
+    order: -1;
+    height: auto;
+  }
+
+  .overlay {
+    width: 100%;
+    left: 0;
+    transform: none !important;
+    height: auto;
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .overlay-panel {
+    width: 100%;
+    position: relative;
+    transform: none !important;
+    padding: 20px;
+    align-items: center;
+    text-align: center;
+  }
+
+  .overlay-left, .overlay-right {
+    display: none;
+  }
+
+  .auth-container:not(.right-panel-active) .overlay-right {
+    display: flex;
+  }
+
+  .auth-container.right-panel-active .overlay-left {
+    display: flex;
+  }
+
+  .sign-in-container, .sign-up-container {
+    position: relative;
+    width: 100%;
+    transform: none !important;
+    height: auto;
+    opacity: 1;
+  }
+
+  .auth-container:not(.right-panel-active) .sign-up-container {
+    display: none;
+  }
+
+  .auth-container.right-panel-active .sign-in-container {
+    display: none;
+  }
+
+  .overlay-content h2 {
+    font-size: 24px;
+  }
+
+  .overlay-content p {
+    margin: 15px 0 25px;
+  }
+
+  .ghost-button {
+    margin-top: 10px;
+  }
+
+  /* Ajuste para los mensajes emergentes en móvil si se superponen */
+  .password-strength-feedback,
+  .password-error-message {
+    left: 5%;
+    width: 90%;
+  }
+}
+
+/* Estilos para el div #root, donde se monta tu aplicación React */
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.lottie-panel-icon {
+  margin-bottom: 20px;
+  pointer-events: none;
+  cursor: default;
+}
+
+.auth-form.login-form {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-lottie-icon,
+.register-lottie-icon {
+  margin-bottom: 10px;
+  pointer-events: none;
+  cursor: default;
+}
+
+html, body {
+  font-family: 'Poppins', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Imagen de fondo */
+#background-image {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  min-width: 100%;
+  min-height: 100%;
+  z-index: -1;
+  object-fit: cover;
+  filter: brightness(60%) contrast(110%);
+  transition: filter 0.5s ease-in-out;
+}
