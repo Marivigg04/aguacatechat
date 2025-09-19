@@ -274,7 +274,7 @@ const AguacateChat = () => {
                     </div>
                 </div>
 
-                <div id="chatArea" className="flex-1 overflow-y-auto p-4 space-y-4 chat-container scroll-smooth theme-bg-primary">
+                <div id="chatArea" className="flex-1 overflow-y-auto p-4 space-y-4 chat-container scroll-smooth">
                     {chatMessages.map((message, index) => (
                         <div key={index} className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
                             {message.type === 'received' && (
