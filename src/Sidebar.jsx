@@ -1,5 +1,7 @@
 import React from 'react';
 import Lottie from 'react-lottie';
+import filterAnimation from './animations/Filter.json';
+import { useState } from 'react';
 
 const Sidebar = ({
     showSideMenu,
@@ -15,21 +17,48 @@ const Sidebar = ({
     setConfigPaused,
     isConfigStopped,
     setConfigStopped
-}) => (
-    <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r">
-        <div className="flex flex-col items-center pt-6">
-            <button
-                className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity flex flex-col gap-1 items-center"
-                title="Menú"
-                onClick={() => setShowSideMenu(!showSideMenu)}
-            >
-                <span className="block w-6 h-1 bg-teal-primary rounded mb-1"></span>
-                <span className="block w-6 h-1 bg-teal-primary rounded mb-1"></span>
-                <span className="block w-6 h-1 bg-teal-primary rounded"></span>
-            </button>
-        </div>
-        {showSideMenu && (
-            <div className="fixed top-0 left-0 h-full w-64 theme-bg-secondary theme-border border-r shadow-2xl z-50 flex flex-col pt-8">
+}) => {
+    const [isFilterPaused, setFilterPaused] = useState(true);
+    const [isFilterStopped, setFilterStopped] = useState(false);
+
+    return (
+        <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r">
+            <div className="flex flex-col items-center pt-6">
+                <button
+                    className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity flex flex-col gap-1 items-center"
+                    title="Menú"
+                    onClick={() => setShowSideMenu(!showSideMenu)}
+                    onMouseEnter={() => {
+                        setFilterStopped(true);
+                        setTimeout(() => {
+                            setFilterStopped(false);
+                            setFilterPaused(false);
+                        }, 10);
+                    }}
+                    onMouseLeave={() => setFilterPaused(true)}
+                >
+                    <div className="w-8 h-8 flex items-center justify-center">
+                        <Lottie
+                            options={{
+                                loop: true,
+                                autoplay: true,
+                                animationData: filterAnimation,
+                                rendererSettings: {
+                                    preserveAspectRatio: 'xMidYMid slice'
+                                }
+                            }}
+                            isPaused={isFilterPaused}
+                            isStopped={isFilterStopped}
+                            height={32}
+                            width={32}
+                        />
+                    </div>
+                </button>
+            </div>
+        <div
+            className={`fixed top-0 left-0 h-full w-64 theme-bg-secondary theme-border border-r shadow-2xl z-50 flex flex-col pt-8 sidebar-slide ${showSideMenu ? 'sidebar-slide-in' : 'sidebar-slide-out'}`}
+            style={{ pointerEvents: showSideMenu ? 'auto' : 'none' }}
+        >
                 <button
                     className="w-full text-left p-4 hover:theme-bg-chat theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
                     onClick={() => {
@@ -75,8 +104,7 @@ const Sidebar = ({
                     ✕
                 </button>
             </div>
-        )}
-    </div>
-);
-
+        </div>
+    );
+}
 export default Sidebar;
