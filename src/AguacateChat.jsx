@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import Lottie from 'react-lottie';
 import './AguacateChat.css';
+
+// 1. Importar los archivos de animación desde la carpeta src/animations
+import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
+import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
+import animationSmile from './animations/wired-flat-261-emoji-smile-hover-smile.json';
+import animationLink from './animations/wired-flat-11-link-unlink-hover-bounce.json';
+import animationShare from './animations/wired-flat-751-share-hover-pointing.json'; 
+import animationSend from './animations/wired-flat-177-envelope-send-hover-flying.json'; // Cambia el import por el nuevo archivo
+import animationPhoto from './animations/wired-lineal-61-camera-hover-flash.json'; // Asegúrate de tener este archivo
+import animationVideo from './animations/wired-flat-1037-vlog-camera-hover-pinch.json'; // Asegúrate de tener este archivo
 
 const initialContacts = [
     { name: 'Ana García', status: '🟢', lastMessage: '¡Hola! ¿Cómo estás?', time: '14:30', initials: 'AG' },
@@ -44,6 +55,32 @@ const AguacateChat = () => {
     const [showContactModal, setShowContactModal] = useState(false);
     const [modalType, setModalType] = useState('chat');
     const [selectedGroupContacts, setSelectedGroupContacts] = useState([]);
+    const [showAttachMenu, setShowAttachMenu] = useState(false);
+    
+    // 2. Estados para controlar las animaciones al pasar el cursor
+    const [isSearchPaused, setSearchPaused] = useState(true);
+    const [isSearchStopped, setSearchStopped] = useState(false);
+
+    const [isLinkPaused, setLinkPaused] = useState(true);
+    const [isLinkStopped, setLinkStopped] = useState(false);
+
+    const [isSmilePaused, setSmilePaused] = useState(true);
+    const [isSmileStopped, setSmileStopped] = useState(false);
+
+    const [isTrashPaused, setTrashPaused] = useState(true);
+    const [isTrashStopped, setTrashStopped] = useState(false);
+
+    const [isSharePaused, setSharePaused] = useState(true);
+    const [isShareStopped, setShareStopped] = useState(false);
+
+    const [isSendPaused, setSendPaused] = useState(true);
+    const [isSendStopped, setSendStopped] = useState(false);
+
+    const [isPhotoPaused, setPhotoPaused] = useState(true);
+    const [isPhotoStopped, setPhotoStopped] = useState(false);
+
+    const [isVideoPaused, setVideoPaused] = useState(true);
+    const [isVideoStopped, setVideoStopped] = useState(false);
 
     const allContacts = [
         ...initialContacts,
@@ -52,6 +89,27 @@ const AguacateChat = () => {
         { name: 'David González', status: '🔴', lastMessage: 'Ok, hablamos más tarde', time: 'Ayer', initials: 'DG' },
         { name: 'Sofia Ruiz', status: '🟢', lastMessage: 'Nos vemos pronto', time: 'Hace 2h', initials: 'SR' }
     ];
+
+    // 3. Opciones por defecto para cada animación
+    const createLottieOptions = (animationData) => ({
+        loop: false,
+        autoplay: false,
+        animationData: animationData,
+        rendererSettings: {
+            preserveAspectRatio: 'xMidYMid slice'
+        }
+    });
+
+    const lottieOptions = {
+        search: createLottieOptions(animationSearch),
+        link: createLottieOptions(animationLink),
+        smile: createLottieOptions(animationSmile),
+        trash: createLottieOptions(animationTrash),
+        share: createLottieOptions(animationShare),
+        send: createLottieOptions(animationSend), // Asegúrate que use el nuevo icono
+        photo: createLottieOptions(animationPhoto),
+        video: createLottieOptions(animationVideo),
+    };
 
     useEffect(() => {
         document.body.className = isDarkMode ? 'dark-mode theme-bg-primary theme-text-primary transition-colors duration-300' : 'light-mode theme-bg-primary theme-text-primary transition-colors duration-300';
@@ -173,7 +231,13 @@ const AguacateChat = () => {
                             </button>
                         </div>
                     </div>
-                    <div className="relative">
+                    <div className="relative" onMouseEnter={() => {
+                        setSearchStopped(true);
+                        setTimeout(() => {
+                            setSearchStopped(false);
+                            setSearchPaused(false);
+                        }, 10);
+                    }} onMouseLeave={() => setSearchPaused(true)}>
                         <input
                             id="searchInput"
                             type="text"
@@ -182,7 +246,10 @@ const AguacateChat = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
-                        <span className="absolute left-3 top-3 theme-text-secondary">🔍</span>
+                        {/* 4. REEMPLAZO DEL ICONO DE BÚSQUEDA */}
+                        <div className="absolute left-2 top-1/2 transform -translate-y-1/2 pointer-events-none w-6 h-6">
+                            <Lottie options={lottieOptions.search} isPaused={isSearchPaused} isStopped={isSearchStopped} />
+                        </div>
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto relative" style={{ backgroundColor: 'var(--bg-contacts)' }}>
@@ -249,7 +316,10 @@ const AguacateChat = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="relative">
-                            <button onClick={toggleChatOptions} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" title="Opciones del chat">⚙️</button>
+                            <button onClick={toggleChatOptions} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" title="Opciones del chat">
+                                {/* Icono de tres puntos */}
+                                <span style={{ fontSize: '1.5rem', lineHeight: '1' }}>⋯</span>
+                            </button>
                             <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu ? '' : 'hidden'}`}>
                                 <button onClick={() => { alert('Silenciar notificaciones'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2">
                                     🔇 <span>Silenciar notificaciones</span>
@@ -257,11 +327,38 @@ const AguacateChat = () => {
                                 <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
                                     📌 <span>Fijar conversación</span>
                                 </button>
-                                <button onClick={() => { alert('Exportar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
-                                    📋 <span>Exportar chat</span>
+                                <button onClick={() => { alert('Exportar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                    onMouseEnter={() => {
+                                        setShareStopped(true);
+                                        setTimeout(() => {
+                                            setShareStopped(false);
+                                            setSharePaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setSharePaused(true)}
+                                >
+                                    <div className="w-5 h-5">
+                                        <Lottie options={lottieOptions.share} isPaused={isSharePaused} isStopped={isShareStopped}/>
+                                    </div>
+                                    <span>Exportar chat</span>
                                 </button>
-                                <button onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
-                                    🗑️ <span>Limpiar chat</span>
+                                {/* 4. REEMPLAZO DEL ICONO DE LIMPIAR CHAT */}
+                                <button 
+                                    onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
+                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                    onMouseEnter={() => {
+                                        setTrashStopped(true);
+                                        setTimeout(() => {
+                                            setTrashStopped(false);
+                                            setTrashPaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setTrashPaused(true)}
+                                >
+                                    <div className="w-5 h-5">
+                                        <Lottie options={lottieOptions.trash} isPaused={isTrashPaused} isStopped={isTrashStopped}/>
+                                    </div>
+                                    <span>Limpiar chat</span>
                                 </button>
                                 <button onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
                                     🚫 <span>Bloquear contacto</span>
@@ -291,8 +388,98 @@ const AguacateChat = () => {
 
                 <div className="theme-bg-secondary theme-border border-t p-4">
                     <div className="flex items-center gap-3">
-                        <button onClick={() => alert('Adjuntar archivo')} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" title="Adjuntar archivo">📎</button>
-                        <button onClick={() => alert('Mostrar emojis')} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" title="Emojis">😊</button>
+                        {/* 4. REEMPLAZO DEL ICONO DE ADJUNTAR */}
+                        <button 
+                            onClick={() => setShowAttachMenu(!showAttachMenu)} 
+                            className="p-1 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" 
+                            title="Adjuntar archivo"
+                            onMouseEnter={() => {
+                                setLinkStopped(true);
+                                setTimeout(() => {
+                                    setLinkStopped(false);
+                                    setLinkPaused(false);
+                                }, 10);
+                            }}
+                            onMouseLeave={() => setLinkPaused(true)}
+                        >
+                            <div className="w-8 h-8">
+                                <Lottie options={lottieOptions.link} isPaused={isLinkPaused} isStopped={isLinkStopped}/>
+                            </div>
+                        </button>
+                        {showAttachMenu && (
+                            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                                <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col">
+                                    <div className="p-4 theme-border border-b flex items-center justify-between">
+                                        <h3 className="text-lg font-bold theme-text-primary">Adjuntar archivo</h3>
+                                        <button onClick={() => setShowAttachMenu(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
+                                            ✕
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-col gap-2 p-4">
+                                        <button
+                                            className="flex items-center gap-2 p-2 rounded transition-colors" // Quitar hover:bg-gray-100
+                                            onClick={() => { alert('Enviar foto'); setShowAttachMenu(false); }}
+                                            onMouseEnter={() => {
+                                                setPhotoStopped(true);
+                                                setTimeout(() => {
+                                                    setPhotoStopped(false);
+                                                    setPhotoPaused(false);
+                                                }, 10);
+                                            }}
+                                            onMouseLeave={() => {
+                                                setPhotoPaused(true);
+                                                setPhotoStopped(true);
+                                                setTimeout(() => setPhotoStopped(false), 10);
+                                            }}
+                                        >
+                                            <div className="w-8 h-8">
+                                                <Lottie options={lottieOptions.photo} isPaused={isPhotoPaused} isStopped={isPhotoStopped} />
+                                            </div>
+                                            <span className="theme-text-primary">Enviar foto</span>
+                                        </button>
+                                        <button
+                                            className="flex items-center gap-2 p-2 rounded transition-colors" // Quitar hover:bg-gray-100
+                                            onClick={() => { alert('Enviar video'); setShowAttachMenu(false); }}
+                                            onMouseEnter={() => {
+                                                setVideoStopped(true);
+                                                setTimeout(() => {
+                                                    setVideoStopped(false);
+                                                    setVideoPaused(false);
+                                                }, 10);
+                                            }}
+                                            onMouseLeave={() => {
+                                                setVideoPaused(true);
+                                                setVideoStopped(true);
+                                                setTimeout(() => setVideoStopped(false), 10);
+                                            }}
+                                        >
+                                            <div className="w-8 h-8">
+                                                <Lottie options={lottieOptions.video} isPaused={isVideoPaused} isStopped={isVideoStopped} />
+                                            </div>
+                                            <span className="theme-text-primary">Enviar video</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {/* 4. REEMPLAZO DEL ICONO DE EMOJI */}
+                        <button 
+                            onClick={() => alert('Mostrar emojis')} 
+                            className="p-1 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" 
+                            title="Emojis"
+                            onMouseEnter={() => {
+                                setSmileStopped(true);
+                                setTimeout(() => {
+                                    setSmileStopped(false);
+                                    setSmilePaused(false);
+                                }, 10);
+                            }}
+                            onMouseLeave={() => setSmilePaused(true)}
+                        >
+                             <div className="w-8 h-8">
+                                <Lottie options={lottieOptions.smile} isPaused={isSmilePaused} isStopped={isSmileStopped}/>
+                            </div>
+                        </button>
                         <div className="flex-1 relative">
                             <input
                                 id="messageInput"
@@ -303,8 +490,21 @@ const AguacateChat = () => {
                                 onChange={(e) => setMessageInput(e.target.value)}
                                 onKeyPress={handleKeyPress}
                             />
-                            <button onClick={sendMessage} className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity">
-                                ➤
+                            <button
+                                onClick={sendMessage}
+                                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity"
+                                onMouseEnter={() => {
+                                    setSendStopped(true);
+                                    setTimeout(() => {
+                                        setSendStopped(false);
+                                        setSendPaused(false);
+                                    }, 10);
+                                }}
+                                onMouseLeave={() => setSendPaused(true)}
+                            >
+                                <div className="w-7 h-7">
+                                    <Lottie options={lottieOptions.send} isPaused={isSendPaused} isStopped={isSendStopped}/>
+                                </div>
                             </button>
                         </div>
                     </div>
