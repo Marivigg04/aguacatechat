@@ -1,0 +1,44 @@
+# Estructura completa de la carpeta Login y archivos extra en src
+
+## src/Login/
+- App.jsx
+- App.css
+- index.js
+- pages/
+  - AuthPage.jsx
+  - AnimatedPanel.jsx
+- components/
+  - LoginForm.jsx
+  - RegisterForm.jsx
+  - common/
+    - LoadingSpinner.jsx
+    - ProgressDots.jsx
+  - PasswordReset/
+    - PasswordReset.jsx
+    - FormPanel.jsx
+    - index.js
+- assets/
+  - escudo.gif
+- animations/
+  - wired-flat-497-truck-delivery-loop-cycle.json
+  - wired-flat-2691-logo-square-wechat-hover-pinch.json
+  - Success.json
+  - Register.json
+  - login.json
+- styles/
+  - AuthPage.css
+  - PasswordReset.css
+- services/
+  - supabaseClient.js
+- utils/
+  - constants.js
+
+## Archivos extra en src/
+- ConfigModal.jsx: Componente modal para configuración de usuario o ajustes generales.
+- ProfileModal.jsx: Componente modal para mostrar y editar el perfil del usuario.
+- Sidebar.jsx: Componente para la barra lateral del chat, muestra contactos, grupos y opciones de navegación.
+
+---
+Cada carpeta y archivo está organizado para separar formularios, utilidades, animaciones, estilos y servicios. Los modales y el sidebar permiten interacción avanzada en el chat y gestión de usuario.
+
+Si agregas nuevos archivos o carpetas, actualiza este documento para mantener la referencia completa.

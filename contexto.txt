@@ -1,0 +1,112 @@
+# Contexto del Proyecto: AguacateChat
+
+## Estructura de Carpetas y Archivos
+
+- src/
+  - main.jsx: Punto de entrada principal de React. Renderiza el componente App.
+  - App.jsx: Controla las rutas principales (login, registro, chat, password reset) y la lógica de autenticación y transiciones.
+  - index.css: Estilos globales base y tipografía.
+  - AguacateChat.jsx: Componente principal del chat, maneja contactos, mensajes, sidebar, modo claro/oscuro y animaciones.
+  - AguacateChat.css: Estilos personalizados para el chat, colores, gradientes, responsive y temas.
+  - Login/
+    - App.jsx
+    - App.css
+    - index.js
+    - pages/
+      - AuthPage.jsx
+      - AnimatedPanel.jsx
+    - components/
+      - LoginForm.jsx
+      - RegisterForm.jsx
+      - common/
+        - LoadingSpinner.jsx
+        - ProgressDots.jsx
+      - PasswordReset/
+        - PasswordReset.jsx
+        - FormPanel.jsx
+        - index.js
+    - assets/
+      - escudo.gif
+    - animations/
+      - wired-flat-497-truck-delivery-loop-cycle.json
+      - wired-flat-2691-logo-square-wechat-hover-pinch.json
+      - Success.json
+      - Register.json
+      - login.json
+  - animations/
+    - Filter.json
+    - lock.json
+    - Paper Plane.json
+    - Sun.json
+    - Sunny.json
+    - system-regular-8-account-hover-pinch.json
+    - system-solid-22-build-hover-build.json
+    - Typing.json
+    - wired-flat-1037-vlog-camera-hover-pinch.json
+    - wired-flat-11-link-unlink-hover-bounce.json
+    - wired-flat-112-book-hover-closed.json
+    - wired-flat-177-envelope-send-hover-flying.json
+    - wired-flat-185-trash-bin-hover-pinch.json
+    - wired-flat-188-microphone-recording-hover-recording.json
+    - wired-flat-19-magnifier-zoom-search-hover-rotation.json
+    - wired-flat-261-emoji-smile-hover-smile.json
+    - wired-flat-3099-portrait-photo-hover-pinch.json
+    - wired-flat-35-edit-hover-circle.json
+    - wired-flat-409-tool-hover-oscillate.json
+    - wired-flat-751-share-hover-pointing.json
+    - wired-lineal-61-camera-hover-flash.json
+  - ConfigModal.jsx: Componente modal para configuración de usuario o ajustes generales.
+  - ProfileModal.jsx: Componente modal para mostrar y editar el perfil del usuario.
+  - Sidebar.jsx: Componente para la barra lateral del chat, muestra contactos, grupos y opciones de navegación.
+  - public/
+    - vite.svg: Icono principal del proyecto.
+
+---
+Cada carpeta y archivo está organizado para separar formularios, utilidades, animaciones, estilos y servicios. Los modales y el sidebar permiten interacción avanzada en el chat y gestión de usuario.
+
+Si agregas nuevos archivos o carpetas, actualiza este documento para mantener la referencia completa.
+
+## Funcionalidad de Cada Componente
+
+- main.jsx: Renderiza la aplicación React en el DOM.
+- App.jsx: Controla la navegación entre login, registro, chat y password reset. Simula autenticación y gestiona transiciones animadas (fade) entre pantallas.
+- AguacateChat.jsx: Chat principal, muestra lista de contactos, mensajes, sidebar, adjuntos, modo claro/oscuro, animaciones Lottie en acciones.
+- AuthPage.jsx: Página de login y registro, muestra los formularios y el overlay con animación de logo. Permite alternar entre login y registro.
+- LoginForm.jsx: Formulario de login, validación de email y contraseña, animación Lottie, botón para recuperar contraseña.
+- RegisterForm.jsx: Formulario de registro, validación de email y contraseña, animación Lottie, feedback de fortaleza de contraseña.
+- PasswordReset.jsx: Controla el flujo de recuperación de contraseña, renderiza FormPanel y gestiona los pasos (email, código, nueva contraseña).
+- FormPanel.jsx: Renderiza los pasos del flujo de recuperación, validaciones, feedback visual, animaciones de éxito y error.
+- LoadingSpinner.jsx: Spinner animado para mostrar estados de carga.
+
+## Estilos y Temas
+
+- AguacateChat.css: Define la paleta de colores, gradientes, modo claro/oscuro, responsive y estilos de mensajes.
+- AuthPage.css: Estilos para login/registro, overlay, inputs, botones, animaciones y responsive.
+- PasswordReset.css: Estilos para el flujo de recuperación, gradientes, inputs, botones, feedback visual y animaciones.
+
+## Animaciones
+
+- Animaciones Lottie para logo, login, registro y feedback de éxito.
+- Transiciones CSS (fade) entre login y password reset.
+
+## Navegación y Rutas
+
+- /login: Página de login y registro.
+- /password-reset: Flujo de recuperación de contraseña.
+- /chat: Chat principal (requiere autenticación simulada).
+- /: Redirección según autenticación.
+
+## Lógica de Autenticación
+
+- Simulada con useState en App.jsx. Al iniciar sesión, se accede al chat.
+- Navegación entre login, registro y password reset controlada por estado y rutas.
+
+## Otros Detalles
+
+- Font Awesome incluido por CDN en index.html para íconos de ojo en inputs de contraseña.
+- Paleta de colores personalizada (teal, gradientes, modo claro/oscuro).
+- Responsive en todos los componentes principales.
+- Validaciones y feedback visual en todos los formularios.
+
+---
+Este archivo resume toda la estructura, componentes y funcionalidades actuales del proyecto AguacateChat. Si agregas nuevos módulos, actualiza este contexto para mantener la documentación al día.
