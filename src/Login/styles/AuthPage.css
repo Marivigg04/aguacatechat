@@ -1,3 +1,14 @@
+/* Fade transition para login/password reset */
+.fade-transition {
+  transition: opacity 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+.fade-in {
+  opacity: 1;
+}
+.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
 /* Estilos fundamentales para asegurar que la aplicación ocupe toda la altura de la ventana */
 html, body, #root, .App {
   height: 100%;
