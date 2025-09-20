@@ -11,6 +11,8 @@ import animationShare from './animations/wired-flat-751-share-hover-pointing.jso
 import animationSend from './animations/wired-flat-177-envelope-send-hover-flying.json'; // Cambia el import por el nuevo archivo
 import animationPhoto from './animations/wired-lineal-61-camera-hover-flash.json'; // Asegúrate de tener este archivo
 import animationVideo from './animations/wired-flat-1037-vlog-camera-hover-pinch.json'; // Asegúrate de tener este archivo
+import animationConfig from './animations/system-solid-22-build-hover-build.json';
+import animationProfile from './animations/system-regular-8-account-hover-pinch.json';
 
 const initialContacts = [
     { name: 'Ana García', status: '🟢', lastMessage: '¡Hola! ¿Cómo estás?', time: '14:30', initials: 'AG' },
@@ -56,6 +58,9 @@ const AguacateChat = () => {
     const [modalType, setModalType] = useState('chat');
     const [selectedGroupContacts, setSelectedGroupContacts] = useState([]);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
+    const [showSideMenu, setShowSideMenu] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [showConfigModal, setShowConfigModal] = useState(false);
     
     // 2. Estados para controlar las animaciones al pasar el cursor
     const [isSearchPaused, setSearchPaused] = useState(true);
@@ -82,6 +87,12 @@ const AguacateChat = () => {
     const [isVideoPaused, setVideoPaused] = useState(true);
     const [isVideoStopped, setVideoStopped] = useState(false);
 
+    const [isProfilePaused, setProfilePaused] = useState(true);
+    const [isProfileStopped, setProfileStopped] = useState(false);
+
+    const [isConfigPaused, setConfigPaused] = useState(true);
+    const [isConfigStopped, setConfigStopped] = useState(false);
+
     const allContacts = [
         ...initialContacts,
         { name: 'Pedro Martínez', status: '🟢', lastMessage: 'Hola, ¿cómo estás?', time: 'Ayer', initials: 'PM' },
@@ -106,9 +117,11 @@ const AguacateChat = () => {
         smile: createLottieOptions(animationSmile),
         trash: createLottieOptions(animationTrash),
         share: createLottieOptions(animationShare),
-        send: createLottieOptions(animationSend), // Asegúrate que use el nuevo icono
+        send: createLottieOptions(animationSend),
         photo: createLottieOptions(animationPhoto),
         video: createLottieOptions(animationVideo),
+        profile: createLottieOptions(animationProfile),
+        config: createLottieOptions(animationConfig),
     };
 
     useEffect(() => {
@@ -212,8 +225,110 @@ const AguacateChat = () => {
         }
     };
 
+    // Agrega tu información de perfil aquí:
+    const myProfile = {
+        name: 'María Fernández',
+        initials: 'MF',
+        phone: '+34 612 345 678'
+    };
+
     return (
         <div className="flex h-screen overflow-hidden">
+            {/* Sidebar de opciones (tres rayas) */}
+            <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r">
+                {/* Botón de menú en la parte superior */}
+                <div className="flex flex-col items-center pt-6">
+                    <button
+                        className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity flex flex-col gap-1 items-center"
+                        title="Menú"
+                        onClick={() => setShowSideMenu(!showSideMenu)}
+                    >
+                        {/* Icono de tres rayas horizontales centrado */}
+                        <span className="block w-6 h-1 bg-teal-primary rounded mb-1"></span>
+                        <span className="block w-6 h-1 bg-teal-primary rounded mb-1"></span>
+                        <span className="block w-6 h-1 bg-teal-primary rounded"></span>
+                    </button>
+                </div>
+                {showSideMenu && (
+                    <div className="fixed top-0 left-0 h-full w-64 theme-bg-secondary theme-border border-r shadow-2xl z-50 flex flex-col pt-8">
+                        <button
+                            className="w-full text-left p-4 hover:theme-bg-chat theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
+                            onClick={() => { setShowProfileModal(true); setShowSideMenu(false); }}
+                            onMouseEnter={() => {
+                                setProfileStopped(true);
+                                setTimeout(() => {
+                                    setProfileStopped(false);
+                                    setProfilePaused(false);
+                                }, 10);
+                            }}
+                            onMouseLeave={() => setProfilePaused(true)}
+                        >
+                            <div className="w-6 h-6">
+                                <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
+                            </div>
+                            <span>Perfil</span>
+                        </button>
+                        <button
+                            className="w-full text-left p-4 hover:theme-bg-chat theme-text-primary rounded-b-lg transition-colors flex items-center gap-2"
+                            onClick={() => { setShowConfigModal(true); setShowSideMenu(false); }}
+                            onMouseEnter={() => {
+                                setConfigStopped(true);
+                                setTimeout(() => {
+                                    setConfigStopped(false);
+                                    setConfigPaused(false);
+                                }, 10);
+                            }}
+                            onMouseLeave={() => setConfigPaused(true)}
+                        >
+                            <div className="w-6 h-6">
+                                <Lottie options={lottieOptions.config} isPaused={isConfigPaused} isStopped={isConfigStopped} />
+                            </div>
+                            <span>Configuración</span>
+                        </button>
+                        <button
+                            className="absolute top-2 right-2 p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity"
+                            onClick={() => setShowSideMenu(false)}
+                            title="Cerrar menú"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
+
+                {/* Barra lateral emergente de configuración */}
+                {showConfigModal && (
+                    <div className="fixed bottom-6 left-6 z-50">
+                        <div className="theme-bg-secondary theme-border border rounded-2xl shadow-2xl w-80 flex flex-col">
+                            <div className="p-4 theme-border border-b flex items-center justify-between">
+                                <h3 className="text-lg font-bold theme-text-primary">Configuración</h3>
+                                <button onClick={() => setShowConfigModal(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
+                                    ✕
+                                </button>
+                            </div>
+                            <div className="flex flex-col gap-2 p-4">
+                                <button
+                                    className="flex items-center gap-2 p-2 rounded transition-colors"
+                                    onClick={() => alert('Personalización')}
+                                >
+                                    🎨 <span className="theme-text-primary">Personalización</span>
+                                </button>
+                                <button
+                                    className="flex items-center gap-2 p-2 rounded transition-colors"
+                                    onClick={() => alert('Chats')}
+                                >
+                                    💬 <span className="theme-text-primary">Chats</span>
+                                </button>
+                                <button
+                                    className="flex items-center gap-2 p-2 rounded transition-colors"
+                                    onClick={() => alert('Cuenta')}
+                                >
+                                    👤 <span className="theme-text-primary">Cuenta</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
             {/* Overlay para móvil */}
             <div id="overlay" className={`fixed inset-0 bg-black bg-opacity-50 z-10 md:hidden ${isSidebarOpen ? '' : 'hidden'}`} onClick={toggleSidebar}></div>
 
@@ -324,10 +439,10 @@ const AguacateChat = () => {
                                 <button onClick={() => { alert('Silenciar notificaciones'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2">
                                     🔇 <span>Silenciar notificaciones</span>
                                 </button>
-                                <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
+                                <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2">
                                     📌 <span>Fijar conversación</span>
                                 </button>
-                                <button onClick={() => { alert('Exportar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                <button onClick={() => { alert('Exportar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2"
                                     onMouseEnter={() => {
                                         setShareStopped(true);
                                         setTimeout(() => {
@@ -345,7 +460,7 @@ const AguacateChat = () => {
                                 {/* 4. REEMPLAZO DEL ICONO DE LIMPIAR CHAT */}
                                 <button 
                                     onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
-                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2"
                                     onMouseEnter={() => {
                                         setTrashStopped(true);
                                         setTimeout(() => {
@@ -360,10 +475,10 @@ const AguacateChat = () => {
                                     </div>
                                     <span>Limpiar chat</span>
                                 </button>
-                                <button onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
+                                <button onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2">
                                     🚫 <span>Bloquear contacto</span>
                                 </button>
-                                <button onClick={() => { alert('Ver información'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2">
+                                <button onClick={() => { alert('Ver información'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colores flex items-center gap-2">
                                     ℹ️ <span>Ver información</span>
                                 </button>
                             </div>
@@ -562,6 +677,62 @@ const AguacateChat = () => {
                     )}
                 </div>
             </div>
+
+            {/* Modal de perfil */}
+            {showProfileModal && (
+    <div className="fixed bottom-6 left-6 z-50">
+        <div className="theme-bg-secondary theme-border border rounded-2xl shadow-2xl w-80 flex flex-col">
+            <div className="p-4 theme-border border-b flex items-center justify-between">
+                <h3 className="text-lg font-bold theme-text-primary">Perfil</h3>
+                <button onClick={() => setShowProfileModal(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
+                    ✕
+                </button>
+            </div>
+            <div className="flex flex-col gap-2 p-4">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold text-xl">
+                        {myProfile.initials}
+                    </div>
+                    <span className="font-semibold theme-text-primary text-lg">{myProfile.name}</span>
+                </div>
+                <div className="flex flex-col gap-1 mb-2">
+                    <span className="text-sm theme-text-secondary">Número de teléfono:</span>
+                    <span className="font-semibold theme-text-primary">{myProfile.phone}</span>
+                </div>
+                <button
+                    className="flex items-center gap-2 p-2 rounded transition-colors"
+                    onClick={() => alert('Cambiar imagen de perfil')}
+                >
+                    🖼️ <span className="theme-text-primary">Cambiar imagen de perfil</span>
+                </button>
+                <button
+                    className="flex items-center gap-2 p-2 rounded transition-colors"
+                    onClick={() => alert('Cambiar nombre del perfil')}
+                >
+                    ✏️ <span className="theme-text-primary">Cambiar nombre del perfil</span>
+                </button>
+                <button
+                    className="flex items-center gap-2 p-2 rounded transition-colors"
+                    onClick={() => alert('Cambiar contraseña')}
+                >
+                    🔑 <span className="theme-text-primary">Cambiar contraseña</span>
+                </button>
+                <button
+                    className="flex items-center gap-2 p-2 rounded transition-colors"
+                    onClick={() => alert('Info del perfil')}
+                >
+                    ℹ️ <span className="theme-text-primary">Info del perfil</span>
+                </button>
+                <button
+                    className="flex items-center gap-2 p-2 rounded transition-colors bg-gradient-to-r from-teal-primary to-teal-secondary text-white mt-2"
+                    onClick={() => alert('Cerrar sesión')}
+                >
+                    🔒 <span>Cerrar sesión</span>
+                </button>
+            </div>
+        </div>
+    </div>
+)}
         </div>
     );
 };
