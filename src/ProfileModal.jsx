@@ -1,0 +1,396 @@
+import React, { useState } from 'react';
+import Lottie from 'react-lottie';
+import { FaEye, FaEyeSlash } from 'react-icons/fa'; // Agrega este import al inicio
+
+const ProfileModal = ({
+    showProfileModal,
+    setShowProfileModal,
+    myProfile,
+    isEditingName,
+    setIsEditingName,
+    newProfileName,
+    setNewProfileName,
+    isEditProfilePaused,
+    setEditProfilePaused,
+    isEditProfileStopped,
+    setEditProfileStopped,
+    isEditingInfo,
+    setIsEditingInfo,
+    profileInfo,
+    setProfileInfo,
+    newProfileInfo,
+    setNewProfileInfo,
+    isInfoProfilePaused,
+    setInfoProfilePaused,
+    isInfoProfileStopped,
+    setInfoProfileStopped,
+    lottieOptions,
+    setPhotoProfilePaused,
+    setPhotoProfileStopped,
+    isPhotoProfilePaused,
+    isPhotoProfileStopped,
+    setTypingProfilePaused,
+    setTypingProfileStopped,
+    isTypingProfilePaused,
+    isTypingProfileStopped,
+    setLockProfilePaused,
+    setLockProfileStopped,
+    isLockProfilePaused,
+    isLockProfileStopped
+}) => {
+    // Estados locales para la ventana de cambiar contraseña
+    const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+    return (
+        showProfileModal && (
+            <div className="fixed bottom-6 left-6 z-50">
+                <div className="theme-bg-secondary theme-border border rounded-2xl shadow-2xl w-80 flex flex-col">
+                    <div className="p-4 theme-border border-b flex items-center justify-between">
+                        <h3 className="text-lg font-bold theme-text-primary">Perfil</h3>
+                        <button onClick={() => setShowProfileModal(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
+                            ✕
+                        </button>
+                    </div>
+                    <div className="flex flex-col gap-2 p-4">
+                        {/* Foto de perfil centrada */}
+                        <div className="flex flex-col items-center mb-4">
+                            <div className="w-16 h-16 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold text-2xl mb-2">
+                                {myProfile.initials}
+                            </div>
+                            {/* Nombre y edición */}
+                            {!isEditingName ? (
+                                <div className="flex items-center gap-2">
+                                    <span className="font-semibold theme-text-primary text-lg">{myProfile.name}</span>
+                                    <div
+                                        className="w-7 h-7"
+                                        onClick={() => {
+                                            setIsEditingName(true);
+                                            setTimeout(() => {
+                                                document.getElementById('profileNameInput')?.focus();
+                                            }, 100);
+                                        }}
+                                        onMouseEnter={() => {
+                                            setEditProfileStopped(true);
+                                            setTimeout(() => {
+                                                setEditProfileStopped(false);
+                                                setEditProfilePaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setEditProfilePaused(true)}
+                                        style={{ cursor: 'pointer' }}
+                                        title="Cambiar nombre del perfil"
+                                    >
+                                        <Lottie options={lottieOptions.editProfile} isPaused={isEditProfilePaused} isStopped={isEditProfileStopped} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <form
+                                    className="flex flex-col items-center gap-2 w-full"
+                                    onSubmit={e => {
+                                        e.preventDefault();
+                                        if (newProfileName.trim()) {
+                                            myProfile.name = newProfileName.trim();
+                                            setIsEditingName(false);
+                                        }
+                                    }}
+                                >
+                                    <input
+                                        id="profileNameInput"
+                                        type="text"
+                                        className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
+                                        value={newProfileName}
+                                        onChange={e => setNewProfileName(e.target.value)}
+                                        onBlur={() => {
+                                            if (newProfileName.trim()) {
+                                                myProfile.name = newProfileName.trim();
+                                            }
+                                            setIsEditingName(false);
+                                        }}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') {
+                                                if (newProfileName.trim()) {
+                                                    myProfile.name = newProfileName.trim();
+                                                }
+                                                setIsEditingName(false);
+                                            }
+                                            if (e.key === 'Escape') {
+                                                setNewProfileName(myProfile.name);
+                                                setIsEditingName(false);
+                                            }
+                                        }}
+                                        autoFocus
+                                    />
+                                    <div className="flex gap-2 mt-1">
+                                        <button
+                                            type="submit"
+                                            className="p-1 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
+                                            title="Guardar"
+                                        >
+                                            Guardar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
+                                            onClick={() => {
+                                                setNewProfileName(myProfile.name);
+                                                setIsEditingName(false);
+                                            }}
+                                            title="Cancelar"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                        <div className="flex flex-col gap-1 mb-2">
+                            <span className="text-sm theme-text-secondary">Número de teléfono:</span>
+                            <span className="font-semibold theme-text-primary">{myProfile.phone}</span>
+                        </div>
+                        {/* Información del perfil editable alineada debajo del número de teléfono */}
+                        <div className="flex flex-col gap-1 mb-2">
+                            <span className="text-sm theme-text-secondary">Información del perfil:</span>
+                            {!isEditingInfo ? (
+                                <div className="flex items-center gap-2 w-full">
+                                    <span className="theme-text-primary text-base flex-1">{profileInfo}</span>
+                                    <div
+                                        className="w-7 h-7"
+                                        onClick={() => {
+                                            setNewProfileInfo(profileInfo); // <-- Inicializa el campo con el valor actual
+                                            setIsEditingInfo(true);
+                                            setTimeout(() => {
+                                                document.getElementById('profileInfoInput')?.focus();
+                                            }, 100);
+                                        }}
+                                        onMouseEnter={() => {
+                                            setInfoProfileStopped(true);
+                                            setTimeout(() => {
+                                                setInfoProfileStopped(false);
+                                                setInfoProfilePaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setInfoProfilePaused(true)}
+                                        style={{ cursor: 'pointer' }}
+                                        title="Editar información del perfil"
+                                    >
+                                        <Lottie options={lottieOptions.infoProfile} isPaused={isInfoProfilePaused} isStopped={isInfoProfileStopped} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <form
+                                    className="flex flex-col items-center gap-2 w-full"
+                                    onSubmit={e => {
+                                        e.preventDefault();
+                                        if (newProfileInfo.trim()) {
+                                            setProfileInfo(newProfileInfo.trim());
+                                            setIsEditingInfo(false);
+                                        }
+                                    }}
+                                >
+                                    <input
+                                        id="profileInfoInput"
+                                        type="text"
+                                        className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
+                                        value={newProfileInfo}
+                                        onChange={e => setNewProfileInfo(e.target.value)}
+                                        onBlur={() => {
+                                            if (newProfileInfo.trim()) {
+                                                setProfileInfo(newProfileInfo.trim());
+                                            }
+                                            setIsEditingInfo(false);
+                                        }}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') {
+                                                if (newProfileInfo.trim()) {
+                                                    setProfileInfo(newProfileInfo.trim());
+                                                }
+                                                setIsEditingInfo(false);
+                                            }
+                                            if (e.key === 'Escape') {
+                                                setNewProfileInfo(profileInfo);
+                                                setIsEditingInfo(false);
+                                            }
+                                        }}
+                                        autoFocus
+                                    />
+                                    <div className="flex gap-2 mt-1">
+                                        <button
+                                            type="submit"
+                                            className="p-1 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
+                                            title="Guardar"
+                                        >
+                                            Guardar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
+                                            onClick={() => {
+                                                setNewProfileInfo(profileInfo);
+                                                setIsEditingInfo(false);
+                                            }}
+                                            title="Cancelar"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                        {/* Opciones de perfil */}
+                        <button
+                            className="flex items-center gap-2 p-2 rounded transition-colors"
+                            onClick={() => alert('Cambiar imagen de perfil')}
+                            onMouseEnter={() => {
+                                setPhotoProfileStopped(true);
+                                setTimeout(() => {
+                                    setPhotoProfileStopped(false);
+                                    setPhotoProfilePaused(false);
+                                }, 10);
+                            }}
+                            onMouseLeave={() => setPhotoProfilePaused(true)}
+                        >
+                            <div className="w-7 h-7">
+                                <Lottie options={lottieOptions.photoProfile} isPaused={isPhotoProfilePaused} isStopped={isPhotoProfileStopped} />
+                            </div>
+                            <span className="theme-text-primary">Cambiar imagen de perfil</span>
+                        </button>
+                        <button
+                            className="flex items-center gap-2 p-2 rounded transition-colors"
+                            onClick={() => setShowEditPasswordModal(true)}
+                            onMouseEnter={() => {
+                                setTypingProfileStopped(true);
+                                setTimeout(() => {
+                                    setTypingProfileStopped(false);
+                                    setTypingProfilePaused(false);
+                                }, 10);
+                            }}
+                            onMouseLeave={() => setTypingProfilePaused(true)}
+                        >
+                            <div className="w-7 h-7">
+                                <Lottie options={lottieOptions.typingProfile} isPaused={isTypingProfilePaused} isStopped={isTypingProfileStopped} />
+                            </div>
+                            <span className="theme-text-primary">Cambiar contraseña</span>
+                        </button>
+                        <button
+                            className="flex items-center gap-2 p-2 rounded transition-colors bg-gradient-to-r from-teal-primary to-teal-secondary text-white mt-2 w-full justify-center"
+                            onClick={() => alert('Cerrar sesión')}
+                            onMouseEnter={() => {
+                                setLockProfileStopped(true);
+                                setTimeout(() => {
+                                    setLockProfileStopped(false);
+                                    setLockProfilePaused(false);
+                                }, 10);
+                            }}
+                            onMouseLeave={() => setLockProfilePaused(true)}
+                        >
+                            <div className="w-7 h-7">
+                                <Lottie options={lottieOptions.lockProfile} isPaused={isLockProfilePaused} isStopped={isLockProfileStopped} />
+                            </div>
+                            <span className="font-semibold">Cerrar sesión</span>
+                        </button>
+                    </div>
+                </div>
+                {/* Ventana emergente para cambiar contraseña */}
+                {showEditPasswordModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                        <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col">
+                            <div className="p-4 theme-border border-b flex items-center justify-between">
+                                <h3 className="text-lg font-bold theme-text-primary">Cambiar contraseña</h3>
+                                <button onClick={() => setShowEditPasswordModal(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
+                                    ✕
+                                </button>
+                            </div>
+                            <form
+                                className="flex flex-col gap-3 p-4"
+                                onSubmit={e => {
+                                    e.preventDefault();
+                                    if (newPassword && newPassword === confirmPassword) {
+                                        alert('Contraseña cambiada correctamente');
+                                        setCurrentPassword('');
+                                        setNewPassword('');
+                                        setConfirmPassword('');
+                                        setShowEditPasswordModal(false);
+                                    } else {
+                                        alert('Las contraseñas no coinciden');
+                                    }
+                                }}
+                            >
+                                <div className="relative">
+                                    <input
+                                        type={showCurrentPassword ? "text" : "password"}
+                                        placeholder="Contraseña actual"
+                                        className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
+                                        value={currentPassword}
+                                        onChange={e => setCurrentPassword(e.target.value)}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
+                                        onClick={() => setShowCurrentPassword(v => !v)}
+                                        tabIndex={-1}
+                                        aria-label="Mostrar/Ocultar contraseña actual"
+                                    >
+                                        {showCurrentPassword ? <FaEyeSlash /> : <FaEye />}
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type={showNewPassword ? "text" : "password"}
+                                        placeholder="Nueva contraseña"
+                                        className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
+                                        value={newPassword}
+                                        onChange={e => setNewPassword(e.target.value)}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
+                                        onClick={() => setShowNewPassword(v => !v)}
+                                        tabIndex={-1}
+                                        aria-label="Mostrar/Ocultar nueva contraseña"
+                                    >
+                                        {showNewPassword ? <FaEyeSlash /> : <FaEye />}
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <input
+                                        type={showConfirmPassword ? "text" : "password"}
+                                        placeholder="Confirmar nueva contraseña"
+                                        className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
+                                        value={confirmPassword}
+                                        onChange={e => setConfirmPassword(e.target.value)}
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
+                                        onClick={() => setShowConfirmPassword(v => !v)}
+                                        tabIndex={-1}
+                                        aria-label="Mostrar/Ocultar confirmación"
+                                    >
+                                        {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                                    </button>
+                                </div>
+                                <button
+                                    type="submit"
+                                    className="p-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
+                                >
+                                    Guardar
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )
+    );
+};
+
+export default ProfileModal;
