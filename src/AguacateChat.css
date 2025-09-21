@@ -1,28 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Variables de color para modos claro y oscuro */
+/* Define la fuente base para toda la aplicación */
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Paleta de colores MÁS VIVA Y PROFESIONAL.
+  - Verdes más brillantes (emerald) para un look moderno.
+  - Fondos más limpios para un mayor contraste.
+  - Sombras sutiles para dar profundidad.
+*/
 .dark-mode {
-    --bg-primary: linear-gradient(135deg, #1a2332, #2d3748);
-    --bg-secondary: linear-gradient(135deg, #2d3748, #1a2332);
-    --bg-chat: linear-gradient(135deg, #374151, #4a5568);
-    --bg-contacts: #374151;
-    --text-primary: #ffffff;
-    --text-secondary: #14B8A6;
-    --border-color: #0D9488;
-    --accent-gradient: linear-gradient(135deg, #14B8A6, #0D9488);
+    --bg-primary: #0d1a26; /* Fondo principal casi negro */
+    --bg-secondary: #1a2c3a; /* Fondo de paneles ligeramente más claro */
+    --bg-chat: #2a4157; /* Fondo de inputs y elementos interactivos */
+    --bg-contacts: #1a2c3a;
+    --text-primary: #d2eceb; /* Texto principal (blanco suave) */
+    --text-secondary: #14b8a6; /* Verde Teal vibrante para acentos */
+    --border-color: #334155; /* Borde sutil */
+    --accent-gradient: linear-gradient(135deg, #10b981, #14b8a6); /* Gradiente de esmeralda a teal */
 }
 
 .light-mode {
-    --bg-primary: linear-gradient(135deg, #f0fdfa, #ecfdf5);
-    --bg-secondary: linear-gradient(135deg, #ccfbf1, #d1fae5);
-    --bg-chat: linear-gradient(135deg, #a7f3d0, #99f6e4);
+    --bg-primary: #f8fafc; /* Fondo principal (blanco hueso) */
+    --bg-secondary: #ffffff; /* Paneles blancos puros */
+    --bg-chat: #f1f5f9; /* Fondo de inputs y elementos interactivos */
     --bg-contacts: #ffffff;
-    --text-primary: #134E4A;
-    --text-secondary: #115E59;
-    --border-color: #14B8A6;
-    --accent-gradient: linear-gradient(135deg, #14B8A6, #0D9488);
+    --text-primary: #0f172a; /* Texto principal (casi negro) */
+    --text-secondary: #047857; /* Verde esmeralda oscuro para texto secundario */
+    --border-color: #e2e8f0; /* Borde muy sutil */
+    --accent-gradient: linear-gradient(135deg, #10b981, #14b8a6);
 }
 
 .theme-bg-primary { background: var(--bg-primary); }
@@ -32,23 +43,26 @@
 .theme-text-secondary { color: var(--text-secondary); }
 .theme-border { border-color: var(--border-color); }
 
-/* Estilos de mensajes */
+/* Estilos de mensajes con MEJOR CONTRASTE.
+  - El mensaje enviado es más sutil.
+  - El mensaje recibido usa el nuevo gradiente de acento.
+*/
 .message-sent {
-    background: #f1f3f4;
-    color: #1a365d;
+    background-color: #e2e8f0; /* Gris claro */
+    color: #1e293b;
 }
 
 .dark-mode .message-sent {
-    background: #374151;
-    color: #ffffff;
+    background-color: #334155; /* Azul-gris oscuro */
+    color: #f1f5f9;
 }
 
 .message-received {
-    background: linear-gradient(135deg, #0f766e, #0d9488);
+    background: var(--accent-gradient);
     color: #ffffff;
 }
 
-/* Manejo del scroll y altura */
+/* ... (el resto del CSS puede permanecer igual) ... */
 .scroll-smooth {
     scroll-behavior: smooth;
 }
@@ -57,7 +71,6 @@
     height: calc(100vh - 140px);
 }
 
-/* Responsive para el sidebar */
 @media (max-width: 768px) {
     .sidebar {
         transform: translateX(-100%);

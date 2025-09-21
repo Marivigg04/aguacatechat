@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
+import toast, { Toaster } from 'react-hot-toast';
 
 import Sidebar from './Sidebar';
 import ProfileModal from './ProfileModal';
@@ -70,6 +71,7 @@ const AguacateChat = () => {
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showConfigModal, setShowConfigModal] = useState(false);
+    const [isTyping, setIsTyping] = useState(false); // Nuevo estado
     
     // 2. Estados para controlar las animaciones al pasar el cursor
     const [isSearchPaused, setSearchPaused] = useState(true);
@@ -171,16 +173,21 @@ const AguacateChat = () => {
         if (messageInput.trim() === '') return;
 
         const newMessage = { type: 'sent', text: messageInput };
-        setChatMessages([...chatMessages, newMessage]);
+        setChatMessages(prev => [...prev, newMessage]);
         setMessageInput('');
 
-        // Simular respuesta
+        // Simular que el otro usuario está escribiendo
+        setIsTyping(true);
+
+        // Simular respuesta después de un tiempo
         setTimeout(() => {
             const responses = ['¡Perfecto!', 'Entendido 👍', 'Gracias por el mensaje', 'Me parece bien', '¡Excelente!'];
             const randomResponse = responses[Math.floor(Math.random() * responses.length)];
             const receivedMessage = { type: 'received', text: randomResponse };
-            setChatMessages(prevMessages => [...prevMessages, receivedMessage]);
-        }, 2000);
+            
+            setIsTyping(false); // Deja de escribir
+            setChatMessages(prev => [...prev, receivedMessage]);
+        }, 2000); // 2 segundos de "escribiendo"
     };
 
     const handleKeyPress = (e) => {
@@ -236,8 +243,21 @@ const AguacateChat = () => {
 
     const createGroupWithSelected = () => {
         if (selectedGroupContacts.length > 0) {
-            alert(`Creando grupo con: ${selectedGroupContacts.map(c => c.name).join(', ')}`);
+            // Reemplazar alert()
+            toast.success(`Grupo creado con ${selectedGroupContacts.length} miembros.`, {
+                style: {
+                    background: 'var(--bg-chat)',
+                    color: 'var(--text-primary)',
+                },
+            });
             closeContactModal();
+        } else {
+            toast.error('Selecciona al menos un contacto.', {
+                 style: {
+                    background: 'var(--bg-chat)',
+                    color: 'var(--text-primary)',
+                },
+            });
         }
     };
 
@@ -276,6 +296,9 @@ const AguacateChat = () => {
 
     return (
         <div className="flex h-screen overflow-hidden">
+            {/* Componente para mostrar las notificaciones */}
+            <Toaster position="top-center" reverseOrder={false} />
+
             {/* Sidebar */}
             <Sidebar
                 showSideMenu={showSideMenu}
@@ -298,9 +321,6 @@ const AguacateChat = () => {
                     <div className="flex items-center justify-between mb-4">
                         <h1 className="text-xl font-bold theme-text-primary">AguacateChat</h1>
                         <div className="flex items-center gap-2">
-                            <button id="themeToggle" className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" onClick={toggleTheme}>
-                                <span id="themeIcon">{isDarkMode ? '☀️' : '🌙'}</span>
-                            </button>
                             <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
                                 ✕
                             </button>
@@ -391,18 +411,22 @@ const AguacateChat = () => {
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="relative">
-                            <button onClick={toggleChatOptions} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" title="Opciones del chat">
-                                {/* Icono de tres puntos */}
-                                <span style={{ fontSize: '1.5rem', lineHeight: '1' }}>⋯</span>
+                            <button onClick={toggleChatOptions} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity flex flex-col gap-1 items-center justify-center w-10 h-10" title="Opciones del chat">
+                                <span className="w-1 h-1 bg-current rounded-full"></span>
+                                <span className="w-1 h-1 bg-current rounded-full"></span>
+                                <span className="w-1 h-1 bg-current rounded-full"></span>
                             </button>
                             <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu ? '' : 'hidden'}`}>
-                                <button onClick={() => { alert('Silenciar notificaciones'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2">
+                                <button onClick={() => { 
+                                    toast.success('Notificaciones silenciadas.'); 
+                                    toggleChatOptions(); 
+                                 }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2">
                                     🔇 <span>Silenciar notificaciones</span>
-                                </button>
-                                <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2">
+                                 </button>
+                                <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
                                     📌 <span>Fijar conversación</span>
                                 </button>
-                                <button onClick={() => { alert('Exportar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2"
+                                <button onClick={() => { alert('Exportar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
                                     onMouseEnter={() => {
                                         setShareStopped(true);
                                         setTimeout(() => {
@@ -420,7 +444,7 @@ const AguacateChat = () => {
                                 {/* 4. REEMPLAZO DEL ICONO DE LIMPIAR CHAT */}
                                 <button 
                                     onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
-                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2"
+                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
                                     onMouseEnter={() => {
                                         setTrashStopped(true);
                                         setTimeout(() => {
@@ -435,10 +459,10 @@ const AguacateChat = () => {
                                     </div>
                                     <span>Limpiar chat</span>
                                 </button>
-                                <button onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2">
+                                <button onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
                                     🚫 <span>Bloquear contacto</span>
                                 </button>
-                                <button onClick={() => { alert('Ver información'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colores flex items-center gap-2">
+                                <button onClick={() => { alert('Ver información'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2">
                                     ℹ️ <span>Ver información</span>
                                 </button>
                             </div>
@@ -459,6 +483,22 @@ const AguacateChat = () => {
                             </div>
                         </div>
                     ))}
+                    
+                    {/* NUEVO: Indicador de escribiendo */}
+                    {isTyping && (
+                        <div className="flex justify-start">
+                             <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
+                                {selectedContact.initials}
+                            </div>
+                            <div className="message-received max-w-xs lg:max-w-md px-4 py-2 rounded-2xl rounded-bl-md">
+                                <div className="flex items-center gap-1">
+                                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0s'}}></span>
+                                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></span>
+                                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="theme-bg-secondary theme-border border-t p-4">
@@ -682,6 +722,8 @@ const AguacateChat = () => {
             <ConfigModal
                 showConfigModal={showConfigModal}
                 setShowConfigModal={setShowConfigModal}
+                isDarkMode={isDarkMode}
+                toggleTheme={toggleTheme}
             />
         </div>
     );
