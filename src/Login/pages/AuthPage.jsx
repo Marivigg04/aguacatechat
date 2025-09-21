@@ -4,17 +4,17 @@ import RegisterForm from '../components/RegisterForm';
 import '../styles/AuthPage.css';
 
 import Lottie from 'react-lottie';
-import yourDecorativeAnimation from '../animations/wired-flat-497-truck-delivery-loop-cycle.json'; 
+import logoSquareAnimation from '../animations/wired-flat-2691-logo-square-wechat-hover-pinch.json';
 
 const AuthPage = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
 
   const defaultOptions = {
-    loop: true,           
-    autoplay: true,       
-    animationData: yourDecorativeAnimation, 
+    loop: true,
+    autoplay: true,
+    animationData: logoSquareAnimation,
     rendererSettings: {
-      preserveAspectRatio: 'xMidYMid slice' 
+      preserveAspectRatio: 'xMidYMid slice'
     }
   };
 
@@ -51,6 +51,7 @@ const AuthPage = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
                   options={defaultOptions}
                   height={150}
                   width={150}
+                  speed={0.5}
                   // CAMBIO CLAVE: Añadir pointerEvents="none" directamente
                   pointerEvents="none" 
                   // Mantener onClick por si acaso, aunque con pointerEvents="none" no debería ser necesario
@@ -70,6 +71,7 @@ const AuthPage = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
                   options={defaultOptions}
                   height={150}
                   width={150}
+                  speed={0.5}
                   // CAMBIO CLAVE: Añadir pointerEvents="none" directamente
                   pointerEvents="none" 
                   // Mantener onClick por si acaso
