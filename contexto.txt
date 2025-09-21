@@ -98,7 +98,9 @@ Si agregas nuevos archivos o carpetas, actualiza este documento para mantener la
 
 ## Lógica de Autenticación
 
-- Simulada con useState en App.jsx. Al iniciar sesión, se accede al chat.
+- Basada en Supabase Auth (email y contraseña). El registro crea un usuario en Supabase y guarda `fullName` y `username` en los metadatos del usuario.
+- La sesión se persiste y se refresca automáticamente (persistSession y autoRefreshToken activados).
+- `App.jsx` sincroniza el estado global con `supabase.auth.getSession()` y `onAuthStateChange` para proteger la ruta `/chat`.
 - Navegación entre login, registro y password reset controlada por estado y rutas.
 
 ## Otros Detalles

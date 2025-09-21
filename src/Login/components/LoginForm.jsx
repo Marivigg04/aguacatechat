@@ -5,11 +5,13 @@ import Lottie from 'react-lottie'; // Importa Lottie
 import loginAnimation from '../animations/login.json'; // <--- Nombre de archivo corregido
 
 import { useNavigate } from 'react-router-dom';
+import { auth } from '../../services/db';
 
 const LoginForm = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   // Opciones por defecto para la animación Lottie de login
@@ -22,11 +24,24 @@ const LoginForm = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Simulación de login exitoso
-    if (onLoginSuccess) onLoginSuccess();
-    navigate('/chat');
+    setLoading(true);
+    try {
+      const { data, error } = await auth.signInWithPassword({ email, password });
+      if (error) {
+        alert(`Error al iniciar sesión: ${error.message}`);
+        return;
+      }
+      // Login exitoso
+      if (onLoginSuccess) onLoginSuccess(data?.user || null);
+      navigate('/chat');
+    } catch (err) {
+      alert('Ocurrió un error inesperado al iniciar sesión.');
+      // console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleShowPassword = () => {
@@ -80,7 +95,7 @@ const LoginForm = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
 
       <a href="#" className="forgot-password-link" onClick={handleForgotPassword}>¿Olvidaste tu contraseña?</a>
 
-      <button type="submit">Iniciar Sesión</button>
+      <button type="submit" disabled={loading}>{loading ? 'Ingresando…' : 'Iniciar Sesión'}</button>
     </form>
   );
 };

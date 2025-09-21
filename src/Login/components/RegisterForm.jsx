@@ -3,6 +3,7 @@ import Lottie from 'react-lottie';
 
 import registerAnimation from '../animations/Register.json'; // Asegúrate de que esta ruta sea correcta
 import successAnimation from '../animations/Success.json'; // Asegúrate de que esta ruta y nombre de archivo sean correctos (case-sensitive)
+import { auth } from '../../services/db';
 
 const RegisterForm = () => {
   const [fullName, setFullName] = useState('');
@@ -14,6 +15,7 @@ const RegisterForm = () => {
   const [passwordMatchError, setPasswordMatchError] = useState(false);
   // State for strength: 'none', 'low', 'medium', 'strong', 'very-strong'
   const [passwordStrength, setPasswordStrength] = useState('none');
+  const [loading, setLoading] = useState(false);
 
   // --- ESTADO PARA CONTROLAR EL FOCO DEL CAMPO DE CONTRASEÑA ---
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
@@ -129,14 +131,16 @@ const RegisterForm = () => {
     setPasswordMatchError(false);
 
     try {
-      // Aquí se asume que tienes Supabase configurado en front/src/services/supabaseClient.js
-      // Si usas otro backend, reemplaza esta lógica
-      const { data, error } = await window.supabase.auth.signUp({
+      setLoading(true);
+      // Registro con Supabase, guardando el nombre como metadata "fullName"
+      const { data, error } = await auth.signUp({
         email,
         password,
         options: {
-          data: { fullName }
-        }
+          // Guardamos tanto fullName como username (usando el mismo valor por ahora)
+          data: { fullName, username: fullName },
+          emailRedirectTo: window?.location?.origin ? `${window.location.origin}/login` : undefined,
+        },
       });
 
       if (error) {
@@ -154,6 +158,8 @@ const RegisterForm = () => {
       setConfirmPassword('');
     } catch (err) {
       alert('Ocurrió un error inesperado: ' + (err.message || err));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -328,7 +334,7 @@ const RegisterForm = () => {
         )}
       </div>
 
-      <button type="submit">Crear cuenta</button>
+      <button type="submit" disabled={loading}>{loading ? 'Creando…' : 'Crear cuenta'}</button>
     </form>
   );
 };

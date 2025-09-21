@@ -1,12 +1,38 @@
-# React + Vite
+# AguacateChat (React + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Supabase Setup
 
-Currently, two official plugins are available:
+1) Copy `.env.example` to `.env.local` and add your credentials:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+```
+VITE_SUPABASE_URL=your-project-url
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
 
-## Expanding the ESLint configuration
+2) Start the dev server. Env vars with `VITE_` are available to the client.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Using the Supabase client
+
+- Centralized client: `src/services/supabaseClient.js`
+- Simple DB helpers: `src/services/db.js`
+
+Example usage in any component:
+
+```js
+import { supabase } from '@/services/supabaseClient' // or '../../services/supabaseClient'
+import { selectFrom, insertInto } from '@/services/db'
+
+// Read
+const messages = await selectFrom('messages', { columns: '*', orderBy: 'created_at', ascending: true })
+
+// Write
+await insertInto('messages', { text: 'Hola', user_id: '...' })
+```
+
+Legacy code using `window.supabase` will continue to work.
+
+## Scripts
+
+- `npm run dev` – start dev server
+- `npm run build` – production build
+- `npm run preview` – preview build
