@@ -58,6 +58,8 @@
   - ConfigModal.jsx: Componente modal para configuración de usuario o ajustes generales.
   - ProfileModal.jsx: Componente modal para mostrar y editar el perfil del usuario.
   - Sidebar.jsx: Componente para la barra lateral del chat, muestra contactos, grupos y opciones de navegación.
+  - context/
+    - AuthContext.jsx: Contexto global de autenticación y sesión. Expone useAuth() con las variables del usuario logueado (id, email, username, fullName), el objeto session y signOut(). Persiste los datos del usuario en sessionStorage durante la sesión del navegador y los limpia al cerrar sesión.
   - public/
     - vite.svg: Icono principal del proyecto.
 
@@ -100,7 +102,8 @@ Si agregas nuevos archivos o carpetas, actualiza este documento para mantener la
 
 - Basada en Supabase Auth (email y contraseña). El registro crea un usuario en Supabase y guarda `fullName` y `username` en los metadatos del usuario.
 - La sesión se persiste y se refresca automáticamente (persistSession y autoRefreshToken activados).
-- `App.jsx` sincroniza el estado global con `supabase.auth.getSession()` y `onAuthStateChange` para proteger la ruta `/chat`.
+- `AuthContext.jsx` sincroniza el estado global con `supabase.auth.getSession()` y `onAuthStateChange`, y expone `useAuth()` para proteger rutas y leer datos del usuario.
+- Variables de sesión disponibles: `user.id`, `user.email`, `user.username`, `user.fullName` (además de `session` y `user.raw`). Se almacenan temporalmente en `sessionStorage` y se eliminan en `signOut()`.
 - Navegación entre login, registro y password reset controlada por estado y rutas.
 
 ## Otros Detalles

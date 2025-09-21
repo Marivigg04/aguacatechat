@@ -5,36 +5,18 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import AguacateChat from './AguacateChat';
 import AuthPage from './Login/pages/AuthPage.jsx';
 import PasswordReset from './Login/components/PasswordReset/PasswordReset.jsx';
-import { supabase } from './services/supabaseClient';
+import { useAuth } from './context/AuthContext.jsx';
 
 function App() {
-  // Autenticación real basada en la sesión de Supabase
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Autenticación derivada del contexto global
+  const { isAuthenticated } = useAuth();
 
   // Navegación entre login y password reset
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [fadeState, setFadeState] = useState('in'); // 'in' | 'out'
   const fadeTimeoutRef = useRef(null);
 
-  // Sincroniza el estado de la app con la sesión de Supabase
-  useEffect(() => {
-    let isMounted = true;
-    // Obtener sesión inicial
-    supabase.auth.getSession().then(({ data }) => {
-      if (!isMounted) return;
-      setIsAuthenticated(!!data.session);
-    });
-
-    // Suscribirse a cambios de sesión
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
-    });
-
-    return () => {
-      isMounted = false;
-      sub?.subscription?.unsubscribe?.();
-    };
-  }, []);
+  // Transiciones de UI (se mantienen, ya no suscribe a supabase directamente)
 
   const handleNavigateToPasswordReset = () => {
     setFadeState('out');

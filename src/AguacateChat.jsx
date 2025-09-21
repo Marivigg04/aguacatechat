@@ -6,6 +6,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import Sidebar from './Sidebar';
 import ProfileModal from './ProfileModal';
 import ConfigModal from './ConfigModal';
+import { useAuth } from './context/AuthContext.jsx';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
@@ -56,6 +57,7 @@ const initialMessages = {
 };
 
 const AguacateChat = () => {
+    const { user } = useAuth();
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [selectedContact, setSelectedContact] = useState(initialContacts[0]);
@@ -261,16 +263,23 @@ const AguacateChat = () => {
         }
     };
 
-    // Agrega tu información de perfil aquí:
+    // Perfil basado en el usuario autenticado
+    const displayName = (user?.fullName || user?.username || (user?.email ? user.email.split('@')[0] : '') || 'Usuario').trim();
+    const initialsFrom = (value) => {
+        const parts = (value || '').trim().split(/\s+/);
+        const first = parts[0]?.[0] || 'U';
+        const second = parts[1]?.[0] || '';
+        return (first + second).toUpperCase();
+    };
     const myProfile = {
-        name: 'María Fernández',
-        initials: 'MF',
-        phone: '+34 612 345 678'
+        name: displayName,
+        initials: initialsFrom(displayName),
+        phone: '+34 612 345 678',
     };
 
     // Estados para ProfileModal
     const [isEditingName, setIsEditingName] = useState(false);
-    const [newProfileName, setNewProfileName] = useState(myProfile.name);
+    const [newProfileName, setNewProfileName] = useState(displayName);
     const [isEditProfilePaused, setEditProfilePaused] = useState(true);
     const [isEditProfileStopped, setEditProfileStopped] = useState(false);
 
@@ -293,6 +302,14 @@ const AguacateChat = () => {
 
     const [isLockProfilePaused, setLockProfilePaused] = useState(true);
     const [isLockProfileStopped, setLockProfileStopped] = useState(false);
+
+    // Mantener sincronizado el nombre editable cuando cambia el usuario y no se está editando
+    useEffect(() => {
+        if (!isEditingName) {
+            setNewProfileName(displayName);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [displayName]);
 
     return (
         <div className="flex h-screen overflow-hidden">

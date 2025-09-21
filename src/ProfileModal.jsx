@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import Lottie from 'react-lottie';
 import { FaEye, FaEyeSlash } from 'react-icons/fa'; // Agrega este import al inicio
+import { useAuth } from './context/AuthContext.jsx'
+import { useNavigate } from 'react-router-dom'
 
 const ProfileModal = ({
     showProfileModal,
@@ -38,6 +40,8 @@ const ProfileModal = ({
     isLockProfilePaused,
     isLockProfileStopped
 }) => {
+    const { signOut, user } = useAuth();
+    const navigate = useNavigate();
     // Estados locales para la ventana de cambiar contraseña
     const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
@@ -279,7 +283,11 @@ const ProfileModal = ({
                         </button>
                         <button
                             className="flex items-center gap-2 p-2 rounded transition-colors bg-gradient-to-r from-teal-primary to-teal-secondary text-white mt-2 w-full justify-center"
-                            onClick={() => alert('Cerrar sesión')}
+                            onClick={async () => {
+                                await signOut();
+                                setShowProfileModal(false);
+                                navigate('/login');
+                            }}
                             onMouseEnter={() => {
                                 setLockProfileStopped(true);
                                 setTimeout(() => {
