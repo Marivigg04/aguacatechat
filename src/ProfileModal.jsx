@@ -51,6 +51,28 @@ const ProfileModal = ({
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+    // Estado para la info de perfil desde Supabase
+    const [profileInfoDb, setProfileInfoDb] = useState('');
+
+    React.useEffect(() => {
+        async function fetchProfileInfo() {
+            if (!user?.id) return;
+            try {
+                // Import dinámico para evitar problemas de SSR
+                const { selectFrom } = await import('./services/db');
+                const data = await selectFrom('profiles', {
+                    columns: 'profileInformation',
+                    match: { id: user.id },
+                    single: true
+                });
+                setProfileInfoDb(data?.profileInformation || '');
+            } catch (err) {
+                setProfileInfoDb('');
+            }
+        }
+        fetchProfileInfo();
+    }, [user?.id, showProfileModal]);
+
     return (
         showProfileModal && (
             <div className="fixed bottom-6 left-6 z-50">
@@ -162,15 +184,12 @@ const ProfileModal = ({
                             <span className="text-sm theme-text-secondary">Información del perfil:</span>
                             {!isEditingInfo ? (
                                 <div className="flex items-center gap-2 w-full">
-                                    <span className="theme-text-primary text-base flex-1">{profileInfo}</span>
+                                    <span className="theme-text-primary text-base flex-1">{profileInfoDb || 'Sin información disponible.'}</span>
                                     <div
                                         className="w-7 h-7"
                                         onClick={() => {
-                                            setNewProfileInfo(profileInfo); // <-- Inicializa el campo con el valor actual
+                                            setNewProfileInfo(profileInfoDb || '');
                                             setIsEditingInfo(true);
-                                            setTimeout(() => {
-                                                document.getElementById('profileInfoInput')?.focus();
-                                            }, 100);
                                         }}
                                         onMouseEnter={() => {
                                             setInfoProfileStopped(true);
@@ -189,10 +208,25 @@ const ProfileModal = ({
                             ) : (
                                 <form
                                     className="flex flex-col items-center gap-2 w-full"
-                                    onSubmit={e => {
+                                    onSubmit={async e => {
                                         e.preventDefault();
                                         if (newProfileInfo.trim()) {
-                                            setProfileInfo(newProfileInfo.trim());
+                                            try {
+                                                const { updateTable } = await import('./services/db');
+                                                await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                setProfileInfoDb(newProfileInfo.trim());
+                                                if (window.toast) window.toast.success('Información actualizada');
+                                                else {
+                                                    const { default: toast } = await import('react-hot-toast');
+                                                    toast.success('Información actualizada');
+                                                }
+                                            } catch (err) {
+                                                if (window.toast) window.toast.error('Error al guardar');
+                                                else {
+                                                    const { default: toast } = await import('react-hot-toast');
+                                                    toast.error('Error al guardar');
+                                                }
+                                            }
                                             setIsEditingInfo(false);
                                         }
                                     }}
@@ -203,24 +237,6 @@ const ProfileModal = ({
                                         className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
                                         value={newProfileInfo}
                                         onChange={e => setNewProfileInfo(e.target.value)}
-                                        onBlur={() => {
-                                            if (newProfileInfo.trim()) {
-                                                setProfileInfo(newProfileInfo.trim());
-                                            }
-                                            setIsEditingInfo(false);
-                                        }}
-                                        onKeyDown={e => {
-                                            if (e.key === 'Enter') {
-                                                if (newProfileInfo.trim()) {
-                                                    setProfileInfo(newProfileInfo.trim());
-                                                }
-                                                setIsEditingInfo(false);
-                                            }
-                                            if (e.key === 'Escape') {
-                                                setNewProfileInfo(profileInfo);
-                                                setIsEditingInfo(false);
-                                            }
-                                        }}
                                         autoFocus
                                     />
                                     <div className="flex gap-2 mt-1">
@@ -228,20 +244,15 @@ const ProfileModal = ({
                                             type="submit"
                                             className="p-1 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
                                             title="Guardar"
-                                        >
-                                            Guardar
-                                        </button>
+                                        >Guardar</button>
                                         <button
                                             type="button"
                                             className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
                                             onClick={() => {
-                                                setNewProfileInfo(profileInfo);
                                                 setIsEditingInfo(false);
                                             }}
                                             title="Cancelar"
-                                        >
-                                            Cancelar
-                                        </button>
+                                        >Cancelar</button>
                                     </div>
                                 </form>
                             )}
