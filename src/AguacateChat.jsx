@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import toast, { Toaster } from 'react-hot-toast';
@@ -7,6 +7,7 @@ import Sidebar from './Sidebar';
 import ProfileModal from './ProfileModal';
 import ConfigModal from './ConfigModal';
 import { useAuth } from './context/AuthContext.jsx';
+import supabase from './services/supabaseClient';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
@@ -74,6 +75,12 @@ const AguacateChat = () => {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
+
+    // Estado de búsqueda en "Nuevo Chat" (modal)
+    const [searchUserQuery, setSearchUserQuery] = useState('');
+    const [searchUserResults, setSearchUserResults] = useState([]);
+    const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+    const searchReqIdRef = useRef(0);
     
     // 2. Estados para controlar las animaciones al pasar el cursor
     const [isSearchPaused, setSearchPaused] = useState(true);
@@ -215,6 +222,10 @@ const AguacateChat = () => {
         setModalType('chat');
         setShowContactModal(true);
         setShowNewChatMenu(false);
+        // Reiniciar búsqueda del modal
+        setSearchUserQuery('');
+        setSearchUserResults([]);
+        setIsSearchingUsers(false);
     };
 
     const createNewGroup = () => {
@@ -261,6 +272,61 @@ const AguacateChat = () => {
                 },
             });
         }
+    };
+
+    // Buscar perfiles en Supabase por username (coincidencias parciales, insensible a mayúsculas)
+    useEffect(() => {
+        if (!showContactModal || modalType !== 'chat') return;
+        const q = searchUserQuery.trim();
+        if (q === '') {
+            setSearchUserResults([]);
+            setIsSearchingUsers(false);
+            return;
+        }
+        setIsSearchingUsers(true);
+        const requestId = ++searchReqIdRef.current;
+        const timer = setTimeout(async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, username, avatar_url')
+                    .ilike('username', `%${q}%`)
+                    .limit(15);
+                if (requestId !== searchReqIdRef.current) return; // descartar resultados antiguos
+                if (error) {
+                    console.error('Error buscando perfiles:', error);
+                    toast.error(`No se pudo buscar usuarios: ${error.message}`);
+                    setSearchUserResults([]);
+                } else {
+                    setSearchUserResults(data || []);
+                }
+            } catch (err) {
+                if (requestId !== searchReqIdRef.current) return;
+                console.error('Excepción buscando perfiles:', err);
+                toast.error('Error inesperado buscando usuarios');
+                setSearchUserResults([]);
+            } finally {
+                if (requestId === searchReqIdRef.current) setIsSearchingUsers(false);
+            }
+        }, 350); // debounce
+        return () => clearTimeout(timer);
+    }, [searchUserQuery, showContactModal, modalType]);
+
+    const handlePickProfile = (profile) => {
+        const nameFromProfile = (profile?.username || 'Usuario').trim();
+        const contact = {
+            name: nameFromProfile,
+            status: '🟢',
+            lastMessage: '',
+            time: '',
+            initials: initialsFrom(nameFromProfile),
+            profileId: profile?.id,
+            email: undefined,
+            username: profile?.username,
+            avatar_url: profile?.avatar_url,
+        };
+        selectContact(contact);
+        closeContactModal();
     };
 
     // Perfil basado en el usuario autenticado
@@ -416,9 +482,17 @@ const AguacateChat = () => {
                         <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
                             ☰
                         </button>
-                        <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
-                            {selectedContact.initials}
-                        </div>
+                        {selectedContact?.avatar_url ? (
+                            <img
+                                src={selectedContact.avatar_url}
+                                alt={selectedContact.name}
+                                className="w-10 h-10 rounded-full object-cover"
+                            />
+                        ) : (
+                            <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
+                                {selectedContact.initials}
+                            </div>
+                        )}
                         <div>
                             <h2 id="chatName" className="font-semibold theme-text-primary">{selectedContact.name}</h2>
                             <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : 'Desconectado'}</p>
@@ -489,9 +563,17 @@ const AguacateChat = () => {
                     {chatMessages.map((message, index) => (
                         <div key={index} className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
                             {message.type === 'received' && (
-                                <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
-                                    {selectedContact.initials}
-                                </div>
+                                selectedContact?.avatar_url ? (
+                                    <img
+                                        src={selectedContact.avatar_url}
+                                        alt={selectedContact.name}
+                                        className="w-8 h-8 rounded-full object-cover mr-2"
+                                    />
+                                ) : (
+                                    <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
+                                        {selectedContact.initials}
+                                    </div>
+                                )
                             )}
                             <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl`}>
                                 {message.text}
@@ -502,9 +584,17 @@ const AguacateChat = () => {
                     {/* NUEVO: Indicador de escribiendo */}
                     {isTyping && (
                         <div className="flex justify-start">
-                             <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
-                                {selectedContact.initials}
-                            </div>
+                                {selectedContact?.avatar_url ? (
+                                    <img
+                                        src={selectedContact.avatar_url}
+                                        alt={selectedContact.name}
+                                        className="w-8 h-8 rounded-full object-cover mr-2"
+                                    />
+                                ) : (
+                                    <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
+                                        {selectedContact.initials}
+                                    </div>
+                                )}
                             <div className="message-received max-w-xs lg:max-w-md px-4 py-2 rounded-2xl rounded-bl-md">
                                 <div className="flex items-center gap-1">
                                     <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0s'}}></span>
@@ -664,29 +754,73 @@ const AguacateChat = () => {
                             </button>
                         </div>
                         <p id="modalSubtitle" className="text-sm theme-text-secondary mt-2">
-                            {modalType === 'chat' ? 'Selecciona un contacto para iniciar una conversación' : 'Selecciona los contactos para agregar al grupo'}
+                            {modalType === 'chat' ? 'Escribe el nombre de usuario para buscar y empezar un chat' : 'Selecciona los contactos para agregar al grupo'}
                         </p>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4">
-                        <div id="contactList" className="space-y-2">
-                            {allContacts.map((contact, index) => (
-                                <div key={index} onClick={() => toggleContactSelection(contact)} className={`p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-gray-700 transition-colors ${modalType === 'group' && selectedGroupContacts.find(c => c.name === contact.name) ? 'bg-teal-primary' : 'theme-bg-chat'}`}>
-                                    {modalType === 'group' && (
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedGroupContacts.find(c => c.name === contact.name) ? true : false}
-                                            readOnly
-                                            className="form-checkbox h-5 w-5 text-teal-600 rounded"
-                                        />
+                        {modalType === 'chat' ? (
+                            <div className="flex flex-col gap-3">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nombre de usuario"
+                                    className="w-full p-3 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
+                                    value={searchUserQuery}
+                                    onChange={(e) => setSearchUserQuery(e.target.value)}
+                                    autoFocus
+                                />
+                                {/* Resultados */}
+                                <div id="searchResults" className="space-y-2">
+                                    {isSearchingUsers && (
+                                        <div className="text-sm theme-text-secondary">Buscando...</div>
                                     )}
-                                    <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
-                                        {contact.initials}
-                                    </div>
-                                    <h4 className="font-semibold theme-text-primary">{contact.name}</h4>
+                                    {!isSearchingUsers && searchUserQuery.trim() !== '' && searchUserResults.length === 0 && (
+                                        <div className="text-sm theme-text-secondary">Sin resultados</div>
+                                    )}
+                                    {searchUserResults.map((p) => (
+                                        <div
+                                            key={p.id}
+                                            className="p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:theme-bg-secondary transition-colors theme-bg-chat"
+                                            onClick={() => handlePickProfile(p)}
+                                        >
+                                            {p.avatar_url ? (
+                                                <img
+                                                    src={p.avatar_url}
+                                                    alt={p.username || 'Usuario'}
+                                                    className="w-10 h-10 rounded-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
+                                                    {initialsFrom(p.username || 'U')}
+                                                </div>
+                                            )}
+                                            <div className="flex flex-col">
+                                                <h4 className="font-semibold theme-text-primary">{p.username || 'Usuario'}</h4>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </div>
+                        ) : (
+                            <div id="contactList" className="space-y-2">
+                                {allContacts.map((contact, index) => (
+                                    <div key={index} onClick={() => toggleContactSelection(contact)} className={`p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-gray-700 transition-colors ${modalType === 'group' && selectedGroupContacts.find(c => c.name === contact.name) ? 'bg-teal-primary' : 'theme-bg-chat'}`}>
+                                        {modalType === 'group' && (
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedGroupContacts.find(c => c.name === contact.name) ? true : false}
+                                                readOnly
+                                                className="form-checkbox h-5 w-5 text-teal-600 rounded"
+                                            />
+                                        )}
+                                        <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
+                                            {contact.initials}
+                                        </div>
+                                        <h4 className="font-semibold theme-text-primary">{contact.name}</h4>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {modalType === 'group' && (

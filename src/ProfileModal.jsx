@@ -183,12 +183,22 @@ const ProfileModal = ({
                                     setAvatarPreview(previewUrl);
                                     setUploadingAvatar(true);
                                     try {
+                                        // Verificar sesión/UID de auth para construir la ruta correcta (RLS depende de auth.uid())
+                                        const { data: sessRes } = await supabase.auth.getSession();
+                                        const authUid = sessRes?.session?.user?.id || null;
+                                        if (!authUid) {
+                                            const msg = 'No hay sesión activa. Inicia sesión para actualizar tu foto.';
+                                            if (window.toast) window.toast.error(msg); else { try { const { default: toast } = await import('react-hot-toast'); toast.error(msg); } catch {}
+                                            }
+                                            throw new Error('Missing auth session');
+                                        }
+
                                         // Construir ruta de almacenamiento
                                         const oldPath = extractPathFromPublicUrl(avatarUrl);
                                         const fileName = `${Date.now()}.${ext}`;
-                                        const path = `${user.id}/${fileName}`;
+                                        const path = `${authUid}/${fileName}`; // usar auth.uid para cumplir RLS
                                         if (import.meta.env?.DEV) {
-                                            console.debug('[Avatar] Subiendo a', { bucket: 'userphotos', path, mime });
+                                            console.debug('[Avatar] Subiendo a', { bucket: 'userphotos', path, mime, authUid, userId: user?.id });
                                         }
                                         // Subir al bucket userphotos
                                         const { error: uploadError } = await supabase.storage
@@ -197,8 +207,12 @@ const ProfileModal = ({
                                             // no tendremos problemas de caché al actualizar.
                                             .upload(path, blob, { upsert: true, contentType: mime, cacheControl: '31536000' });
                                         if (uploadError) {
+                                            const firstSeg = path.split('/')[0];
+                                            const details = `UID=${authUid} | path=${path} | firstSeg=${firstSeg}`;
+                                            if (window.toast) window.toast.error(`No se pudo subir la imagen. ${details}`);
+                                            else { try { const { default: toast } = await import('react-hot-toast'); toast.error(`No se pudo subir la imagen. ${details}`); } catch {} }
                                             if (import.meta.env?.DEV) {
-                                                console.error('[Avatar] Error en upload:', uploadError);
+                                                console.error('[Avatar] Error en upload:', uploadError, { authUid, path, firstSeg });
                                             }
                                             throw uploadError;
                                         }
@@ -216,8 +230,10 @@ const ProfileModal = ({
                                         const publicUrl = publicData.publicUrl;
 
                                         // Guardar en profiles.avatar_url
+                                        const { data: sess2 } = await supabase.auth.getSession();
+                                        const profileId = sess2?.session?.user?.id || user?.id;
                                         const { updateTable } = await import('./services/db');
-                                        await updateTable('profiles', { id: user.id }, { avatar_url: publicUrl });
+                                        await updateTable('profiles', { id: profileId }, { avatar_url: publicUrl });
 
                                         // Actualizar UI a la URL pública y liberar el objeto local
                                         if (previewUrl) URL.revokeObjectURL(previewUrl);
