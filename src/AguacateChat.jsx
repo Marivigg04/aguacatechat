@@ -1,3 +1,4 @@
+import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
 import React, { useState, useEffect } from 'react';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
@@ -9,7 +10,6 @@ import ConfigModal from './ConfigModal';
 import { useAuth } from './context/AuthContext.jsx';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
-import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
 import animationSmile from './animations/wired-flat-261-emoji-smile-hover-smile.json';
 import animationLink from './animations/wired-flat-11-link-unlink-hover-bounce.json';
@@ -24,6 +24,10 @@ import animationInfoProfile from './animations/wired-flat-112-book-hover-closed.
 import animationPhotoProfile from './animations/wired-flat-3099-portrait-photo-hover-pinch.json';
 import animationTypingProfile from './animations/Typing.json';
 import animationLockProfile from './animations/lock.json';
+import bocina from './animations/Bocina.json';
+import pin from './animations/Pin.json';
+import callSilent from './animations/Call_silent.json';
+import information from './animations/information.json';
 
 const initialContacts = [
     { name: 'Ana García', status: '🟢', lastMessage: '¡Hola! ¿Cómo estás?', time: '14:30', initials: 'AG' },
@@ -127,6 +131,7 @@ const AguacateChat = () => {
     });
 
     const lottieOptions = {
+        trash: createLottieOptions(animationTrash),
         search: createLottieOptions(animationSearch),
         link: createLottieOptions(animationLink),
         smile: createLottieOptions(animationSmile),
@@ -142,6 +147,10 @@ const AguacateChat = () => {
         photoProfile: createLottieOptions(animationPhotoProfile),
         typingProfile: createLottieOptions(animationTypingProfile),
         lockProfile: createLottieOptions(animationLockProfile),
+        bocina: createLottieOptions(bocina),
+        pin: createLottieOptions(pin),
+        callSilent: createLottieOptions(callSilent),
+        information: createLottieOptions(information),
     };
 
     useEffect(() => {
@@ -432,31 +441,6 @@ const AguacateChat = () => {
                                 <span className="w-1 h-1 bg-current rounded-full"></span>
                             </button>
                             <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu ? '' : 'hidden'}`}>
-                                <button onClick={() => { 
-                                    toast.success('Notificaciones silenciadas.'); 
-                                    toggleChatOptions(); 
-                                 }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2">
-                                    🔇 <span>Silenciar notificaciones</span>
-                                 </button>
-                                <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
-                                    📌 <span>Fijar conversación</span>
-                                </button>
-                                <button onClick={() => { alert('Exportar chat'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
-                                    onMouseEnter={() => {
-                                        setShareStopped(true);
-                                        setTimeout(() => {
-                                            setShareStopped(false);
-                                            setSharePaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setSharePaused(true)}
-                                >
-                                    <div className="w-5 h-5">
-                                        <Lottie options={lottieOptions.share} isPaused={isSharePaused} isStopped={isShareStopped}/>
-                                    </div>
-                                    <span>Exportar chat</span>
-                                </button>
-                                {/* 4. REEMPLAZO DEL ICONO DE LIMPIAR CHAT */}
                                 <button 
                                     onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
                                     className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
@@ -474,11 +458,29 @@ const AguacateChat = () => {
                                     </div>
                                     <span>Limpiar chat</span>
                                 </button>
+                                <button onClick={() => { toast.success('Notificaciones silenciadas.'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2">
+                                    <div className="w-5 h-5">
+                                        <Lottie options={lottieOptions.bocina} height={24} width={24} />
+                                    </div>
+                                    <span>Silenciar notificaciones</span>
+                                </button>
+                                <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
+                                    <div className="w-5 h-5">
+                                        <Lottie options={lottieOptions.pin} height={24} width={24} />
+                                    </div>
+                                    <span>Fijar conversación</span>
+                                </button>
                                 <button onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
-                                    🚫 <span>Bloquear contacto</span>
+                                    <div className="w-5 h-5">
+                                        <Lottie options={lottieOptions.callSilent} height={24} width={24} />
+                                    </div>
+                                    <span>Bloquear contacto</span>
                                 </button>
                                 <button onClick={() => { alert('Ver información'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2">
-                                    ℹ️ <span>Ver información</span>
+                                    <div className="w-5 h-5">
+                                        <Lottie options={lottieOptions.information} height={24} width={24} />
+                                    </div>
+                                    <span>Ver información</span>
                                 </button>
                             </div>
                         </div>
