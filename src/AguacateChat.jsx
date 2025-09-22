@@ -720,16 +720,7 @@ const AguacateChat = () => {
                 setEditProfilePaused={setEditProfilePaused}
                 isEditProfileStopped={isEditProfileStopped}
                 setEditProfileStopped={setEditProfileStopped}
-                isEditingInfo={isEditingInfo}
-                setIsEditingInfo={setIsEditingInfo}
-                profileInfo={profileInfo}
-                setProfileInfo={setProfileInfo}
-                newProfileInfo={newProfileInfo}
-                setNewProfileInfo={setNewProfileInfo}
-                isInfoProfilePaused={isInfoProfilePaused}
-                setInfoProfilePaused={setInfoProfilePaused}
-                isInfoProfileStopped={isInfoProfileStopped}
-                setInfoProfileStopped={setInfoProfileStopped}
+                // Eliminado: props de edición de profileInfo
                 lottieOptions={lottieOptions}
                 setShowEditPasswordModal={setShowEditPasswordModal}
                 showEditPasswordModal={showEditPasswordModal} // <-- Añade esta línea

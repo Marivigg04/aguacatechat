@@ -1,7 +1,24 @@
 import React from 'react';
 import Lottie from 'react-lottie';
 import filterAnimation from './animations/Filter.json';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useAuth } from './context/AuthContext.jsx';
+
+// Carga simple del avatar desde la tabla profiles
+async function fetchAvatarUrl(userId) {
+    if (!userId) return null;
+    try {
+        const { selectFrom } = await import('./services/db');
+        const data = await selectFrom('profiles', {
+            columns: 'avatar_url',
+            match: { id: userId },
+            single: true,
+        });
+        return data?.avatar_url || null;
+    } catch {
+        return null;
+    }
+}
 
 const Sidebar = ({
     showSideMenu,
@@ -18,8 +35,29 @@ const Sidebar = ({
     isConfigStopped,
     setConfigStopped
 }) => {
+    const { user } = useAuth();
     const [isFilterPaused, setFilterPaused] = useState(true);
     const [isFilterStopped, setFilterStopped] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState(null);
+
+    // Cargar avatar inicial y reaccionar a cambios
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            const url = await fetchAvatarUrl(user?.id);
+            if (mounted) setAvatarUrl(url);
+        })();
+        // Escuchar actualizaciones desde el modal de perfil
+        const onAvatarUpdated = (e) => {
+            const url = e?.detail || null;
+            if (url) setAvatarUrl(url);
+        };
+        window.addEventListener('profile:avatar-updated', onAvatarUpdated);
+        return () => {
+            mounted = false;
+            window.removeEventListener('profile:avatar-updated', onAvatarUpdated);
+        };
+    }, [user?.id]);
 
     return (
         <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r">
@@ -73,7 +111,17 @@ const Sidebar = ({
                         onMouseLeave={() => setProfilePaused(true)}
                     >
                         <div className="w-7 h-7 flex items-center justify-center">
-                            <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
+                            {avatarUrl ? (
+                                <div className="w-full h-full rounded-full overflow-hidden border border-white/10">
+                                    <img
+                                        src={avatarUrl}
+                                        alt="Avatar"
+                                        className="w-full h-full object-cover scale-125"
+                                    />
+                                </div>
+                            ) : (
+                                <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
+                            )}
                         </div>
                     </button>
                     <button
@@ -125,8 +173,18 @@ const Sidebar = ({
                         }}
                         onMouseLeave={() => setProfilePaused(true)}
                     >
-                        <div className="w-6 h-6">
-                            <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
+                        <div className="w-6 h-6 flex items-center justify-center">
+                            {avatarUrl ? (
+                                <div className="w-full h-full rounded-full overflow-hidden border border-white/10">
+                                    <img
+                                        src={avatarUrl}
+                                        alt="Avatar"
+                                        className="w-full h-full object-cover scale-150"
+                                    />
+                                </div>
+                            ) : (
+                                <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
+                            )}
                         </div>
                         <span>Perfil</span>
                     </button>

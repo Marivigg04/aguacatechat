@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Lottie from 'react-lottie';
-import { FaEye, FaEyeSlash } from 'react-icons/fa'; // Agrega este import al inicio
+import { FaEye, FaEyeSlash, FaPen } from 'react-icons/fa'; // Agrega este import al inicio
+import { supabase } from './services/supabaseClient';
 import { useAuth } from './context/AuthContext.jsx'
 import { useNavigate } from 'react-router-dom'
 
@@ -16,12 +17,6 @@ const ProfileModal = ({
     setEditProfilePaused,
     isEditProfileStopped,
     setEditProfileStopped,
-    isEditingInfo,
-    setIsEditingInfo,
-    profileInfo,
-    setProfileInfo,
-    newProfileInfo,
-    setNewProfileInfo,
     isInfoProfilePaused,
     setInfoProfilePaused,
     isInfoProfileStopped,
@@ -40,6 +35,10 @@ const ProfileModal = ({
     isLockProfilePaused,
     isLockProfileStopped
 }) => {
+    // Estados locales para edición de información de perfil
+    // (independiente de los props, para evitar problemas de sincronización)
+    const [isEditingInfo, setIsEditingInfo] = useState(false);
+    const [newProfileInfo, setNewProfileInfo] = useState('');
     const { signOut, user } = useAuth();
     const navigate = useNavigate();
     // Estados locales para la ventana de cambiar contraseña
@@ -53,6 +52,66 @@ const ProfileModal = ({
 
     // Estado para la info de perfil desde Supabase
     const [profileInfoDb, setProfileInfoDb] = useState('');
+    // Estado y ref para la foto de perfil local (vista previa), url remota y selector de archivos
+    const [avatarPreview, setAvatarPreview] = useState(null);
+    const [avatarUrl, setAvatarUrl] = useState(null);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const fileInputRef = React.useRef(null);
+
+    // Helpers: validación, recorte y utilidades de imagen
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    // Soporte de tipos comunes en navegadores (bucket público)
+    const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const TARGET_SIZE = 512; // tamaño final cuadrado
+
+    function extractPathFromPublicUrl(url) {
+        if (!url) return null;
+        const marker = '/userphotos/';
+        const idx = url.lastIndexOf(marker);
+        if (idx === -1) return null;
+        return url.substring(idx + marker.length);
+    }
+
+    function validateFile(file) {
+        if (file.size > MAX_FILE_SIZE) {
+            return 'La imagen supera el tamaño máximo de 5MB';
+        }
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            return 'Formato no permitido. Usa JPG, PNG o WebP';
+        }
+        return null;
+    }
+
+    async function processImageToSquare(file, size = TARGET_SIZE) {
+        // Devuelve { blob, mime, ext, previewUrl }
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        try {
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = objectUrl;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const minSide = Math.min(img.width, img.height);
+            const sx = (img.width - minSide) / 2;
+            const sy = (img.height - minSide) / 2;
+            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+
+            const mime = 'image/webp';
+            const ext = 'webp';
+            const blob = await new Promise((resolve) => {
+                canvas.toBlob((b) => resolve(b), mime, 0.9);
+            });
+            const previewUrl = URL.createObjectURL(blob);
+            return { blob, mime, ext, previewUrl };
+        } finally {
+            URL.revokeObjectURL(objectUrl);
+        }
+    }
 
     React.useEffect(() => {
         async function fetchProfileInfo() {
@@ -61,13 +120,15 @@ const ProfileModal = ({
                 // Import dinámico para evitar problemas de SSR
                 const { selectFrom } = await import('./services/db');
                 const data = await selectFrom('profiles', {
-                    columns: 'profileInformation',
+                    columns: 'profileInformation, avatar_url',
                     match: { id: user.id },
                     single: true
                 });
                 setProfileInfoDb(data?.profileInformation || '');
+                setAvatarUrl(data?.avatar_url || null);
             } catch (err) {
                 setProfileInfoDb('');
+                setAvatarUrl(null);
             }
         }
         fetchProfileInfo();
@@ -87,17 +148,152 @@ const ProfileModal = ({
                         </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-                        {/* Foto de perfil centrada */}
+                        {/* Botón avatar con overlay de lápiz en hover y selector de imagen */}
                         <div className="flex flex-col items-center mb-4">
-                            <div className="w-16 h-16 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold text-2xl mb-2">
-                                {myProfile.initials}
-                            </div>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file || !user?.id) return;
+
+                                    // Validaciones
+                                    const errorMsg = validateFile(file);
+                                    if (errorMsg) {
+                                        if (window.toast) window.toast.error(errorMsg);
+                                        else {
+                                            try { const { default: toast } = await import('react-hot-toast'); toast.error(errorMsg); } catch {}
+                                        }
+                                        return;
+                                    }
+
+                                    // Recorte/resize previo y vista previa del procesado
+                                    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+                                    let processed;
+                                    try {
+                                        processed = await processImageToSquare(file);
+                                    } catch (err) {
+                                        if (window.toast) window.toast.error('No se pudo procesar la imagen');
+                                        else { try { const { default: toast } = await import('react-hot-toast'); toast.error('No se pudo procesar la imagen'); } catch {} }
+                                        return;
+                                    }
+                                    const { blob, mime, ext, previewUrl } = processed;
+                                    setAvatarPreview(previewUrl);
+                                    setUploadingAvatar(true);
+                                    try {
+                                        // Construir ruta de almacenamiento
+                                        const oldPath = extractPathFromPublicUrl(avatarUrl);
+                                        const fileName = `${Date.now()}.${ext}`;
+                                        const path = `${user.id}/${fileName}`;
+                                        if (import.meta.env?.DEV) {
+                                            console.debug('[Avatar] Subiendo a', { bucket: 'userphotos', path, mime });
+                                        }
+                                        // Subir al bucket userphotos
+                                        const { error: uploadError } = await supabase.storage
+                                            .from('userphotos')
+                                            // Bucket público: añadimos cacheControl para aprovechar CDN. Como usamos nombres únicos por timestamp,
+                                            // no tendremos problemas de caché al actualizar.
+                                            .upload(path, blob, { upsert: true, contentType: mime, cacheControl: '31536000' });
+                                        if (uploadError) {
+                                            if (import.meta.env?.DEV) {
+                                                console.error('[Avatar] Error en upload:', uploadError);
+                                            }
+                                            throw uploadError;
+                                        }
+
+                                        // Obtener URL pública
+                                        const { data: publicData, error: pubErr } = supabase.storage
+                                            .from('userphotos')
+                                            .getPublicUrl(path);
+                                        if (pubErr) {
+                                            if (import.meta.env?.DEV) {
+                                                console.error('[Avatar] Error obteniendo URL pública:', pubErr);
+                                            }
+                                            throw pubErr;
+                                        }
+                                        const publicUrl = publicData.publicUrl;
+
+                                        // Guardar en profiles.avatar_url
+                                        const { updateTable } = await import('./services/db');
+                                        await updateTable('profiles', { id: user.id }, { avatar_url: publicUrl });
+
+                                        // Actualizar UI a la URL pública y liberar el objeto local
+                                        if (previewUrl) URL.revokeObjectURL(previewUrl);
+                                        setAvatarPreview(null);
+                                        setAvatarUrl(publicUrl);
+                                        // Notificar a otros componentes (e.g., Sidebar) que el avatar cambió
+                                        try {
+                                            window.dispatchEvent(new CustomEvent('profile:avatar-updated', { detail: publicUrl }));
+                                        } catch {}
+
+                                        // Eliminar avatar anterior si existía
+                                        if (oldPath) {
+                                            try {
+                                                await supabase.storage.from('userphotos').remove([oldPath]);
+                                            } catch (delErr) {
+                                                console.warn('No se pudo eliminar la imagen anterior:', delErr);
+                                            }
+                                        }
+
+                                        // Notificación opcional
+                                        if (window.toast) window.toast.success('Foto actualizada');
+                                        else {
+                                            try {
+                                                const { default: toast } = await import('react-hot-toast');
+                                                toast.success('Foto actualizada');
+                                            } catch {}
+                                        }
+
+                                        // Callback opcional para capas superiores
+                                        if (typeof myProfile?.onPhotoSelected === 'function') {
+                                            try { myProfile.onPhotoSelected(file, publicUrl); } catch {}
+                                        }
+                                    } catch (err) {
+                                        // Si falla, mantener (o limpiar) la vista previa local y avisar
+                                        const details = err?.message || err?.error?.message || String(err);
+                                        const msgBase = 'No se pudo actualizar la foto';
+                                        const msg = import.meta.env?.DEV ? `${msgBase}: ${details}` : msgBase;
+                                        if (window.toast) window.toast.error(msg);
+                                        else {
+                                            try {
+                                                const { default: toast } = await import('react-hot-toast');
+                                                toast.error(msg);
+                                            } catch {}
+                                        }
+                                        console.error('[Avatar] Error completo:', err);
+                                    } finally {
+                                        setUploadingAvatar(false);
+                                    }
+                                }}
+                            />
+                            <button
+                                type="button"
+                                className="relative group w-32 h-32 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary text-white flex items-center justify-center shadow-lg overflow-hidden"
+                                onClick={() => fileInputRef.current?.click()}
+                                title="Cambiar foto de perfil"
+                            >
+                                {avatarPreview || avatarUrl ? (
+                                    <img src={avatarPreview || avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="font-bold text-5xl select-none">{myProfile.initials}</span>
+                                )}
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                    <FaPen className="text-white text-2xl" />
+                                </div>
+                                {uploadingAvatar && (
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                        <span className="text-white text-sm">Subiendo...</span>
+                                    </div>
+                                )}
+                            </button>
                             {/* Nombre y edición con transición suave */}
-                            <div className="w-full flex flex-col items-center">
+                            <div className="w-full flex flex-col items-center mt-5">
                                 <div className={`transition-all duration-300 w-full`}>
                                     {!isEditingName ? (
-                                        <div className="flex items-center gap-2 justify-center">
-                                            <span className="font-semibold theme-text-primary text-lg">{myProfile.name}</span>
+                                        <div className="flex items-center gap-4 justify-center">
+                                            <span className="font-semibold theme-text-primary text-3xl">{myProfile.name}</span>
                                             <div
                                                 className="w-7 h-7"
                                                 onClick={() => {
@@ -182,10 +378,7 @@ const ProfileModal = ({
                                 </div>
                             </div>
                         </div>
-                        <div className="flex flex-col gap-1 mb-2">
-                            <span className="text-sm theme-text-secondary">Número de teléfono:</span>
-                            <span className="font-semibold theme-text-primary">{myProfile.phone}</span>
-                        </div>
+                        {/* Se eliminó el número de teléfono */}
                         {/* Información del perfil editable con transición suave */}
                         <div className="flex flex-col gap-1 mb-2">
                             <span className="text-sm theme-text-secondary">Información del perfil:</span>
@@ -193,15 +386,15 @@ const ProfileModal = ({
                                 {!isEditingInfo ? (
                                     <div className="flex items-center gap-2 w-full">
                                         <span className="theme-text-primary text-base flex-1 font-semibold">
-                                            {profileInfo && profileInfo.trim() !== ''
-                                                ? profileInfo
+                                            {profileInfoDb && profileInfoDb.trim() !== ''
+                                                ? profileInfoDb
                                                 : <span className="theme-text-primary font-semibold">Sin información</span>
                                             }
                                         </span>
                                         <div
                                             className="w-7 h-7"
                                             onClick={() => {
-                                                setNewProfileInfo(profileInfo || '');
+                                                setNewProfileInfo(profileInfoDb || '');
                                                 setIsEditingInfo(true);
                                                 setTimeout(() => {
                                                     document.getElementById('profileInfoInput')?.focus();
@@ -224,10 +417,25 @@ const ProfileModal = ({
                                 ) : (
                                     <form
                                         className="flex flex-col items-center gap-2 w-full"
-                                        onSubmit={e => {
+                                        onSubmit={async e => {
                                             e.preventDefault();
                                             if (newProfileInfo.trim()) {
-                                                setProfileInfo(newProfileInfo.trim());
+                                                try {
+                                                    const { updateTable } = await import('./services/db');
+                                                    await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                    setProfileInfoDb(newProfileInfo.trim());
+                                                    if (window.toast) window.toast.success('Información actualizada');
+                                                    else {
+                                                        const { default: toast } = await import('react-hot-toast');
+                                                        toast.success('Información actualizada');
+                                                    }
+                                                } catch (err) {
+                                                    if (window.toast) window.toast.error('Error al guardar');
+                                                    else {
+                                                        const { default: toast } = await import('react-hot-toast');
+                                                        toast.error('Error al guardar');
+                                                    }
+                                                }
                                                 setIsEditingInfo(false);
                                             }
                                         }}
@@ -243,21 +451,29 @@ const ProfileModal = ({
                                                     setNewProfileInfo('');
                                                 }
                                             }}
-                                            onBlur={() => {
+                                            onBlur={async () => {
                                                 if (newProfileInfo.trim()) {
-                                                    setProfileInfo(newProfileInfo.trim());
+                                                    try {
+                                                        const { updateTable } = await import('./services/db');
+                                                        await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                        setProfileInfoDb(newProfileInfo.trim());
+                                                    } catch {}
                                                 }
                                                 setIsEditingInfo(false);
                                             }}
-                                            onKeyDown={e => {
+                                            onKeyDown={async e => {
                                                 if (e.key === 'Enter') {
                                                     if (newProfileInfo.trim()) {
-                                                        setProfileInfo(newProfileInfo.trim());
+                                                        try {
+                                                            const { updateTable } = await import('./services/db');
+                                                            await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                            setProfileInfoDb(newProfileInfo.trim());
+                                                        } catch {}
                                                     }
                                                     setIsEditingInfo(false);
                                                 }
                                                 if (e.key === 'Escape') {
-                                                    setNewProfileInfo(profileInfo);
+                                                    setNewProfileInfo(profileInfoDb || '');
                                                     setIsEditingInfo(false);
                                                 }
                                             }}
@@ -288,24 +504,7 @@ const ProfileModal = ({
                                 )}
                             </div>
                         </div>
-                        {/* Opciones de perfil */}
-                        <button
-                            className="flex items-center gap-2 p-2 rounded transition-colors"
-                            onClick={() => alert('Cambiar imagen de perfil')}
-                            onMouseEnter={() => {
-                                setPhotoProfileStopped(true);
-                                setTimeout(() => {
-                                    setPhotoProfileStopped(false);
-                                    setPhotoProfilePaused(false);
-                                }, 10);
-                            }}
-                            onMouseLeave={() => setPhotoProfilePaused(true)}
-                        >
-                            <div className="w-7 h-7">
-                                <Lottie options={lottieOptions.photoProfile} isPaused={isPhotoProfilePaused} isStopped={isPhotoProfileStopped} />
-                            </div>
-                            <span className="theme-text-primary">Cambiar imagen de perfil</span>
-                        </button>
+                        {/* Se eliminó el botón "Cambiar imagen de perfil" */}
                         <button
                             className="flex items-center gap-2 p-2 rounded transition-colors"
                             onClick={() => setShowEditPasswordModal(true)}
