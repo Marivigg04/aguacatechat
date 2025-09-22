@@ -132,19 +132,28 @@ const AguacateChat = () => {
             const second = parts[1]?.[0] || '';
             return (first + second).toUpperCase();
         };
+        const formatTime = (iso) => {
+            if (!iso) return '';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        };
         return (convs || []).map((c) => {
             const username = c?.otherProfile?.username || 'Usuario';
             const name = username.trim();
+            const lastContent = c?.last_message?.content || '';
+            const lastAt = c?.last_message_at || c?.created_at;
             return {
                 name,
                 status: '🟢',
-                lastMessage: '',
-                time: '',
+                lastMessage: lastContent,
+                time: formatTime(lastAt),
                 initials: deriveInitials(name),
                 profileId: c?.otherProfile?.id,
                 username: c?.otherProfile?.username,
                 avatar_url: c?.otherProfile?.avatar_url,
                 conversationId: c?.conversationId,
+                last_message_at: lastAt,
             };
         });
     };
@@ -192,45 +201,78 @@ const AguacateChat = () => {
         }
     }, [chatMessages]);
 
-    // Realtime: suscribirse a mensajes nuevos de la conversación activa
+    // Mantener referencia de la conversación seleccionada para Realtime global
+    const selectedConvIdRef = useRef(null);
+
     useEffect(() => {
-        if (!selectedContact?.conversationId) return;
-        const convId = selectedContact.conversationId;
-        const channel = supabase.channel(`messages:conv:${convId}`)
+        selectedConvIdRef.current = selectedContact?.conversationId || null;
+    }, [selectedContact?.conversationId]);
+
+    // Realtime global: escuchar eventos de messages para
+    // a) actualizar chat activo
+    // b) refrescar lista de conversaciones con último mensaje y re-orden
+    useEffect(() => {
+        const channel = supabase
+            .channel('messages:all')
             .on(
                 'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `conversation_id=eq.${convId}`,
-                },
+                { event: '*', schema: 'public', table: 'messages' },
                 (payload) => {
-                    const m = payload.new;
-                    if (!m) return;
-                    // Evitar duplicar el propio mensaje ya agregado de forma optimista
-                    if (m.sender_id === user?.id) return;
-                    setChatMessages((prev) => [
-                        ...prev,
-                        {
-                            type: 'received',
-                            text: m.content,
-                            created_at: m.created_at,
-                        },
-                    ]);
+                    const evt = payload.eventType;
+                    if (evt === 'INSERT') {
+                        const m = payload.new;
+                        if (!m) return;
+                        // b) Actualizar conversaciones y reordenar (para cualquier conversación)
+                        setConversations((prev) => {
+                            if (!Array.isArray(prev) || prev.length === 0) return prev;
+                            const updated = prev.map((c) => {
+                                if (c.conversationId === m.conversation_id) {
+                                    return {
+                                        ...c,
+                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id },
+                                        last_message_at: m.created_at,
+                                    };
+                                }
+                                return c;
+                            });
+                            // Ordenar por más reciente
+                            updated.sort((a, b) => {
+                                const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+                                const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+                                return tb - ta;
+                            });
+                            return [...updated];
+                        });
+
+                        // a) Actualizar chat activo si coincide
+                        if (m.conversation_id !== selectedConvIdRef.current) return;
+                        // Evitar duplicar los propios (ya agregados de forma optimista)
+                        if (m.sender_id === user?.id) return;
+                        setChatMessages((prev) => [
+                            ...prev,
+                            { id: m.id, type: 'received', text: m.content, created_at: m.created_at },
+                        ]);
+                    } else if (evt === 'UPDATE') {
+                        const m = payload.new;
+                        if (!m) return;
+                        if (m.conversation_id !== selectedConvIdRef.current) return;
+                        setChatMessages((prev) => prev.map(msg => (
+                            msg.id === m.id ? { ...msg, text: m.content, created_at: m.created_at } : msg
+                        )));
+                    } else if (evt === 'DELETE') {
+                        const m = payload.old;
+                        if (!m) return;
+                        if (m.conversation_id !== selectedConvIdRef.current) return;
+                        setChatMessages((prev) => prev.filter(msg => msg.id !== m.id));
+                    }
                 }
             )
-            .subscribe((status) => {
-                // opcional: log de estado
-                // console.log('Realtime status', status)
-            });
+            .subscribe();
 
         return () => {
-            try {
-                supabase.removeChannel(channel);
-            } catch {}
+            try { supabase.removeChannel(channel); } catch {}
         };
-    }, [selectedContact?.conversationId, user?.id]);
+    }, [user?.id]);
 
     const toggleTheme = () => {
         setIsDarkMode(!isDarkMode);
@@ -247,6 +289,7 @@ const AguacateChat = () => {
             if (contact?.conversationId) {
                 const msgs = await fetchMessagesByConversation(contact.conversationId);
                 const mapped = msgs.map(m => ({
+                    id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
                     text: m.content,
                     created_at: m.created_at,
@@ -271,7 +314,8 @@ const AguacateChat = () => {
             toast.error('No hay conversación activa');
             return;
         }
-        const optimistic = { type: 'sent', text: content, created_at: new Date().toISOString() };
+    const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString() };
         setChatMessages(prev => [...prev, optimistic]);
         setMessageInput('');
         try {
@@ -291,8 +335,8 @@ const AguacateChat = () => {
 
     const contacts = conversationsToContacts(conversations);
     const filteredContacts = contacts.filter(contact =>
-        contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
+        (contact.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (contact.lastMessage || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const toggleNewChatMenu = () => {
@@ -572,6 +616,12 @@ const AguacateChat = () => {
                     </div>
                 </div>
                 <div className="flex-1 overflow-y-auto relative" style={{ backgroundColor: 'var(--bg-contacts)' }}>
+                    {contacts.length === 0 && !loadingConversations && (
+                        <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-4">
+                            <p className="theme-text-secondary">No tienes conversaciones todavía.</p>
+                            <button onClick={createNewChat} className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white hover:opacity-90 transition-opacity">Crear nueva conversación</button>
+                        </div>
+                    )}
                     {filteredContacts.map((contact, index) => (
                         <div
                             key={index}
@@ -579,15 +629,19 @@ const AguacateChat = () => {
                             onClick={() => selectContact(contact)}
                         >
                             <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
-                                    {contact.initials}
-                                </div>
+                                {contact?.avatar_url ? (
+                                    <img src={contact.avatar_url} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
+                                ) : (
+                                    <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
+                                        {contact.initials}
+                                    </div>
+                                )}
                                 <div className="flex-1">
                                     <div className="flex justify-between items-center">
                                         <h3 className="font-semibold theme-text-primary">{contact.name}</h3>
                                         <span className="text-xs theme-text-secondary">{contact.time}</span>
                                     </div>
-                                    <p className="text-sm theme-text-secondary truncate">{contact.lastMessage}</p>
+                                    <p className="text-sm theme-text-secondary truncate">{contact.lastMessage || 'Sin mensajes aún'}</p>
                                 </div>
                                 {contact.unread > 0 && (
                                     <div className="bg-teal-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{contact.unread}</div>

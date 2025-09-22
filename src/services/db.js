@@ -158,7 +158,28 @@ export async function fetchUserConversations(currentUserId) {
     byConvOthers.set(o.conversation_id, arr)
   }
 
-  // 5) Componer resultado amigable para UI
+  // 5) Último mensaje por conversación (bulk)
+  const lastByConv = new Map()
+  {
+    // Traer mensajes de todas las conv en orden descendente y quedarnos con el primero de cada conv
+    const { data: msgs, error: msgErr } = await supabase
+      .from('messages')
+      .select('id, conversation_id, sender_id, content, created_at')
+      .in('conversation_id', convIds)
+      .order('created_at', { ascending: false })
+      .limit(convIds.length * 20) // margen por si hay convs sin mensajes
+
+    if (msgErr && msgErr.code !== 'PGRST116') { // código de sin resultados no es error crítico
+      throw msgErr
+    }
+    for (const m of (msgs || [])) {
+      if (!lastByConv.has(m.conversation_id)) {
+        lastByConv.set(m.conversation_id, m)
+      }
+    }
+  }
+
+  // 6) Componer resultado amigable para UI con último mensaje y orden por actividad
   const result = []
   for (const r of (myRows || [])) {
     const convId = r.conversation_id
@@ -166,14 +187,24 @@ export async function fetchUserConversations(currentUserId) {
     const otherIds = byConvOthers.get(convId) || []
     const otherId = otherIds[0] || null
     const prof = otherId ? profileMap.get(otherId) : null
+    const last = lastByConv.get(convId) || null
     result.push({
       conversationId: convId,
       type: conv.type || 'direct',
       created_at: conv.created_at,
       otherUserId: otherId,
       otherProfile: prof,
+      last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id } : null,
+      last_message_at: last?.created_at || conv.created_at,
     })
   }
+
+  // Ordenar por la más reciente primero
+  result.sort((a, b) => {
+    const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
+    const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
+    return tb - ta
+  })
 
   return result
 }
