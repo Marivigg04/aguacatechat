@@ -192,6 +192,46 @@ const AguacateChat = () => {
         }
     }, [chatMessages]);
 
+    // Realtime: suscribirse a mensajes nuevos de la conversación activa
+    useEffect(() => {
+        if (!selectedContact?.conversationId) return;
+        const convId = selectedContact.conversationId;
+        const channel = supabase.channel(`messages:conv:${convId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `conversation_id=eq.${convId}`,
+                },
+                (payload) => {
+                    const m = payload.new;
+                    if (!m) return;
+                    // Evitar duplicar el propio mensaje ya agregado de forma optimista
+                    if (m.sender_id === user?.id) return;
+                    setChatMessages((prev) => [
+                        ...prev,
+                        {
+                            type: 'received',
+                            text: m.content,
+                            created_at: m.created_at,
+                        },
+                    ]);
+                }
+            )
+            .subscribe((status) => {
+                // opcional: log de estado
+                // console.log('Realtime status', status)
+            });
+
+        return () => {
+            try {
+                supabase.removeChannel(channel);
+            } catch {}
+        };
+    }, [selectedContact?.conversationId, user?.id]);
+
     const toggleTheme = () => {
         setIsDarkMode(!isDarkMode);
     };
