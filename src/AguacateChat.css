@@ -95,3 +95,31 @@ body {
   transform: translateX(-350px);
   opacity: 0.2;
 }
+
+/* Scrollbar general */
+::-webkit-scrollbar {
+  width: 8px;
+  background: var(--bg-chat, #222);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--teal-primary, #14b8a6);
+  border-radius: 8px;
+  min-height: 24px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--teal-secondary, #2dd4bf);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--bg-chat, #222);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--teal-primary, #14b8a6) var(--bg-chat, #222);
+}
+

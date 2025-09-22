@@ -14,7 +14,7 @@ import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-ho
 import animationSmile from './animations/wired-flat-261-emoji-smile-hover-smile.json';
 import animationLink from './animations/wired-flat-11-link-unlink-hover-bounce.json';
 import animationShare from './animations/wired-flat-751-share-hover-pointing.json'; 
-import animationSend from './animations/wired-flat-177-envelope-send-hover-flying.json';
+import animationSend from './animations/Paper Plane.json';
 import animationPhoto from './animations/wired-lineal-61-camera-hover-flash.json';
 import animationVideo from './animations/wired-flat-1037-vlog-camera-hover-pinch.json';
 import animationConfig from './animations/system-solid-22-build-hover-build.json';
@@ -336,7 +336,7 @@ const AguacateChat = () => {
             <div id="sidebar" className={`sidebar w-80 theme-bg-secondary theme-border border-r flex flex-col md:relative absolute z-20 h-full ${isSidebarOpen ? 'open' : ''}`}>
                 <div className="p-4 theme-border border-b">
                     <div className="flex items-center justify-between mb-4">
-                        <h1 className="text-xl font-bold theme-text-primary">AguacateChat</h1>
+                        <h1 className="text-xl font-bold theme-text-primary">AguacaChat</h1>
                         <div className="flex items-center gap-2">
                             <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
                                 ✕
@@ -612,15 +612,27 @@ const AguacateChat = () => {
                                 <Lottie options={lottieOptions.smile} isPaused={isSmilePaused} isStopped={isSmileStopped}/>
                             </div>
                         </button>
-                        <div className="flex-1 relative">
-                            <input
+                        <div className="flex-1 relative flex items-end">
+                            <textarea
                                 id="messageInput"
-                                type="text"
                                 placeholder="Escribe un mensaje..."
-                                className="w-full p-3 pr-12 rounded-2xl theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary"
+                                className="w-full px-7 py-4 pr-20 rounded-full theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary resize-none"
+                                style={{
+                                    minHeight: '44px',
+                                    maxHeight: '160px',
+                                    lineHeight: '1.5',
+                                    marginBottom: '2px',
+                                    background: 'var(--bg-chat, #222)',
+                                    overflow: 'hidden'
+                                }}
                                 value={messageInput}
-                                onChange={(e) => setMessageInput(e.target.value)}
+                                onChange={e => setMessageInput(e.target.value)}
+                                onInput={e => {
+                                    e.target.style.height = '44px';
+                                    e.target.style.height = e.target.scrollHeight + 'px';
+                                }}
                                 onKeyPress={handleKeyPress}
+                                rows={1}
                             />
                             <button
                                 onClick={sendMessage}
@@ -683,10 +695,10 @@ const AguacateChat = () => {
                         <div className="p-4 theme-border border-t">
                             <div id="groupActions" className="mb-3">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span id="selectedCount" className="text-sm theme-text-secondary">{selectedGroupContacts.length} contactos seleccionados</span>
+                                    <span id="selectedCount" className="theme-text-secondary">{selectedGroupContacts.length} contactos seleccionados</span>
                                     <button onClick={() => setSelectedGroupContacts([])} className="text-xs theme-text-secondary hover:opacity-80">Limpiar</button>
                                 </div>
-                                <button onClick={createGroupWithSelected} className="w-full p-3 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-lg hover:opacity-90 transition-opacity mb-2">
+                                <button onClick={createGroupWithSelected} className="w-full p-3 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-lg hover:opacity-90 transition-opacity">
                                     👥 Crear Grupo
                                 </button>
                             </div>
