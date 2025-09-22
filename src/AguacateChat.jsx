@@ -457,11 +457,10 @@ const AguacateChat = () => {
                 const convs = await fetchUserConversations(user.id);
                 if (!alive) return;
                 setConversations(convs);
-                // Seleccionar por defecto la primera conversación si no hay una
+                // Seleccionar por defecto la primera conversación y cargar sus mensajes
                 if (convs.length > 0 && !selectedContact?.conversationId) {
                     const firstContact = conversationsToContacts(convs)[0];
-                    setSelectedContact(firstContact);
-                    setChatMessages([]);
+                    await selectContact(firstContact);
                 }
             } catch (e) {
                 console.error('Error cargando conversaciones:', e);
