@@ -45,3 +45,163 @@ export const auth = {
   onAuthStateChange: (cb) => supabase.auth.onAuthStateChange(cb),
   getSession: () => supabase.auth.getSession(),
 }
+
+// Conversations helpers
+// Create (or find) a direct conversation between two users and ensure both participants are inserted.
+// Returns the conversation row { id, type, created_at }
+export async function createOrGetDirectConversation(currentUserId, otherUserId) {
+  if (!currentUserId || !otherUserId) {
+    throw new Error('Faltan IDs de usuario para crear la conversación')
+  }
+  if (currentUserId === otherUserId) {
+    throw new Error('No puedes iniciar un chat directo contigo mismo')
+  }
+
+  // 1) Buscar si ya existe una conversación directa con ambos participantes
+  const { data: existingRows, error: findErr } = await supabase
+    .from('participants')
+    .select('conversation_id, user_id, conversations!inner(id, type)')
+    .eq('conversations.type', 'direct')
+    .in('user_id', [currentUserId, otherUserId])
+
+  if (findErr) throw findErr
+
+  if (existingRows && existingRows.length > 0) {
+    // Agrupar por conversación y verificar que estén ambos user_ids
+    const byConv = new Map()
+    for (const row of existingRows) {
+      const key = row.conversation_id
+      if (!byConv.has(key)) byConv.set(key, new Set())
+      byConv.get(key).add(row.user_id)
+    }
+    for (const [convId, userSet] of byConv.entries()) {
+      if (userSet.has(currentUserId) && userSet.has(otherUserId)) {
+        // Ya existe, devolver la conversación encontrada
+        return { id: convId, type: 'direct' }
+      }
+    }
+  }
+
+  // 2) Crear conversación directa SIN RETURNING para evitar RLS en SELECT
+  const convId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8)
+        return v.toString(16)
+      })
+  const { error: convErr } = await supabase
+    .from('conversations')
+    .insert({ id: convId, type: 'direct' })
+
+  if (convErr) throw convErr
+
+  // 3) Insertar participantes
+  // 3a) Siempre insertar al usuario actual (suele estar permitido por RLS)
+  const { error: selfErr } = await supabase
+    .from('participants')
+    .insert({ conversation_id: convId, user_id: currentUserId })
+
+  if (selfErr) throw selfErr
+
+  // 3b) Insertar al otro usuario
+  const { error: otherErr } = await supabase
+    .from('participants')
+    .insert({ conversation_id: convId, user_id: otherUserId })
+
+  if (otherErr) throw otherErr
+
+  return { id: convId, type: 'direct' }
+}
+
+// List conversations for a user, including the other participant's profile (for direct chats)
+export async function fetchUserConversations(currentUserId) {
+  if (!currentUserId) return []
+
+  // 1) Mis participaciones con datos de conversación
+  const { data: myRows, error: myErr } = await supabase
+    .from('participants')
+    .select('conversation_id, conversations(id, type, created_at)')
+    .eq('user_id', currentUserId)
+
+  if (myErr) throw myErr
+  const convIds = Array.from(new Set((myRows || []).map(r => r.conversation_id)))
+  if (convIds.length === 0) return []
+
+  // 2) Otros participantes en esas conversaciones
+  const { data: others, error: othersErr } = await supabase
+    .from('participants')
+    .select('conversation_id, user_id')
+    .in('conversation_id', convIds)
+    .neq('user_id', currentUserId)
+
+  if (othersErr) throw othersErr
+
+  const otherUserIds = Array.from(new Set((others || []).map(o => o.user_id)))
+
+  // 3) Perfiles de los otros usuarios (bulk)
+  let profiles = []
+  if (otherUserIds.length > 0) {
+    const { data: profs, error: profErr } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url')
+      .in('id', otherUserIds)
+    if (profErr) throw profErr
+    profiles = profs || []
+  }
+  const profileMap = new Map(profiles.map(p => [p.id, p]))
+
+  // 4) Mapear por conversación sus otros participantes
+  const byConvOthers = new Map()
+  for (const o of (others || [])) {
+    const arr = byConvOthers.get(o.conversation_id) || []
+    arr.push(o.user_id)
+    byConvOthers.set(o.conversation_id, arr)
+  }
+
+  // 5) Componer resultado amigable para UI
+  const result = []
+  for (const r of (myRows || [])) {
+    const convId = r.conversation_id
+    const conv = r.conversations || {}
+    const otherIds = byConvOthers.get(convId) || []
+    const otherId = otherIds[0] || null
+    const prof = otherId ? profileMap.get(otherId) : null
+    result.push({
+      conversationId: convId,
+      type: conv.type || 'direct',
+      created_at: conv.created_at,
+      otherUserId: otherId,
+      otherProfile: prof,
+    })
+  }
+
+  return result
+}
+
+// Messages helpers
+export async function insertMessage({ conversationId, senderId, content }) {
+  if (!conversationId || !senderId || !content?.trim()) {
+    throw new Error('Datos de mensaje incompletos')
+  }
+  const payload = {
+    conversation_id: conversationId,
+    sender_id: senderId,
+    content: content.trim(),
+  }
+  const { error } = await supabase.from('messages').insert(payload)
+  if (error) throw error
+  return true
+}
+
+export async function fetchMessagesByConversation(conversationId, { limit } = {}) {
+  if (!conversationId) return []
+  let query = supabase
+    .from('messages')
+    .select('id, sender_id, content, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+  if (limit) query = query.limit(limit)
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}

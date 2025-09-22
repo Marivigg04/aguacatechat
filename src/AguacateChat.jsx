@@ -9,6 +9,7 @@ import ProfileModal from './ProfileModal';
 import ConfigModal from './ConfigModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -119,13 +120,34 @@ const AguacateChat = () => {
 
 
 
-    const allContacts = [
-        ...initialContacts,
-        { name: 'Pedro Martínez', status: '🟢', lastMessage: 'Hola, ¿cómo estás?', time: 'Ayer', initials: 'PM' },
-        { name: 'Laura Sánchez', status: '🟡', lastMessage: '¿Tienes un minuto?', time: 'Lunes', initials: 'LS' },
-        { name: 'David González', status: '🔴', lastMessage: 'Ok, hablamos más tarde', time: 'Ayer', initials: 'DG' },
-        { name: 'Sofia Ruiz', status: '🟢', lastMessage: 'Nos vemos pronto', time: 'Hace 2h', initials: 'SR' }
-    ];
+    // Lista real de conversaciones del usuario
+    const [conversations, setConversations] = useState([]);
+    const [loadingConversations, setLoadingConversations] = useState(true);
+
+    // Derivar contactos a partir de conversaciones (directas) y perfiles
+    const conversationsToContacts = (convs) => {
+        const deriveInitials = (value) => {
+            const parts = (value || '').trim().split(/\s+/);
+            const first = parts[0]?.[0] || 'U';
+            const second = parts[1]?.[0] || '';
+            return (first + second).toUpperCase();
+        };
+        return (convs || []).map((c) => {
+            const username = c?.otherProfile?.username || 'Usuario';
+            const name = username.trim();
+            return {
+                name,
+                status: '🟢',
+                lastMessage: '',
+                time: '',
+                initials: deriveInitials(name),
+                profileId: c?.otherProfile?.id,
+                username: c?.otherProfile?.username,
+                avatar_url: c?.otherProfile?.avatar_url,
+                conversationId: c?.conversationId,
+            };
+        });
+    };
 
     // 3. Opciones por defecto para cada animación
     const createLottieOptions = (animationData) => ({
@@ -142,7 +164,6 @@ const AguacateChat = () => {
         search: createLottieOptions(animationSearch),
         link: createLottieOptions(animationLink),
         smile: createLottieOptions(animationSmile),
-        trash: createLottieOptions(animationTrash),
         share: createLottieOptions(animationShare),
         send: createLottieOptions(animationSend),
         photo: createLottieOptions(animationPhoto),
@@ -179,33 +200,47 @@ const AguacateChat = () => {
         setIsSidebarOpen(!isSidebarOpen);
     };
 
-    const selectContact = (contact) => {
+    const selectContact = async (contact) => {
         setSelectedContact(contact);
-        setChatMessages(initialMessages[contact.name] || []);
+        // Cargar mensajes reales si hay conversationId
+        try {
+            if (contact?.conversationId) {
+                const msgs = await fetchMessagesByConversation(contact.conversationId);
+                const mapped = msgs.map(m => ({
+                    type: m.sender_id === user?.id ? 'sent' : 'received',
+                    text: m.content,
+                    created_at: m.created_at,
+                }));
+                setChatMessages(mapped);
+            } else {
+                setChatMessages([]);
+            }
+        } catch (e) {
+            console.error('No se pudieron cargar mensajes:', e);
+            setChatMessages([]);
+        }
         if (window.innerWidth < 768) {
             setIsSidebarOpen(false);
         }
     };
 
-    const sendMessage = () => {
-        if (messageInput.trim() === '') return;
-
-        const newMessage = { type: 'sent', text: messageInput };
-        setChatMessages(prev => [...prev, newMessage]);
+    const sendMessage = async () => {
+        const content = messageInput.trim();
+        if (!content) return;
+        if (!selectedContact?.conversationId) {
+            toast.error('No hay conversación activa');
+            return;
+        }
+        const optimistic = { type: 'sent', text: content, created_at: new Date().toISOString() };
+        setChatMessages(prev => [...prev, optimistic]);
         setMessageInput('');
-
-        // Simular que el otro usuario está escribiendo
-        setIsTyping(true);
-
-        // Simular respuesta después de un tiempo
-        setTimeout(() => {
-            const responses = ['¡Perfecto!', 'Entendido 👍', 'Gracias por el mensaje', 'Me parece bien', '¡Excelente!'];
-            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-            const receivedMessage = { type: 'received', text: randomResponse };
-            
-            setIsTyping(false); // Deja de escribir
-            setChatMessages(prev => [...prev, receivedMessage]);
-        }, 2000); // 2 segundos de "escribiendo"
+        try {
+            await insertMessage({ conversationId: selectedContact.conversationId, senderId: user?.id, content });
+        } catch (e) {
+            console.error('Error enviando mensaje:', e);
+            toast.error('No se pudo enviar el mensaje');
+            // opcional: revertir optimismo o marcar como fallido
+        }
     };
 
     const handleKeyPress = (e) => {
@@ -214,7 +249,8 @@ const AguacateChat = () => {
         }
     };
 
-    const filteredContacts = allContacts.filter(contact =>
+    const contacts = conversationsToContacts(conversations);
+    const filteredContacts = contacts.filter(contact =>
         contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         contact.lastMessage.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -321,22 +357,81 @@ const AguacateChat = () => {
         return () => clearTimeout(timer);
     }, [searchUserQuery, showContactModal, modalType]);
 
-    const handlePickProfile = (profile) => {
-        const nameFromProfile = (profile?.username || 'Usuario').trim();
-        const contact = {
-            name: nameFromProfile,
-            status: '🟢',
-            lastMessage: '',
-            time: '',
-            initials: initialsFrom(nameFromProfile),
-            profileId: profile?.id,
-            email: undefined,
-            username: profile?.username,
-            avatar_url: profile?.avatar_url,
-        };
-        selectContact(contact);
-        closeContactModal();
+    const handlePickProfile = async (profile) => {
+        if (!user?.id) {
+            toast.error('Debes iniciar sesión para empezar un chat');
+            return;
+        }
+        if (!profile?.id) {
+            toast.error('Perfil inválido');
+            return;
+        }
+    const dismiss = toast.loading('Creando conversación...');
+        try {
+            // 1) Crear o recuperar conversación directa en la BD
+            const conv = await createOrGetDirectConversation(user.id, profile.id);
+
+            // 2) Armar el contacto seleccionado para la UI
+            const nameFromProfile = (profile?.username || 'Usuario').trim();
+            const contact = {
+                name: nameFromProfile,
+                status: '🟢',
+                lastMessage: '',
+                time: '',
+                initials: initialsFrom(nameFromProfile),
+                profileId: profile?.id,
+                email: undefined,
+                username: profile?.username,
+                avatar_url: profile?.avatar_url,
+                conversationId: conv?.id,
+            };
+            await selectContact(contact);
+            closeContactModal();
+            toast.success('Conversación lista', { id: dismiss });
+            // refrescar lista de conversaciones
+            try {
+                const convs = await fetchUserConversations(user.id);
+                setConversations(convs);
+            } catch (e) {
+                console.error('No se pudo actualizar conversaciones:', e);
+            }
+        } catch (err) {
+            console.error('Error creando conversación:', err);
+            toast.error(err?.message || 'No se pudo crear la conversación', { id: dismiss });
+        } finally {
+            // no-op
+        }
     };
+
+    // Cargar conversaciones del usuario autenticado
+    useEffect(() => {
+        let alive = true;
+        const load = async () => {
+            if (!user?.id) {
+                setConversations([]);
+                setLoadingConversations(false);
+                return;
+            }
+            setLoadingConversations(true);
+            try {
+                const convs = await fetchUserConversations(user.id);
+                if (!alive) return;
+                setConversations(convs);
+                // Seleccionar por defecto la primera conversación si no hay una
+                if (convs.length > 0 && !selectedContact?.conversationId) {
+                    const firstContact = conversationsToContacts(convs)[0];
+                    setSelectedContact(firstContact);
+                    setChatMessages([]);
+                }
+            } catch (e) {
+                console.error('Error cargando conversaciones:', e);
+            } finally {
+                if (alive) setLoadingConversations(false);
+            }
+        };
+        load();
+        return () => { alive = false };
+    }, [user?.id]);
 
     // Perfil basado en el usuario autenticado
     const displayName = (user?.fullName || user?.username || (user?.email ? user.email.split('@')[0] : '') || 'Usuario').trim();
