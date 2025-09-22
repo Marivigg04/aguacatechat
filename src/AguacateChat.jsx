@@ -283,13 +283,7 @@ const AguacateChat = () => {
     const [isEditProfilePaused, setEditProfilePaused] = useState(true);
     const [isEditProfileStopped, setEditProfileStopped] = useState(false);
 
-    const [isEditingInfo, setIsEditingInfo] = useState(false);
-    const [profileInfo, setProfileInfo] = useState(
-        'Este es tu espacio personal. Puedes escribir aquí una breve descripción sobre ti, tus intereses o cualquier información relevante que quieras mostrar a tus contactos.'
-    );
-    const [newProfileInfo, setNewProfileInfo] = useState('');
-    const [isInfoProfilePaused, setInfoProfilePaused] = useState(true);
-    const [isInfoProfileStopped, setInfoProfileStopped] = useState(false);
+    // Eliminado: edición y animación de profileInfo
 
     // Estado para mostrar el modal de cambiar contraseña
     const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
@@ -720,16 +714,7 @@ const AguacateChat = () => {
                 setEditProfilePaused={setEditProfilePaused}
                 isEditProfileStopped={isEditProfileStopped}
                 setEditProfileStopped={setEditProfileStopped}
-                isEditingInfo={isEditingInfo}
-                setIsEditingInfo={setIsEditingInfo}
-                profileInfo={profileInfo}
-                setProfileInfo={setProfileInfo}
-                newProfileInfo={newProfileInfo}
-                setNewProfileInfo={setNewProfileInfo}
-                isInfoProfilePaused={isInfoProfilePaused}
-                setInfoProfilePaused={setInfoProfilePaused}
-                isInfoProfileStopped={isInfoProfileStopped}
-                setInfoProfileStopped={setInfoProfileStopped}
+                // Eliminado: props de edición de profileInfo
                 lottieOptions={lottieOptions}
                 setShowEditPasswordModal={setShowEditPasswordModal}
                 showEditPasswordModal={showEditPasswordModal} // <-- Añade esta línea
