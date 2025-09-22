@@ -9,7 +9,7 @@ import { useAuth } from './context/AuthContext.jsx';
 
 function App() {
   // Autenticación derivada del contexto global
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   // Navegación entre login y password reset
   const [showPasswordReset, setShowPasswordReset] = useState(false);
@@ -36,17 +36,30 @@ function App() {
     }, 350);
   };
 
+  // While loading auth state (e.g., after refresh), avoid routing redirects.
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <span>Cargando…</span>
+      </div>
+    );
+  }
+
   return (
     <Router>
       <Routes>
         <Route path="/login" element={
-          <div className={`fade-transition ${fadeState === 'in' ? 'fade-in' : 'fade-out'}`}>
-            {showPasswordReset ? (
-              <PasswordReset onNavigateToAuth={handleNavigateToLogin} />
-            ) : (
-              <AuthPage onNavigateToPasswordReset={handleNavigateToPasswordReset} onLoginSuccess={() => { /* obsoleto: ahora escuchamos sesión */ }} />
-            )}
-          </div>
+          isAuthenticated ? (
+            <Navigate to="/chat" replace />
+          ) : (
+            <div className={`fade-transition ${fadeState === 'in' ? 'fade-in' : 'fade-out'}`}>
+              {showPasswordReset ? (
+                <PasswordReset onNavigateToAuth={handleNavigateToLogin} />
+              ) : (
+                <AuthPage onNavigateToPasswordReset={handleNavigateToPasswordReset} onLoginSuccess={() => { /* obsoleto: ahora escuchamos sesión */ }} />
+              )}
+            </div>
+          )
         } />
         <Route path="/password-reset" element={<PasswordReset onNavigateToAuth={handleNavigateToLogin} />} />
         <Route path="/chat" element={isAuthenticated ? (
