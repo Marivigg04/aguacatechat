@@ -1,5 +1,5 @@
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import toast, { Toaster } from 'react-hot-toast';
