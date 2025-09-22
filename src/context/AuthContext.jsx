@@ -90,7 +90,9 @@ export function AuthProvider({ children }) {
   }
 
   const value = useMemo(() => ({
-    isAuthenticated: !!session,
+    // Consider either an active Supabase session OR a previously stored user
+    // to prevent unwanted redirects during initial load/refresh.
+    isAuthenticated: !!(session || user),
     loading,
     session,
     user,
