@@ -284,10 +284,8 @@ const AguacateChat = () => {
     const [isEditProfileStopped, setEditProfileStopped] = useState(false);
 
     const [isEditingInfo, setIsEditingInfo] = useState(false);
-    const [profileInfo, setProfileInfo] = useState(
-        'Este es tu espacio personal. Puedes escribir aquí una breve descripción sobre ti, tus intereses o cualquier información relevante que quieras mostrar a tus contactos.'
-    );
-    const [newProfileInfo, setNewProfileInfo] = useState('');
+    const [profileInfo, setProfileInfo] = useState();
+    const [newProfileInfo, setNewProfileInfo] = useState();
     const [isInfoProfilePaused, setInfoProfilePaused] = useState(true);
     const [isInfoProfileStopped, setInfoProfileStopped] = useState(false);
 

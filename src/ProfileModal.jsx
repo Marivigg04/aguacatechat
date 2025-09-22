@@ -189,88 +189,19 @@ const ProfileModal = ({
                         {/* Información del perfil editable con transición suave */}
                         <div className="flex flex-col gap-1 mb-2">
                             <span className="text-sm theme-text-secondary">Información del perfil:</span>
-                            {!isEditingInfo ? (
-                                <div className="flex items-center gap-2 w-full">
-                                    <span className="theme-text-primary text-base flex-1">{profileInfoDb || 'Sin información disponible.'}</span>
-                                    <div
-                                        className="w-7 h-7"
-                                        onClick={() => {
-                                            setNewProfileInfo(profileInfoDb || '');
-                                            setIsEditingInfo(true);
-                                        }}
-                                        onMouseEnter={() => {
-                                            setInfoProfileStopped(true);
-                                            setTimeout(() => {
-                                                setInfoProfileStopped(false);
-                                                setInfoProfilePaused(false);
-                                            }, 10);
-                                        }}
-                                        onMouseLeave={() => setInfoProfilePaused(true)}
-                                        style={{ cursor: 'pointer' }}
-                                        title="Editar información del perfil"
-                                    >
-                                        <Lottie options={lottieOptions.infoProfile} isPaused={isInfoProfilePaused} isStopped={isInfoProfileStopped} />
-                                    </div>
-                                </div>
-                            ) : (
-                                <form
-                                    className="flex flex-col items-center gap-2 w-full"
-                                    onSubmit={async e => {
-                                        e.preventDefault();
-                                        if (newProfileInfo.trim()) {
-                                            try {
-                                                const { updateTable } = await import('./services/db');
-                                                await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
-                                                setProfileInfoDb(newProfileInfo.trim());
-                                                if (window.toast) window.toast.success('Información actualizada');
-                                                else {
-                                                    const { default: toast } = await import('react-hot-toast');
-                                                    toast.success('Información actualizada');
-                                                }
-                                            } catch (err) {
-                                                if (window.toast) window.toast.error('Error al guardar');
-                                                else {
-                                                    const { default: toast } = await import('react-hot-toast');
-                                                    toast.error('Error al guardar');
-                                                }
-                                            }
-                                            setIsEditingInfo(false);
-                                        }
-                                    }}
-                                >
-                                    <input
-                                        id="profileInfoInput"
-                                        type="text"
-                                        className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
-                                        value={newProfileInfo}
-                                        onChange={e => setNewProfileInfo(e.target.value)}
-                                        autoFocus
-                                    />
-                                    <div className="flex gap-2 mt-1">
-                                        <button
-                                            type="submit"
-                                            className="p-1 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
-                                            title="Guardar"
-                                        >Guardar</button>
-                                        <button
-                                            type="button"
-                                            className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
-                                            onClick={() => {
-                                                setIsEditingInfo(false);
-                                            }}
-                                            title="Cancelar"
-                                        >Cancelar</button>
-                                    </div>
-                                </form>
-                            )}
                             <div className={`transition-all duration-300 w-full`}>
                                 {!isEditingInfo ? (
                                     <div className="flex items-center gap-2 w-full">
-                                        <span className="theme-text-primary text-base flex-1">{profileInfo}</span>
+                                        <span className="theme-text-primary text-base flex-1 font-semibold">
+                                            {profileInfo && profileInfo.trim() !== ''
+                                                ? profileInfo
+                                                : <span className="theme-text-primary font-semibold">Sin información</span>
+                                            }
+                                        </span>
                                         <div
                                             className="w-7 h-7"
                                             onClick={() => {
-                                                setNewProfileInfo(profileInfo);
+                                                setNewProfileInfo(profileInfo || '');
                                                 setIsEditingInfo(true);
                                                 setTimeout(() => {
                                                     document.getElementById('profileInfoInput')?.focus();
@@ -304,9 +235,14 @@ const ProfileModal = ({
                                         <input
                                             id="profileInfoInput"
                                             type="text"
-                                            className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
+                                            className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary font-semibold"
                                             value={newProfileInfo}
                                             onChange={e => setNewProfileInfo(e.target.value)}
+                                            onFocus={e => {
+                                                if (e.target.value === '' || e.target.value === undefined) {
+                                                    setNewProfileInfo('');
+                                                }
+                                            }}
                                             onBlur={() => {
                                                 if (newProfileInfo.trim()) {
                                                     setProfileInfo(newProfileInfo.trim());
@@ -326,6 +262,7 @@ const ProfileModal = ({
                                                 }
                                             }}
                                             autoFocus
+                                            placeholder="Agrega tu información de perfil aquí"
                                         />
                                         <div className="flex gap-2 mt-1">
                                             <button
