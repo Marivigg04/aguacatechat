@@ -283,7 +283,11 @@ const AguacateChat = () => {
     const [isEditProfilePaused, setEditProfilePaused] = useState(true);
     const [isEditProfileStopped, setEditProfileStopped] = useState(false);
 
-    // Eliminado: edición y animación de profileInfo
+    const [isEditingInfo, setIsEditingInfo] = useState(false);
+    const [profileInfo, setProfileInfo] = useState();
+    const [newProfileInfo, setNewProfileInfo] = useState();
+    const [isInfoProfilePaused, setInfoProfilePaused] = useState(true);
+    const [isInfoProfileStopped, setInfoProfileStopped] = useState(false);
 
     // Estado para mostrar el modal de cambiar contraseña
     const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
