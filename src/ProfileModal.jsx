@@ -136,15 +136,34 @@ const ProfileModal = ({
 
     return (
         showProfileModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 transition-opacity duration-300">
+            <div
+                className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
+                onClick={() => setShowProfileModal(false)}
+                style={{
+                    animation: showProfileModal ? 'fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-in'
+                }}
+            >
                 <div
-                    className="theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl"
-                    onClick={e => e.stopPropagation()}
+                    className={`theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl
+                    transition-all duration-700
+                    ${showProfileModal ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-8'}
+                `}
+                style={{
+                    transitionProperty: 'opacity, transform',
+                    transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)',
+                    animation: showProfileModal ? 'slideInLeft 0.4s ease-out' : 'slideOutLeft 0.3s ease-in'
+                }}
+                onClick={e => e.stopPropagation()}
                 >
                     <div className="p-6 theme-border border-b flex items-center justify-between">
                         <h3 className="text-xl font-bold theme-text-primary">Perfil</h3>
-                        <button onClick={() => setShowProfileModal(false)} className="p-2 rounded-full hover:theme-bg-chat transition-colors">
-                            ✕
+                        <button
+                            onClick={() => setShowProfileModal(false)}
+                            className="absolute top-6 right-6 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 text-gray-600 hover:text-gray-800"
+                            title="Cerrar modal"
+                            style={{ zIndex: 10 }}
+                        >
+                            <span className="text-lg font-light">✕</span>
                         </button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
