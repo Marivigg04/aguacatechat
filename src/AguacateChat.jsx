@@ -129,7 +129,7 @@ const AguacateChat = () => {
         const deriveInitials = (value) => {
             const parts = (value || '').trim().split(/\s+/);
             const first = parts[0]?.[0] || 'U';
-            const second = parts[1]?.[0] || '';
+            const second = parts[1]?.[0] || parts[0]?.[1] || '';
             return (first + second).toUpperCase();
         };
         const formatTime = (iso) => {
@@ -527,7 +527,7 @@ const AguacateChat = () => {
     const initialsFrom = (value) => {
         const parts = (value || '').trim().split(/\s+/);
         const first = parts[0]?.[0] || 'U';
-        const second = parts[1]?.[0] || '';
+        const second = parts[1]?.[0] || parts[0]?.[1] || '';
         return (first + second).toUpperCase();
     };
     const myProfile = {
@@ -638,8 +638,10 @@ const AguacateChat = () => {
                                 {contact?.avatar_url ? (
                                     <img src={contact.avatar_url} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
                                 ) : (
-                                    <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
-                                        {contact.initials}
+                                    <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
+                                        <svg className="w-12 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                        </svg>
                                     </div>
                                 )}
                                 <div className="flex-1">
@@ -689,11 +691,13 @@ const AguacateChat = () => {
                             <img
                                 src={selectedContact.avatar_url}
                                 alt={selectedContact.name}
-                                className="w-10 h-10 rounded-full object-cover"
+                                className="w-12 h-12 rounded-full object-cover"
                             />
                         ) : (
-                            <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
-                                {selectedContact.initials}
+                            <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
+                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                </svg>
                             </div>
                         )}
                         <div>
@@ -763,11 +767,13 @@ const AguacateChat = () => {
                                     <img
                                         src={selectedContact.avatar_url}
                                         alt={selectedContact.name}
-                                        className="w-8 h-8 rounded-full object-cover mr-2"
+                                        className="w-10 h-10 rounded-full object-cover mr-2"
                                     />
                                 ) : (
-                                    <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
-                                        {selectedContact.initials}
+                                    <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center mr-2">
+                                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                        </svg>
                                     </div>
                                 )
                             )}
@@ -986,8 +992,10 @@ const AguacateChat = () => {
                                                     className="w-10 h-10 rounded-full object-cover"
                                                 />
                                             ) : (
-                                                <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
-                                                    {initialsFrom(p.username || 'U')}
+                                                <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
+                                                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                                    </svg>
                                                 </div>
                                             )}
                                             <div className="flex flex-col">
