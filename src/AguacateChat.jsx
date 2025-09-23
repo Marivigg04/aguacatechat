@@ -304,6 +304,28 @@ const AguacateChat = () => {
         };
     }, [user?.id]);
 
+    // Suscripción realtime para nuevas conversaciones
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const channel = supabase.channel('new_conversations')
+        channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'participants', filter: `user_id=eq.${user.id}` }, async (payload) => {
+            console.log('Nueva conversación detectada:', payload);
+            // Recargar conversaciones
+            try {
+                const convs = await fetchUserConversations(user.id);
+                setConversations(convs);
+            } catch (e) {
+                console.error('Error recargando conversaciones:', e);
+            }
+        })
+        channel.subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
+
     const toggleTheme = () => {
         setIsDarkMode(!isDarkMode);
     };
