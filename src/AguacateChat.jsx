@@ -162,15 +162,21 @@ const AguacateChat = () => {
             if (Number.isNaN(d.getTime())) return '';
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         };
+        const formatLastConex = (iso) => {
+            if (!iso) return 'Desconectado';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return 'Desconectado';
+            return `Última conexión a las ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+        };
         return (convs || []).map((c) => {
             const username = c?.otherProfile?.username || 'Usuario';
             const name = username.trim();
             const lastContent = c?.last_message?.content || '';
             const lastAt = c?.last_message_at || c?.created_at;
-            console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : '🔴');
+            console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             return {
                 name,
-                status: c?.otherProfile?.isOnline ? '🟢' : '🔴',
+                status: c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex),
                 lastMessage: lastContent,
                 time: formatTime(lastAt),
                 initials: deriveInitials(name),
@@ -179,6 +185,7 @@ const AguacateChat = () => {
                 avatar_url: c?.otherProfile?.avatar_url,
                 conversationId: c?.conversationId,
                 last_message_at: lastAt,
+                lastConex: c?.otherProfile?.lastConex,
             };
         });
     };
@@ -325,7 +332,7 @@ const AguacateChat = () => {
                             console.log('Found matching conversation for user:', updatedProfile.id);
                             return {
                                 ...c,
-                                otherProfile: { ...c.otherProfile, isOnline: updatedProfile.isOnline },
+                                otherProfile: { ...c.otherProfile, isOnline: updatedProfile.isOnline, lastConex: updatedProfile.lastConex },
                             };
                         }
                         return c;
@@ -382,7 +389,11 @@ const AguacateChat = () => {
             const shouldBeOnline = !document.hidden && document.hasFocus();
             console.log('Updating my online status to:', shouldBeOnline);
             try {
-                await updateTable('profiles', { id: user.id }, { isOnline: shouldBeOnline });
+                const updateData = { isOnline: shouldBeOnline };
+                if (!shouldBeOnline) {
+                    updateData.lastConex = new Date().toISOString();
+                }
+                await updateTable('profiles', { id: user.id }, updateData);
             } catch (error) {
                 console.error('Error updating online status:', error);
             }
@@ -414,6 +425,17 @@ const AguacateChat = () => {
             window.removeEventListener('blur', handleBlur);
         };
     }, [user?.id]);
+
+    // Sincronizar selectedContact con las conversaciones actualizadas
+    useEffect(() => {
+        if (selectedContact && conversations.length > 0) {
+            const contacts = conversationsToContacts(conversations);
+            const updatedContact = contacts.find(c => c.conversationId === selectedContact.conversationId);
+            if (updatedContact && (updatedContact.status !== selectedContact.status || updatedContact.lastConex !== selectedContact.lastConex)) {
+                setSelectedContact(updatedContact);
+            }
+        }
+    }, [conversations, selectedContact?.conversationId]);
 
     const toggleTheme = () => {
         setIsDarkMode(!isDarkMode);
@@ -843,7 +865,7 @@ const AguacateChat = () => {
                         )}
                         <div>
                             <h2 id="chatName" className="font-semibold theme-text-primary">{selectedContact.name}</h2>
-                            <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : 'Desconectado'}</p>
+                            <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : selectedContact.status}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">

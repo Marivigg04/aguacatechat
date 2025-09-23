@@ -143,7 +143,7 @@ export async function fetchUserConversations(currentUserId) {
   if (otherUserIds.length > 0) {
     const { data: profs, error: profErr } = await supabase
       .from('profiles')
-      .select('id, username, avatar_url, isOnline')
+      .select('id, username, avatar_url, isOnline, lastConex')
       .in('id', otherUserIds)
     if (profErr) throw profErr
     profiles = profs || []
