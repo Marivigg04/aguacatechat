@@ -45,6 +45,16 @@ const Sidebar = ({
     const [isPersonalizationPaused, setPersonalizationPaused] = useState(true);
     const [isPersonalizationStopped, setPersonalizationStopped] = useState(false);
 
+    // Detectar modo oscuro desde el body (igual que AguacateChat.jsx)
+    const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
+    useEffect(() => {
+        const observer = new MutationObserver(() => {
+            setIsDarkMode(document.body.classList.contains('dark-mode'));
+        });
+        observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
+
     // Cargar avatar inicial y reaccionar a cambios
     useEffect(() => {
         let mounted = true;
@@ -209,17 +219,20 @@ const Sidebar = ({
                 <div
                     className="fixed inset-0 z-50"
                     onClick={handleCloseMenu}
-                    style={{ 
+                    style={{
                         background: 'rgba(0,0,0,0.4)',
                         backdropFilter: 'blur(2px)',
                         animation: showSideMenu && !isAnimating ? 'fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-in'
                     }}
                 >
                     <div
-                        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 flex flex-col pt-8
+                        className={`
+                            fixed top-0 left-0 h-full w-64
+                            theme-bg-secondary theme-border border-r
+                            flex flex-col pt-8
                             transition-all duration-300 ease-out transform
-                            ${showSideMenu && !isAnimating 
-                                ? 'translate-x-0 opacity-100 scale-100' 
+                            ${showSideMenu && !isAnimating
+                                ? 'translate-x-0 opacity-100 scale-100'
                                 : '-translate-x-full opacity-0 scale-95'
                             }
                         `}
@@ -230,37 +243,43 @@ const Sidebar = ({
                     >
                         {/* Botón cerrar menú */}
                         <button
-                            className="absolute top-3 right-3 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 text-gray-600 hover:text-gray-800"
+                            className={`
+                                absolute top-3 right-3 p-2 rounded-full
+                                transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
+                                theme-bg-chat
+                            `}
                             onClick={handleCloseMenu}
                             title="Cerrar menú"
                         >
-                            <span className="text-lg font-light">✕</span>
+                            <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                         </button>
 
                         {/* Contenido del menú con animación staggered */}
                         <div className="flex-1 px-4 pt-8">
-                            <div 
-                                className="space-y-2"
+                            <div
+                                className="space-y-2 theme-text-secondary"
                                 style={{
                                     animation: showSideMenu && !isAnimating ? 'slideInLeft 0.4s ease-out 0.1s both' : 'slideOutLeft 0.3s ease-in both'
                                 }}
                             >
-                                {/* Aquí puedes agregar más elementos del menú */}
-                                <div className="h-32 flex items-center justify-center text-gray-500 text-sm">
+                                <div className="h-32 flex items-center justify-center text-sm">
                                     {/* Espacio para contenido adicional del menú */}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Opciones Perfil y Configuración en la parte inferior */}
-                        <div 
+                        {/* Opciones Perfil, Personalización y Configuración en la parte inferior */}
+                        <div
                             className="px-4 pb-6 space-y-2"
                             style={{
                                 animation: showSideMenu && !isAnimating ? 'slideInLeft 0.4s ease-out 0.2s both' : 'slideOutLeft 0.3s ease-in both'
                             }}
                         >
                             <button
-                                className="w-full text-left p-4 hover:bg-gray-50 text-gray-800 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group"
+                                className={`
+                                    w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group
+                                    theme-text-primary hover:theme-bg-chat
+                                `}
                                 onClick={() => {
                                     setShowProfileModal(true);
                                     handleCloseMenu();
@@ -287,12 +306,15 @@ const Sidebar = ({
                                         <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
                                     )}
                                 </div>
-                                <span className="font-medium transition-all duration-300 group-hover:translate-x-1">Perfil</span>
+                                <span className="font-medium transition-all duration-300 group-hover:translate-x-1 theme-text-primary">Perfil</span>
                             </button>
                             
-                            {/* Nuevo botón Personalización */}
+                            {/* Botón Personalización */}
                             <button
-                                className="w-full text-left p-4 hover:bg-gray-50 text-gray-800 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group"
+                                className={`
+                                    w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group
+                                    theme-text-primary hover:theme-bg-chat
+                                `}
                                 onClick={() => {
                                     setShowPersonalizationModal(true);
                                     handleCloseMenu();
@@ -323,11 +345,14 @@ const Sidebar = ({
                                         width={32}
                                     />
                                 </div>
-                                <span className="font-medium transition-all duration-300 group-hover:translate-x-1">Personalización</span>
+                                <span className="font-medium transition-all duration-300 group-hover:translate-x-1 theme-text-primary">Personalización</span>
                             </button>
 
                             <button
-                                className="w-full text-left p-4 hover:bg-gray-50 text-gray-800 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group"
+                                className={`
+                                    w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group
+                                    theme-text-primary hover:theme-bg-chat
+                                `}
                                 onClick={() => { 
                                     setShowConfigModal(true); 
                                     handleCloseMenu(); 
@@ -344,7 +369,7 @@ const Sidebar = ({
                                 <div className="w-8 h-8 transition-transform duration-300 group-hover:scale-110">
                                     <Lottie options={lottieOptions.config} isPaused={isConfigPaused} isStopped={isConfigStopped} />
                                 </div>
-                                <span className="font-medium transition-all duration-300 group-hover:translate-x-1">Configuración</span>
+                                <span className="font-medium transition-all duration-300 group-hover:translate-x-1 theme-text-primary">Configuración</span>
                             </button>
                         </div>
                     </div>
