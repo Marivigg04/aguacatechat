@@ -219,8 +219,13 @@ export async function insertMessage({ conversationId, senderId, content }) {
     sender_id: senderId,
     content: content.trim(),
   }
+  console.log('Inserting message:', payload);
   const { error } = await supabase.from('messages').insert(payload)
-  if (error) throw error
+  if (error) {
+    console.error('Error inserting message:', error);
+    throw error
+  }
+  console.log('Message inserted successfully');
   return true
 }
 
