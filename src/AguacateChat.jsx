@@ -10,7 +10,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation, updateTable } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -167,9 +167,10 @@ const AguacateChat = () => {
             const name = username.trim();
             const lastContent = c?.last_message?.content || '';
             const lastAt = c?.last_message_at || c?.created_at;
+            console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : '🔴');
             return {
                 name,
-                status: '🟢',
+                status: c?.otherProfile?.isOnline ? '🟢' : '🔴',
                 lastMessage: lastContent,
                 time: formatTime(lastAt),
                 initials: deriveInitials(name),
@@ -304,6 +305,53 @@ const AguacateChat = () => {
         };
     }, [user?.id]);
 
+    // Realtime para updates en profiles (isOnline)
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const profileChannel = supabase
+            .channel('profiles_updates')
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'profiles' },
+                (payload) => {
+                    console.log('Profile realtime event:', payload);
+                    const updatedProfile = payload.new;
+                    if (!updatedProfile) return;
+                    console.log('Updating profile:', updatedProfile.id, 'isOnline:', updatedProfile.isOnline);
+                    // Actualizar el perfil en las conversaciones
+                    setConversations((prev) => prev.map((c) => {
+                        if (c.otherProfile?.id === updatedProfile.id) {
+                            console.log('Found matching conversation for user:', updatedProfile.id);
+                            return {
+                                ...c,
+                                otherProfile: { ...c.otherProfile, isOnline: updatedProfile.isOnline },
+                            };
+                        }
+                        return c;
+                    }));
+                }
+            )
+            .subscribe((status) => {
+                console.log('Profiles realtime subscription status:', status);
+            });
+
+        return () => {
+            try { supabase.removeChannel(profileChannel); } catch {}
+        };
+    }, [user?.id]);
+
+    // Update selectedContact when conversations change
+    useEffect(() => {
+        if (selectedContact?.conversationId) {
+            const updatedConv = conversations.find(c => c.conversationId === selectedContact.conversationId);
+            if (updatedConv) {
+                const newContact = conversationsToContacts([updatedConv])[0];
+                setSelectedContact(newContact);
+            }
+        }
+    }, [conversations]);
+
     // Suscripción realtime para nuevas conversaciones
     useEffect(() => {
         if (!user?.id) return;
@@ -323,6 +371,47 @@ const AguacateChat = () => {
 
         return () => {
             supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
+
+    // Update online status based on tab visibility and window focus
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const updateOnlineStatus = async () => {
+            const shouldBeOnline = !document.hidden && document.hasFocus();
+            console.log('Updating my online status to:', shouldBeOnline);
+            try {
+                await updateTable('profiles', { id: user.id }, { isOnline: shouldBeOnline });
+            } catch (error) {
+                console.error('Error updating online status:', error);
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            console.log('Visibility change detected, hidden:', document.hidden);
+            updateOnlineStatus();
+        };
+        const handleFocus = () => {
+            console.log('Window focused');
+            updateOnlineStatus();
+        };
+        const handleBlur = () => {
+            console.log('Window blurred');
+            updateOnlineStatus();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('blur', handleBlur);
+
+        // Set initial status
+        updateOnlineStatus();
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('blur', handleBlur);
         };
     }, [user?.id]);
 
