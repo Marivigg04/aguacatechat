@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import ToggleSwitch from './ToggleSwitch'; // Importamos nuestro nuevo componente
-
-// Para los iconos, primero instala heroicons: npm install @heroicons/react
+import ToggleSwitch from './ToggleSwitch';
 import {
     BellIcon,
     LockClosedIcon,
@@ -44,22 +42,35 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
     return (
         // Fondo semi-transparente que cubre toda la pantalla
         <div
-            className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4 transition-opacity duration-300"
-            onClick={() => setShowConfigModal(false)} // Cierra el modal al hacer clic fuera
+            className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowConfigModal(false)}
+            style={{
+                animation: showConfigModal ? 'fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-in'
+            }}
         >
             {/* Contenedor principal del modal */}
             <div
-                className="theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl"
-                onClick={(e) => e.stopPropagation()} // Evita que el clic dentro del modal lo cierre
+                className={`theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl
+                    transition-all duration-700
+                    ${showConfigModal ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-8'}
+                `}
+                style={{
+                    transitionProperty: 'opacity, transform',
+                    transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)',
+                    animation: showConfigModal ? 'slideInLeft 0.4s ease-out' : 'slideOutLeft 0.3s ease-in'
+                }}
+                onClick={e => e.stopPropagation()}
             >
                 {/* 1. Encabezado del Modal */}
                 <div className="p-6 theme-border border-b flex items-center justify-between">
                     <h2 className="text-xl font-bold theme-text-primary">Configuración</h2>
                     <button
                         onClick={() => setShowConfigModal(false)}
-                        className="p-2 rounded-full hover:theme-bg-chat transition-colors"
+                        className="absolute top-6 right-6 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 text-gray-600 hover:text-gray-800"
+                        title="Cerrar modal"
+                        style={{ zIndex: 10 }}
                     >
-                        <XMarkIcon className="w-6 h-6 theme-text-primary" />
+                        <span className="text-lg font-light">✕</span>
                     </button>
                 </div>
 
@@ -133,6 +144,36 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                     </button>
                 </div>
             </div>
+            <style jsx>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes fadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+                @keyframes slideInLeft {
+                    from { 
+                        opacity: 0; 
+                        transform: translateX(-30px);
+                    }
+                    to { 
+                        opacity: 1; 
+                        transform: translateX(0);
+                    }
+                }
+                @keyframes slideOutLeft {
+                    from { 
+                        opacity: 1; 
+                        transform: translateX(0);
+                    }
+                    to { 
+                        opacity: 0; 
+                        transform: translateX(-30px);
+                    }
+                }
+            `}</style>
         </div>
     );
 };
