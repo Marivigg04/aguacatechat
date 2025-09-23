@@ -230,22 +230,26 @@ const AguacateChat = () => {
 
     useEffect(() => {
         selectedConvIdRef.current = selectedContact?.conversationId || null;
+        console.log('Selected conversation id set to:', selectedConvIdRef.current);
     }, [selectedContact?.conversationId]);
 
     // Realtime global: escuchar eventos de messages para
     // a) actualizar chat activo
     // b) refrescar lista de conversaciones con último mensaje y re-orden
     useEffect(() => {
+        console.log('Setting up realtime for user:', user?.id);
         const channel = supabase
             .channel('messages:all')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'messages' },
                 (payload) => {
+                    console.log('Realtime event received');
                     const evt = payload.eventType;
                     if (evt === 'INSERT') {
                         const m = payload.new;
                         if (!m) return;
+                        console.log('Event conversation:', m.conversation_id, 'selected:', selectedConvIdRef.current);
                         // b) Actualizar conversaciones y reordenar (para cualquier conversación)
                         setConversations((prev) => {
                             if (!Array.isArray(prev) || prev.length === 0) return prev;
@@ -291,7 +295,9 @@ const AguacateChat = () => {
                     }
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                console.log('Realtime subscription status:', status);
+            });
 
         return () => {
             try { supabase.removeChannel(channel); } catch {}
