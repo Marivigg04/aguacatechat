@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
+import AudioPlayer from './AudioPlayer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
 
 import Sidebar from './Sidebar';
@@ -11,7 +12,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation, updateTable } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation, updateTable, uploadAudioToBucket } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -107,6 +108,22 @@ const AguacateChat = () => {
         fontSize: 16
     });
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
+
+    // Grabación de audio (MediaRecorder)
+    const [isRecording, setIsRecording] = useState(false);
+    const [isRecordingPaused, setIsRecordingPaused] = useState(false);
+    const [recordingElapsed, setRecordingElapsed] = useState(0); // seconds
+    const MAX_RECORD_SECS = 120; // 2 minutes limit
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const audioStreamRef = useRef(null);
+    const recordingStartRef = useRef(0);
+    const accumulatedElapsedRef = useRef(0); // seconds
+    const recordingIntervalRef = useRef(null);
+    const discardOnStopRef = useRef(false);
+    const limitReachedRef = useRef(false);
+    // MIME elegido para la grabación (preferir OGG/Opus si es posible)
+    const recorderMimeRef = useRef('');
 
     // Estado de búsqueda en "Nuevo Chat" (modal)
     const [searchUserQuery, setSearchUserQuery] = useState('');
@@ -221,6 +238,13 @@ const AguacateChat = () => {
         }
     });
 
+    const createLottieOptionsLoop = (animationData) => ({
+        loop: true,
+        autoplay: true,
+        animationData,
+        rendererSettings: { preserveAspectRatio: 'xMidYMid slice' },
+    });
+
     const lottieOptions = {
         trash: createLottieOptions(animationTrash),
         search: createLottieOptions(animationSearch),
@@ -242,7 +266,251 @@ const AguacateChat = () => {
         callSilent: createLottieOptions(callSilent),
         information: createLottieOptions(information),
         mic: createLottieOptions(animationMic),
+        micRecording: createLottieOptionsLoop(animationMic),
     };
+
+    const clearRecordingTimer = () => {
+        if (recordingIntervalRef.current) {
+            clearInterval(recordingIntervalRef.current);
+            recordingIntervalRef.current = null;
+        }
+    };
+
+    const startRecordingTimer = () => {
+        clearRecordingTimer();
+        recordingIntervalRef.current = setInterval(() => {
+            const now = Date.now();
+            const current = (now - recordingStartRef.current) / 1000;
+            const total = accumulatedElapsedRef.current + current;
+            setRecordingElapsed(Math.floor(total));
+            if (!isRecordingPaused && total >= MAX_RECORD_SECS) {
+                limitReachedRef.current = true;
+                accumulatedElapsedRef.current = MAX_RECORD_SECS;
+                setRecordingElapsed(MAX_RECORD_SECS);
+                try { pauseRecording(); } catch {}
+                toast('Has alcanzado el límite de 2:00', { icon: '⏸️' });
+            }
+        }, 250);
+    };
+
+    const formatSeconds = (total) => {
+        const s = Math.max(0, Math.floor(total || 0));
+        const m = Math.floor(s / 60);
+        const ss = s % 60;
+        return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    };
+
+    // Elegir el mejor MIME soportado por el navegador para MediaRecorder
+    const chooseRecorderMime = () => {
+        try {
+            if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+            const candidates = [
+                'audio/ogg;codecs=opus',
+                'audio/ogg',
+                'audio/webm;codecs=opus',
+                'audio/webm',
+            ];
+            for (const t of candidates) {
+                if (MediaRecorder.isTypeSupported(t)) return t;
+            }
+            return '';
+        } catch {
+            return '';
+        }
+    };
+
+    // Comenzar grabación de audio
+    const startRecording = async () => {
+        if (!selectedContact) return;
+        if (isRecording) return;
+        try {
+            // Reset limit when starting a fresh recording
+            limitReachedRef.current = false;
+            // Solicitar acceso al micrófono
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioStreamRef.current = stream;
+
+            // Elegir MIME preferido (OGG/Opus si está disponible)
+            const preferredMime = chooseRecorderMime();
+            recorderMimeRef.current = preferredMime || '';
+
+            let mr;
+            try {
+                if (preferredMime) {
+                    mr = new MediaRecorder(stream, { mimeType: preferredMime, audioBitsPerSecond: 96000 });
+                } else {
+                    mr = new MediaRecorder(stream);
+                }
+            } catch (err) {
+                // Fallback: intentar sin opciones
+                console.warn('Fallo al crear MediaRecorder con MIME preferido, probando sin opciones:', err);
+                mr = new MediaRecorder(stream);
+            }
+
+            mediaRecorderRef.current = mr;
+            audioChunksRef.current = [];
+
+            mr.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) {
+                    audioChunksRef.current.push(e.data);
+                }
+            };
+            mr.onstop = async () => {
+                clearRecordingTimer();
+                try {
+                    if (!discardOnStopRef.current) {
+                        // Usar el tipo real del recorder si está disponible
+                        const usedType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || recorderMimeRef.current || 'audio/webm';
+                        const blob = new Blob(audioChunksRef.current, { type: usedType });
+                        const localUrl = URL.createObjectURL(blob);
+                        // Optimista: mostrar audio local en el chat mientras sube
+                        setChatMessages((prev) => [
+                            ...prev,
+                            { type: 'sent', audioUrl: localUrl, text: '(Audio)', created_at: new Date().toISOString() },
+                        ]);
+
+                        if (!selectedContact?.conversationId) {
+                            toast.error('No hay conversación activa para subir el audio');
+                        } else {
+                            try {
+                                const { publicUrl } = await uploadAudioToBucket({
+                                    blob,
+                                    conversationId: selectedContact.conversationId,
+                                    userId: user?.id,
+                                    mimeType: usedType,
+                                });
+                                await insertMessage({
+                                    conversationId: selectedContact.conversationId,
+                                    senderId: user?.id,
+                                    content: publicUrl,
+                                    type: 'audio',
+                                });
+                                const label = usedType.includes('ogg') ? 'OGG' : usedType.includes('webm') ? 'WebM' : usedType || 'audio';
+                                toast.success(`Audio subido y enviado (${label})`);
+                            } catch (e) {
+                                console.error('Error al subir/enviar audio:', e);
+                                toast.error('No se pudo subir/enviar el audio');
+                            }
+                        }
+                    } else {
+                        toast('Grabación cancelada', { icon: '🗑️' });
+                    }
+                } catch (err) {
+                    console.error(err);
+                    toast.error('No se pudo procesar el audio');
+                } finally {
+                    discardOnStopRef.current = false;
+                    recorderMimeRef.current = '';
+                    accumulatedElapsedRef.current = 0;
+                    setRecordingElapsed(0);
+                    setIsRecordingPaused(false);
+                    // Liberar el micrófono
+                    if (audioStreamRef.current) {
+                        audioStreamRef.current.getTracks().forEach((t) => t.stop());
+                        audioStreamRef.current = null;
+                    }
+                }
+            };
+
+            mr.start();
+            setIsRecordingPaused(false);
+            accumulatedElapsedRef.current = 0;
+            recordingStartRef.current = Date.now();
+            setRecordingElapsed(0);
+            startRecordingTimer();
+            setIsRecording(true);
+            toast('Grabando audio... pulsa de nuevo para detener', { icon: '🎙️' });
+        } catch (err) {
+            console.error('getUserMedia error', err);
+            if (err?.name === 'NotAllowedError') {
+                toast.error('Permiso de micrófono denegado');
+            } else if (err?.name === 'NotFoundError') {
+                toast.error('No se encontró un micrófono');
+            } else if (typeof MediaRecorder === 'undefined') {
+                toast.error('MediaRecorder no está soportado en este navegador');
+            } else {
+                toast.error('Error al iniciar la grabación');
+            }
+        }
+    };
+
+    // Detener grabación de audio
+    const stopRecording = () => {
+        if (!isRecording) return;
+        try {
+            const mr = mediaRecorderRef.current;
+            if (mr && mr.state !== 'inactive') {
+                mr.stop();
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsRecording(false);
+            clearRecordingTimer();
+            setIsRecordingPaused(false);
+        }
+    };
+
+    const toggleRecording = () => {
+        if (isRecording) stopRecording(); else startRecording();
+    };
+
+    const cancelRecording = () => {
+        if (!isRecording) return;
+        discardOnStopRef.current = true;
+        stopRecording();
+    };
+
+    const pauseRecording = () => {
+        try {
+            const mr = mediaRecorderRef.current;
+            if (mr && mr.state === 'recording' && typeof mr.pause === 'function') {
+                mr.pause();
+                // acumular el tiempo hasta ahora
+                accumulatedElapsedRef.current += (Date.now() - recordingStartRef.current) / 1000;
+                clearRecordingTimer();
+                setIsRecordingPaused(true);
+                toast('Grabación en pausa', { icon: '⏸️' });
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const resumeRecording = () => {
+        try {
+            if (limitReachedRef.current) {
+                toast.error('Límite de 2 minutos alcanzado');
+                return;
+            }
+            const mr = mediaRecorderRef.current;
+            if (mr && mr.state === 'paused' && typeof mr.resume === 'function') {
+                mr.resume();
+                recordingStartRef.current = Date.now();
+                setIsRecordingPaused(false);
+                startRecordingTimer();
+                toast('Reanudando grabación', { icon: '▶️' });
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            try {
+                clearRecordingTimer();
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                    mediaRecorderRef.current.stop();
+                }
+            } catch {}
+            if (audioStreamRef.current) {
+                audioStreamRef.current.getTracks().forEach((t) => t.stop());
+                audioStreamRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         document.body.className = isDarkMode ? 'dark-mode theme-bg-primary theme-text-primary transition-colors duration-300' : 'light-mode theme-bg-primary theme-text-primary transition-colors duration-300';
@@ -294,7 +562,7 @@ const AguacateChat = () => {
                                 if (c.conversationId === m.conversation_id) {
                                     return {
                                         ...c,
-                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id },
+                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: m.type },
                                         last_message_at: m.created_at,
                                     };
                                 }
@@ -315,14 +583,20 @@ const AguacateChat = () => {
                         if (m.sender_id === user?.id) return;
                         setChatMessages((prev) => [
                             ...prev,
-                            { id: m.id, type: 'received', text: m.content, created_at: m.created_at },
+                            m.type === 'audio'
+                                ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at }
+                                : { id: m.id, type: 'received', text: m.content, created_at: m.created_at },
                         ]);
                     } else if (evt === 'UPDATE') {
                         const m = payload.new;
                         if (!m) return;
                         if (m.conversation_id !== selectedConvIdRef.current) return;
                         setChatMessages((prev) => prev.map(msg => (
-                            msg.id === m.id ? { ...msg, text: m.content, created_at: m.created_at } : msg
+                            msg.id === m.id
+                                ? (m.type === 'audio'
+                                    ? { ...msg, audioUrl: m.content, text: '(Audio)', created_at: m.created_at }
+                                    : { ...msg, text: m.content, created_at: m.created_at })
+                                : msg
                         )));
                     } else if (evt === 'DELETE') {
                         const m = payload.old;
@@ -483,7 +757,7 @@ const AguacateChat = () => {
                 const mapped = msgs.map(m => ({
                     id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
-                    text: m.content,
+                    ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
                     created_at: m.created_at,
                 }));
                 setChatMessages(mapped);
@@ -1066,7 +1340,11 @@ const AguacateChat = () => {
                                     )}
                                     <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col`}>
                                         <div>
-                                            <MessageRenderer text={message.text} chunkSize={450} />
+                                            {message.audioUrl ? (
+                                                <AudioPlayer src={message.audioUrl} className="w-full max-w-xs" />
+                                            ) : (
+                                                <MessageRenderer text={message.text} chunkSize={450} />
+                                            )}
                                         </div>
                                         <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
                                             {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -1197,6 +1475,33 @@ const AguacateChat = () => {
                             </div>
                         </button>
                         <div className="flex-1 relative flex items-end">
+                            {isRecording && (
+                                <div className="absolute -top-12 left-0 right-0 flex items-center justify-between gap-3 px-3 py-2 rounded-xl theme-bg-chat theme-border border">
+                                    <div className="flex items-center gap-2">
+                                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                                        <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                                            Grabando {formatSeconds(Math.min(recordingElapsed, MAX_RECORD_SECS))}
+                                        </span>
+                                        <div className="w-6 h-6 opacity-80">
+                                            <Lottie options={lottieOptions.micRecording} isPaused={isRecordingPaused} isStopped={false} />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={cancelRecording} className="px-2 py-1 rounded-md theme-bg-secondary theme-border border text-xs hover:opacity-80" title="Cancelar">
+                                            Cancelar
+                                        </button>
+                                        {isRecordingPaused ? (
+                                            <button onClick={resumeRecording} className="px-2 py-1 rounded-md bg-teal-600 text-white text-xs hover:opacity-90" title="Reanudar">
+                                                Reanudar
+                                            </button>
+                                        ) : (
+                                            <button onClick={pauseRecording} className="px-2 py-1 rounded-md bg-red-500 text-white text-xs hover:opacity-90" title="Pausar">
+                                                Pausar
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             <textarea
                                 id="messageInput"
                                 placeholder={selectedContact ? "Escribe un mensaje..." : "Selecciona una conversación para empezar"}
@@ -1219,13 +1524,10 @@ const AguacateChat = () => {
                                 rows={1}
                                 disabled={!selectedContact}
                             />
-                            {messageInput.trim().length === 0 ? (
+                            {(isRecording || messageInput.trim().length === 0) ? (
                                 <button
-                                    onClick={() => {
-                                        // Placeholder: aquí podrías iniciar la grabación de audio
-                                        toast.success('Grabar audio');
-                                    }}
-                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity"
+                                    onClick={toggleRecording}
+                                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 ${isRecording ? 'bg-red-500' : 'bg-gradient-to-r from-teal-primary to-teal-secondary'} text-white rounded-full hover:opacity-80 transition-opacity`}
                                     disabled={!selectedContact}
                                     onMouseEnter={() => {
                                         setMicStopped(true);
@@ -1235,10 +1537,10 @@ const AguacateChat = () => {
                                         }, 10);
                                     }}
                                     onMouseLeave={() => setMicPaused(true)}
-                                    title="Enviar audio"
+                                    title={isRecording ? (isRecordingPaused ? 'Reanudar grabación' : 'Pausar/Detener grabación') : 'Grabar audio'}
                                 >
                                     <div className="w-7 h-7">
-                                        <Lottie options={lottieOptions.mic} isPaused={isMicPaused} isStopped={isMicStopped}/>
+                                        <Lottie options={isRecording ? lottieOptions.micRecording : lottieOptions.mic} isPaused={isRecording ? isRecordingPaused : isMicPaused} isStopped={isRecording ? false : isMicStopped}/>
                                     </div>
                                 </button>
                             ) : (
