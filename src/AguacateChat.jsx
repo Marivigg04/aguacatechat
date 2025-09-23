@@ -11,7 +11,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation, updateTable } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -64,9 +64,23 @@ const initialMessages = {
     ]
 };
 
+// Funciones para manejar cookies
+const getCookie = (name) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+};
+
+const setCookie = (name, value, days = 365) => {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+};
+
 const AguacateChat = () => {
     const { user } = useAuth();
-    const [isDarkMode, setIsDarkMode] = useState(false);
+    const [isDarkMode, setIsDarkMode] = useState(getCookie('darkMode') === 'true');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [selectedContact, setSelectedContact] = useState(initialContacts[0]);
     const [chatMessages, setChatMessages] = useState(initialMessages[initialContacts[0].name]);
@@ -163,14 +177,21 @@ const AguacateChat = () => {
             if (Number.isNaN(d.getTime())) return '';
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         };
+        const formatLastConex = (iso) => {
+            if (!iso) return 'Desconectado';
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return 'Desconectado';
+            return `Última conexión a las ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+        };
         return (convs || []).map((c) => {
             const username = c?.otherProfile?.username || 'Usuario';
             const name = username.trim();
             const lastContent = c?.last_message?.content || '';
             const lastAt = c?.last_message_at || c?.created_at;
+            console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             return {
                 name,
-                status: '🟢',
+                status: c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex),
                 lastMessage: lastContent,
                 time: formatTime(lastAt),
                 initials: deriveInitials(name),
@@ -179,6 +200,7 @@ const AguacateChat = () => {
                 avatar_url: c?.otherProfile?.avatar_url,
                 conversationId: c?.conversationId,
                 last_message_at: lastAt,
+                lastConex: c?.otherProfile?.lastConex,
             };
         });
     };
@@ -217,6 +239,10 @@ const AguacateChat = () => {
 
     useEffect(() => {
         document.body.className = isDarkMode ? 'dark-mode theme-bg-primary theme-text-primary transition-colors duration-300' : 'light-mode theme-bg-primary theme-text-primary transition-colors duration-300';
+    }, [isDarkMode]);
+
+    useEffect(() => {
+        setCookie('darkMode', isDarkMode.toString());
     }, [isDarkMode]);
 
     useEffect(() => {
@@ -304,6 +330,131 @@ const AguacateChat = () => {
             try { supabase.removeChannel(channel); } catch {}
         };
     }, [user?.id]);
+
+    // Realtime para updates en profiles (isOnline)
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const profileChannel = supabase
+            .channel('profiles_updates')
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'profiles' },
+                (payload) => {
+                    console.log('Profile realtime event:', payload);
+                    const updatedProfile = payload.new;
+                    if (!updatedProfile) return;
+                    console.log('Updating profile:', updatedProfile.id, 'isOnline:', updatedProfile.isOnline);
+                    // Actualizar el perfil en las conversaciones
+                    setConversations((prev) => prev.map((c) => {
+                        if (c.otherProfile?.id === updatedProfile.id) {
+                            console.log('Found matching conversation for user:', updatedProfile.id);
+                            return {
+                                ...c,
+                                otherProfile: { ...c.otherProfile, isOnline: updatedProfile.isOnline, lastConex: updatedProfile.lastConex },
+                            };
+                        }
+                        return c;
+                    }));
+                }
+            )
+            .subscribe((status) => {
+                console.log('Profiles realtime subscription status:', status);
+            });
+
+        return () => {
+            try { supabase.removeChannel(profileChannel); } catch {}
+        };
+    }, [user?.id]);
+
+    // Update selectedContact when conversations change
+    useEffect(() => {
+        if (selectedContact?.conversationId) {
+            const updatedConv = conversations.find(c => c.conversationId === selectedContact.conversationId);
+            if (updatedConv) {
+                const newContact = conversationsToContacts([updatedConv])[0];
+                setSelectedContact(newContact);
+            }
+        }
+    }, [conversations]);
+
+    // Suscripción realtime para nuevas conversaciones
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const channel = supabase.channel('new_conversations')
+        channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'participants', filter: `user_id=eq.${user.id}` }, async (payload) => {
+            console.log('Nueva conversación detectada:', payload);
+            // Recargar conversaciones
+            try {
+                const convs = await fetchUserConversations(user.id);
+                setConversations(convs);
+            } catch (e) {
+                console.error('Error recargando conversaciones:', e);
+            }
+        })
+        channel.subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [user?.id]);
+
+    // Update online status based on tab visibility and window focus
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const updateOnlineStatus = async () => {
+            const shouldBeOnline = !document.hidden && document.hasFocus();
+            console.log('Updating my online status to:', shouldBeOnline);
+            try {
+                const updateData = { isOnline: shouldBeOnline };
+                if (!shouldBeOnline) {
+                    updateData.lastConex = new Date().toISOString();
+                }
+                await updateTable('profiles', { id: user.id }, updateData);
+            } catch (error) {
+                console.error('Error updating online status:', error);
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            console.log('Visibility change detected, hidden:', document.hidden);
+            updateOnlineStatus();
+        };
+        const handleFocus = () => {
+            console.log('Window focused');
+            updateOnlineStatus();
+        };
+        const handleBlur = () => {
+            console.log('Window blurred');
+            updateOnlineStatus();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('blur', handleBlur);
+
+        // Set initial status
+        updateOnlineStatus();
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('blur', handleBlur);
+        };
+    }, [user?.id]);
+
+    // Sincronizar selectedContact con las conversaciones actualizadas
+    useEffect(() => {
+        if (selectedContact && conversations.length > 0) {
+            const contacts = conversationsToContacts(conversations);
+            const updatedContact = contacts.find(c => c.conversationId === selectedContact.conversationId);
+            if (updatedContact && (updatedContact.status !== selectedContact.status || updatedContact.lastConex !== selectedContact.lastConex)) {
+                setSelectedContact(updatedContact);
+            }
+        }
+    }, [conversations, selectedContact?.conversationId]);
 
     const toggleTheme = () => {
         setIsDarkMode(!isDarkMode);
@@ -738,7 +889,7 @@ const AguacateChat = () => {
                         )}
                         <div>
                             <h2 id="chatName" className="font-semibold theme-text-primary">{selectedContact.name}</h2>
-                            <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : 'Desconectado'}</p>
+                            <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : selectedContact.status}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
