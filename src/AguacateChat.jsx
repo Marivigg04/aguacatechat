@@ -7,6 +7,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import Sidebar from './Sidebar';
 import ProfileModal from './ProfileModal';
 import ConfigModal from './ConfigModal';
+import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
 import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation } from './services/db';
@@ -26,7 +27,7 @@ import animationInfoProfile from './animations/wired-flat-112-book-hover-closed.
 import animationPhotoProfile from './animations/wired-flat-3099-portrait-photo-hover-pinch.json';
 import animationTypingProfile from './animations/Typing.json';
 import animationLockProfile from './animations/lock.json';
-import bocina from './animations/Bocina.json';
+import bocina from './animations/mute.json';
 import pin from './animations/Pin.json';
 import callSilent from './animations/Call_silent.json';
 import information from './animations/information.json';
@@ -79,6 +80,15 @@ const AguacateChat = () => {
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showConfigModal, setShowConfigModal] = useState(false);
+    const [showPersonalizationModal, setShowPersonalizationModal] = useState(false);
+    const [personalization, setPersonalization] = useState({
+        backgroundType: 'solid',
+        backgroundColor: '#f8fafc',
+        backgroundImage: '',
+        bubbleColors: { sent: '#e2e8f0', received: '#10b981' },
+        accentColor: '#14B8A6',
+        fontSize: 16
+    });
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
 
     // Estado de búsqueda en "Nuevo Chat" (modal)
@@ -88,6 +98,8 @@ const AguacateChat = () => {
     const searchReqIdRef = useRef(0);
     
     // 2. Estados para controlar las animaciones al pasar el cursor
+    const [isMutePaused, setMutePaused] = useState(true);
+    const [isMuteStopped, setMuteStopped] = useState(false);
     const [isSearchPaused, setSearchPaused] = useState(true);
     const [isSearchStopped, setSearchStopped] = useState(false);
 
@@ -115,8 +127,20 @@ const AguacateChat = () => {
     const [isProfilePaused, setProfilePaused] = useState(true);
     const [isProfileStopped, setProfileStopped] = useState(false);
 
+    // Estados para animación del pin
+    const [isPinPaused, setPinPaused] = useState(true);
+    const [isPinStopped, setPinStopped] = useState(false);
+
     const [isConfigPaused, setConfigPaused] = useState(true);
     const [isConfigStopped, setConfigStopped] = useState(false);
+
+    // Estados para animación de callSilent
+    const [isCallSilentPaused, setCallSilentPaused] = useState(true);
+    const [isCallSilentStopped, setCallSilentStopped] = useState(false);
+
+    // Estados para animación de information
+    const [isInformationPaused, setInformationPaused] = useState(true);
+    const [isInformationStopped, setInformationStopped] = useState(false);
 
 
 
@@ -184,7 +208,7 @@ const AguacateChat = () => {
         photoProfile: createLottieOptions(animationPhotoProfile),
         typingProfile: createLottieOptions(animationTypingProfile),
         lockProfile: createLottieOptions(animationLockProfile),
-        bocina: createLottieOptions(bocina),
+        mute: createLottieOptions(bocina),
         pin: createLottieOptions(pin),
         callSilent: createLottieOptions(callSilent),
         information: createLottieOptions(information),
@@ -568,6 +592,11 @@ const AguacateChat = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [displayName]);
 
+    const handleApplyPersonalization = (values) => {
+        setPersonalization(values);
+        // Aquí puedes aplicar los cambios al chat, fondo, etc.
+    };
+
     return (
         <div className="flex h-screen overflow-hidden">
             {/* Componente para mostrar las notificaciones */}
@@ -579,6 +608,7 @@ const AguacateChat = () => {
                 setShowSideMenu={setShowSideMenu}
                 setShowProfileModal={setShowProfileModal}
                 setShowConfigModal={setShowConfigModal}
+                setShowPersonalizationModal={setShowPersonalizationModal}
                 lottieOptions={lottieOptions}
                 isProfilePaused={isProfilePaused}
                 setProfilePaused={setProfilePaused}
@@ -730,27 +760,89 @@ const AguacateChat = () => {
                                     </div>
                                     <span>Limpiar chat</span>
                                 </button>
-                                <button onClick={() => { toast.success('Notificaciones silenciadas.'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2">
+                                <button onClick={() => { toast.success('Notificaciones silenciadas.'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
+                                    onMouseEnter={() => {
+                                        setMuteStopped(true);
+                                        setTimeout(() => {
+                                            setMuteStopped(false);
+                                            setMutePaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setMutePaused(true)}
+                                >
                                     <div className="w-5 h-5">
-                                        <Lottie options={lottieOptions.bocina} height={24} width={24} />
+                                        <Lottie
+                                            options={lottieOptions.mute}
+                                            isPaused={isMutePaused}
+                                            isStopped={isMuteStopped}
+                                            height={24} width={24}
+                                        />
                                     </div>
                                     <span>Silenciar notificaciones</span>
                                 </button>
-                                <button onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
+                                <button 
+                                    onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} 
+                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                    onMouseEnter={() => {
+                                        setPinStopped(true);
+                                        setTimeout(() => {
+                                            setPinStopped(false);
+                                            setPinPaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setPinPaused(true)}
+                                >
                                     <div className="w-5 h-5">
-                                        <Lottie options={lottieOptions.pin} height={24} width={24} />
+                                        <Lottie 
+                                            options={lottieOptions.pin} 
+                                            isPaused={isPinPaused} 
+                                            isStopped={isPinStopped} 
+                                            height={24} width={24} 
+                                        />
                                     </div>
                                     <span>Fijar conversación</span>
                                 </button>
-                                <button onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2">
+                                <button 
+                                    onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} 
+                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                    onMouseEnter={() => {
+                                        setCallSilentStopped(true);
+                                        setTimeout(() => {
+                                            setCallSilentStopped(false);
+                                            setCallSilentPaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setCallSilentPaused(true)}
+                                >
                                     <div className="w-5 h-5">
-                                        <Lottie options={lottieOptions.callSilent} height={24} width={24} />
+                                        <Lottie 
+                                            options={lottieOptions.callSilent} 
+                                            isPaused={isCallSilentPaused} 
+                                            isStopped={isCallSilentStopped} 
+                                            height={24} width={24} 
+                                        />
                                     </div>
                                     <span>Bloquear contacto</span>
                                 </button>
-                                <button onClick={() => { alert('Ver información'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2">
+                                <button 
+                                    onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
+                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2"
+                                    onMouseEnter={() => {
+                                        setInformationStopped(true);
+                                        setTimeout(() => {
+                                            setInformationStopped(false);
+                                            setInformationPaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setInformationPaused(true)}
+                                >
                                     <div className="w-5 h-5">
-                                        <Lottie options={lottieOptions.information} height={24} width={24} />
+                                        <Lottie 
+                                            options={lottieOptions.information} 
+                                            isPaused={isInformationPaused} 
+                                            isStopped={isInformationStopped} 
+                                            height={24} width={24} 
+                                        />
                                     </div>
                                     <span>Ver información</span>
                                 </button>
@@ -1080,6 +1172,15 @@ const AguacateChat = () => {
                 setShowConfigModal={setShowConfigModal}
                 isDarkMode={isDarkMode}
                 toggleTheme={toggleTheme}
+            />
+
+            {/* Modal de personalización */}
+            <PersonalizationModal
+                isOpen={showPersonalizationModal}
+                onClose={() => setShowPersonalizationModal(false)}
+                onApply={handleApplyPersonalization}
+                personalization={personalization}
+                setPersonalization={setPersonalization}
             />
         </div>
     );

@@ -1,5 +1,6 @@
 import React from 'react';
 import Lottie from 'react-lottie';
+import wiredPhotoAnimation from './animations/wired-outline-54-photo-hover-pinch.json';
 import filterAnimation from './animations/Filter.json';
 import { useEffect, useState } from 'react';
 import { useAuth } from './context/AuthContext.jsx';
@@ -25,6 +26,7 @@ const Sidebar = ({
     setShowSideMenu,
     setShowProfileModal,
     setShowConfigModal,
+    setShowPersonalizationModal,
     lottieOptions,
     isProfilePaused,
     setProfilePaused,
@@ -40,6 +42,8 @@ const Sidebar = ({
     const [isFilterStopped, setFilterStopped] = useState(false);
     const [avatarUrl, setAvatarUrl] = useState(null);
     const [isAnimating, setIsAnimating] = useState(false);
+    const [isPersonalizationPaused, setPersonalizationPaused] = useState(true);
+    const [isPersonalizationStopped, setPersonalizationStopped] = useState(false);
 
     // Cargar avatar inicial y reaccionar a cambios
     useEffect(() => {
@@ -153,10 +157,31 @@ const Sidebar = ({
                     <button
                         className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg"
                         title="Personalización"
-                        onClick={() => alert('Personalización')}
+                        onClick={() => setShowPersonalizationModal(true)}
+                        onMouseEnter={() => {
+                            setPersonalizationStopped(true);
+                            setTimeout(() => {
+                                setPersonalizationStopped(false);
+                                setPersonalizationPaused(false);
+                            }, 10);
+                        }}
+                        onMouseLeave={() => setPersonalizationPaused(true)}
                     >
                         <div className="w-7 h-7 flex items-center justify-center">
-                            <span className="text-xl font-bold text-teal-500">🎨</span>
+                            <Lottie
+                                options={{
+                                    loop: false,
+                                    autoplay: false,
+                                    animationData: wiredPhotoAnimation,
+                                    rendererSettings: {
+                                        preserveAspectRatio: 'xMidYMid slice'
+                                    }
+                                }}
+                                isPaused={isPersonalizationPaused}
+                                isStopped={isPersonalizationStopped}
+                                height={32}
+                                width={32}
+                            />
                         </div>
                     </button>
                     <button
@@ -269,14 +294,34 @@ const Sidebar = ({
                             <button
                                 className="w-full text-left p-4 hover:bg-gray-50 text-gray-800 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group"
                                 onClick={() => {
-                                    // Aquí puedes abrir el modal de personalización o lanzar una acción
-                                    alert('Personalización');
+                                    setShowPersonalizationModal(true);
                                     handleCloseMenu();
                                 }}
                             >
-                                <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-                                    {/* Puedes poner aquí un icono Lottie o SVG si tienes uno para personalización */}
-                                    <span className="text-xl font-bold text-teal-500">🎨</span>
+                                <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                                    onMouseEnter={() => {
+                                        setPersonalizationStopped(true);
+                                        setTimeout(() => {
+                                            setPersonalizationStopped(false);
+                                            setPersonalizationPaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setPersonalizationPaused(true)}
+                                >
+                                    <Lottie
+                                        options={{
+                                            loop: false,
+                                            autoplay: false,
+                                            animationData: wiredPhotoAnimation,
+                                            rendererSettings: {
+                                                preserveAspectRatio: 'xMidYMid slice'
+                                            }
+                                        }}
+                                        isPaused={isPersonalizationPaused}
+                                        isStopped={isPersonalizationStopped}
+                                        height={32}
+                                        width={32}
+                                    />
                                 </div>
                                 <span className="font-medium transition-all duration-300 group-hover:translate-x-1">Personalización</span>
                             </button>
