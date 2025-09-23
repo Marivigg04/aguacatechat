@@ -4,6 +4,7 @@ import Lottie from 'react-lottie';
 import registerAnimation from '../animations/Register.json'; // Asegúrate de que esta ruta sea correcta
 import successAnimation from '../animations/Success.json'; // Asegúrate de que esta ruta y nombre de archivo sean correctos (case-sensitive)
 import { auth } from '../../services/db';
+import { supabase } from '../../services/supabaseClient';
 
 const RegisterForm = () => {
   const [fullName, setFullName] = useState('');
@@ -137,8 +138,8 @@ const RegisterForm = () => {
         email,
         password,
         options: {
-          // Guardamos tanto fullName como username (usando el mismo valor por ahora)
-          data: { fullName, username: fullName },
+          // Guardamos fullName en los metadatos, y username como email temporalmente
+          data: { fullName, username: email },
           emailRedirectTo: window?.location?.origin ? `${window.location.origin}/login` : undefined,
         },
       });
@@ -150,7 +151,17 @@ const RegisterForm = () => {
       }
 
       // Registro exitoso
-      alert('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
+      // Actualizar el perfil en la tabla profiles con el nombre completo
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ username: fullName })
+        .eq('id', data.user.id);
+      if (profileError) {
+        console.error('Error actualizando perfil:', profileError);
+        alert('Registro exitoso, pero error al actualizar el nombre. Contacta soporte.');
+      } else {
+        alert('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
+      }
       // Opcional: limpiar campos o redirigir
       setFullName('');
       setEmail('');
