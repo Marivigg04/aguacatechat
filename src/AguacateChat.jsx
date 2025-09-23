@@ -2,6 +2,7 @@ import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.js
 import React, { useState, useEffect, useRef } from 'react';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
+import MessageRenderer from './MessageRenderer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
 
 import Sidebar from './Sidebar';
@@ -358,7 +359,8 @@ const AguacateChat = () => {
     };
 
     const handleKeyPress = (e) => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             sendMessage();
         }
     };
@@ -674,16 +676,20 @@ const AguacateChat = () => {
                                         </svg>
                                     </div>
                                 )}
-                                <div className="flex-1">
+                                <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="font-semibold theme-text-primary">{contact.name}</h3>
-                                        <span className="text-xs theme-text-secondary">{contact.time}</span>
+                                        <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
                                     </div>
-                                    <p className="text-sm theme-text-secondary truncate">{contact.lastMessage || 'Sin mensajes aún'}</p>
+                                    <div className="flex justify-between items-center mt-1">
+                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{contact.lastMessage}</p>
+                                        {contact.unread > 0 && (
+                                            <span className="bg-teal-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                                {contact.unread}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                {contact.unread > 0 && (
-                                    <div className="bg-teal-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{contact.unread}</div>
-                                )}
                             </div>
                         </div>
                     ))}
@@ -869,8 +875,13 @@ const AguacateChat = () => {
                                     </div>
                                 )
                             )}
-                            <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl`}>
-                                {message.text}
+                            <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col`}>
+                                <div>
+                                    <MessageRenderer text={message.text} chunkSize={450} />
+                                </div>
+                                <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
+                                    {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                </div>
                             </div>
                         </div>
                     ))}
