@@ -63,9 +63,23 @@ const initialMessages = {
     ]
 };
 
+// Funciones para manejar cookies
+const getCookie = (name) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+};
+
+const setCookie = (name, value, days = 365) => {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+};
+
 const AguacateChat = () => {
     const { user } = useAuth();
-    const [isDarkMode, setIsDarkMode] = useState(false);
+    const [isDarkMode, setIsDarkMode] = useState(getCookie('darkMode') === 'true');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [selectedContact, setSelectedContact] = useState(initialContacts[0]);
     const [chatMessages, setChatMessages] = useState(initialMessages[initialContacts[0].name]);
@@ -224,6 +238,10 @@ const AguacateChat = () => {
 
     useEffect(() => {
         document.body.className = isDarkMode ? 'dark-mode theme-bg-primary theme-text-primary transition-colors duration-300' : 'light-mode theme-bg-primary theme-text-primary transition-colors duration-300';
+    }, [isDarkMode]);
+
+    useEffect(() => {
+        setCookie('darkMode', isDarkMode.toString());
     }, [isDarkMode]);
 
     useEffect(() => {
