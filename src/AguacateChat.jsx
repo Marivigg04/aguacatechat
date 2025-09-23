@@ -88,7 +88,7 @@ const AguacateChat = () => {
     const [selectedContact, setSelectedContact] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
     // Paginación de mensajes
-    const PAGE_SIZE = 15;
+    const PAGE_SIZE = 20;
     const [hasMoreOlder, setHasMoreOlder] = useState(false);
     const [oldestCursor, setOldestCursor] = useState(null); // ISO date of oldest loaded message
     const [loadingOlder, setLoadingOlder] = useState(false);
