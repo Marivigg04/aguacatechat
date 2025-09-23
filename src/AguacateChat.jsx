@@ -12,7 +12,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation, updateTable, uploadAudioToBucket } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -87,6 +87,11 @@ const AguacateChat = () => {
     // No seleccionar conversación por defecto al cargar
     const [selectedContact, setSelectedContact] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
+    // Paginación de mensajes
+    const PAGE_SIZE = 15;
+    const [hasMoreOlder, setHasMoreOlder] = useState(false);
+    const [oldestCursor, setOldestCursor] = useState(null); // ISO date of oldest loaded message
+    const [loadingOlder, setLoadingOlder] = useState(false);
     const [messageInput, setMessageInput] = useState('');
     const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [showChatOptionsMenu, setShowChatOptionsMenu] = useState(false);
@@ -523,11 +528,28 @@ const AguacateChat = () => {
     // Evitar scroll visible: asegurar que el último mensaje sea visible sin animación
     // Se usa useLayoutEffect para posicionar el scroll antes del pintado
     const chatAreaRef = useRef(null);
+    const pendingPrependRef = useRef(false);
+    const prevScrollHeightRef = useRef(0);
+    const prevScrollTopRef = useRef(0);
+    const shouldScrollToBottomRef = useRef(false);
+    const stickToBottomRef = useRef(true);
+
     useLayoutEffect(() => {
-        if (!selectedContact) return; // sin chat seleccionado no movemos scroll
+        if (!selectedContact) return; // sin chat seleccionado, no movemos scroll
         const el = chatAreaRef.current;
         if (!el) return;
-        el.scrollTop = el.scrollHeight;
+        if (pendingPrependRef.current) {
+            const prevHeight = prevScrollHeightRef.current || 0;
+            const prevTop = prevScrollTopRef.current || 0;
+            const delta = el.scrollHeight - prevHeight;
+            el.scrollTop = delta + prevTop;
+            pendingPrependRef.current = false;
+            prevScrollHeightRef.current = 0;
+            prevScrollTopRef.current = 0;
+        } else if (shouldScrollToBottomRef.current || stickToBottomRef.current) {
+            el.scrollTop = el.scrollHeight;
+            shouldScrollToBottomRef.current = false;
+        }
     }, [chatMessages, selectedContact]);
 
     // Mantener referencia de la conversación seleccionada para Realtime global
@@ -750,26 +772,59 @@ const AguacateChat = () => {
 
     const selectContact = async (contact) => {
         setSelectedContact(contact);
-        // Cargar mensajes reales si hay conversationId
+        // Reset paginación
+        setChatMessages([]);
+        setHasMoreOlder(false);
+        setOldestCursor(null);
+        setLoadingOlder(false);
+        shouldScrollToBottomRef.current = true; // al abrir chat, ir al final
+        // Cargar última página si hay conversationId
         try {
             if (contact?.conversationId) {
-                const msgs = await fetchMessagesByConversation(contact.conversationId);
-                const mapped = msgs.map(m => ({
+                const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE });
+                const mapped = messages.map(m => ({
                     id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
                     ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
                     created_at: m.created_at,
                 }));
                 setChatMessages(mapped);
-            } else {
-                setChatMessages([]);
+                setHasMoreOlder(hasMore);
+                setOldestCursor(nextCursor);
             }
         } catch (e) {
             console.error('No se pudieron cargar mensajes:', e);
             setChatMessages([]);
+            setHasMoreOlder(false);
+            setOldestCursor(null);
         }
         if (window.innerWidth < 768) {
             setIsSidebarOpen(false);
+        }
+    };
+
+    const loadOlderMessages = async () => {
+        if (!selectedContact?.conversationId || loadingOlder || !hasMoreOlder) return;
+        const el = chatAreaRef.current;
+    pendingPrependRef.current = true;
+    prevScrollHeightRef.current = el ? el.scrollHeight : 0;
+    prevScrollTopRef.current = el ? el.scrollTop : 0;
+        setLoadingOlder(true);
+        try {
+            const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, before: oldestCursor });
+            const mapped = messages.map(m => ({
+                id: m.id,
+                type: m.sender_id === user?.id ? 'sent' : 'received',
+                ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
+                created_at: m.created_at,
+            }));
+            setChatMessages(prev => [...mapped, ...prev]);
+            setHasMoreOlder(hasMore);
+            setOldestCursor(nextCursor);
+        } catch (e) {
+            console.error('Error cargando mensajes anteriores:', e);
+        } finally {
+            setLoadingOlder(false);
         }
     };
 
@@ -1308,7 +1363,21 @@ const AguacateChat = () => {
                     </div>
                 )}
 
-                <div id="chatArea" ref={chatAreaRef} className="flex-1 overflow-y-auto p-4 space-y-4 chat-container">
+                <div
+                    id="chatArea"
+                    ref={chatAreaRef}
+                    className="flex-1 overflow-y-auto p-4 space-y-4 chat-container"
+                    onScroll={(e) => {
+                        const el = e.currentTarget;
+                        // stick-to-bottom tracking
+                        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 60;
+                        stickToBottomRef.current = nearBottom;
+                        // top detection for infinite load
+                        if (el.scrollTop <= 80 && hasMoreOlder && !loadingOlder) {
+                            loadOlderMessages();
+                        }
+                    }}
+                >
                     {!selectedContact ? (
                         <div className="h-full w-full flex items-center justify-center">
                             <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
@@ -1321,6 +1390,14 @@ const AguacateChat = () => {
                         </div>
                     ) : (
                         <>
+                            {/* Loader de mensajes anteriores */}
+                            {hasMoreOlder && (
+                                <div className="w-full flex justify-center">
+                                    <div className="text-xs px-3 py-1 rounded-full theme-bg-chat theme-text-secondary border theme-border">
+                                        {loadingOlder ? 'Cargando mensajes...' : 'Desliza hacia arriba para ver más'}
+                                    </div>
+                                </div>
+                            )}
                             {chatMessages.map((message, index) => (
                                 <div key={index} className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
                                     {message.type === 'received' && (

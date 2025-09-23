@@ -243,6 +243,35 @@ export async function fetchMessagesByConversation(conversationId, { limit } = {}
   return data || []
 }
 
+// Cursor-based pagination for messages
+// - Returns the latest "limit" messages when before is null
+// - When before is provided (ISO date), returns messages older than that timestamp
+// Always returns messages sorted ASC (oldest -> newest) for rendering
+export async function fetchMessagesPage(conversationId, { limit = 30, before = null } = {}) {
+  if (!conversationId) return { messages: [], hasMore: false, nextCursor: null }
+  let query = supabase
+    .from('messages')
+    .select('id, sender_id, content, type, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .limit(limit + 1) // fetch one extra to detect if there are more
+
+  if (before) {
+    query = query.lt('created_at', before)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const rows = data || []
+  const hasMore = rows.length > limit
+  const trimmed = hasMore ? rows.slice(0, limit) : rows
+  const messages = trimmed.slice().reverse() // ASC for UI
+  const nextCursor = messages.length > 0 ? messages[0].created_at : before
+
+  return { messages, hasMore, nextCursor }
+}
+
 // Upload an audio blob to 'chataudios' bucket and return its public URL
 export async function uploadAudioToBucket({ blob, conversationId, userId, mimeType }) {
   if (!blob) throw new Error('No audio blob provided')

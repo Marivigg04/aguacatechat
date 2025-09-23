@@ -6,7 +6,7 @@
   - main.jsx: Punto de entrada principal de React. Renderiza el componente App.
   - App.jsx: Controla las rutas principales (login, registro, chat, password reset) y la lógica de autenticación y transiciones.
   - index.css: Estilos globales base y tipografía.
-  - AguacateChat.jsx: Componente principal del chat, maneja contactos, mensajes, sidebar, modo claro/oscuro y animaciones.
+  - AguacateChat.jsx: Componente principal del chat, maneja contactos, mensajes (con paginación e infinite scroll hacia arriba), sidebar, modo claro/oscuro y animaciones.
   - AguacateChat.css: Estilos personalizados para el chat, colores, gradientes, responsive y temas.
   - Login/
     - App.jsx
@@ -112,6 +112,12 @@ Si agregas nuevos archivos o carpetas, actualiza este documento para mantener la
 - Paleta de colores personalizada (teal, gradientes, modo claro/oscuro).
 - Responsive en todos los componentes principales.
 - Validaciones y feedback visual en todos los formularios.
+
+## Carga de mensajes y paginación
+
+- Al abrir un chat se cargan únicamente los últimos 30 mensajes para mejorar el rendimiento.
+- Los mensajes más antiguos se van cargando conforme el usuario hace scroll hacia arriba (infinite scroll), preservando la posición del scroll.
+- Servicio: `fetchMessagesPage(conversationId, { limit = 30, before })` en `src/services/db.js`, que usa un cursor `created_at`.
 
 ---
 Este archivo resume toda la estructura, componentes y funcionalidades actuales del proyecto AguacateChat. Si agregas nuevos módulos, actualiza este contexto para mantener la documentación al día.
