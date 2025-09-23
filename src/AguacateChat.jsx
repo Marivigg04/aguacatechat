@@ -1,5 +1,5 @@
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
@@ -32,6 +32,7 @@ import bocina from './animations/mute.json';
 import pin from './animations/Pin.json';
 import callSilent from './animations/Call_silent.json';
 import information from './animations/information.json';
+import animationMic from './animations/wired-flat-188-microphone-recording-hover-recording.json';
 
 const initialContacts = [
     { name: 'Ana García', status: '🟢', lastMessage: '¡Hola! ¿Cómo estás?', time: '14:30', initials: 'AG' },
@@ -82,8 +83,9 @@ const AguacateChat = () => {
     const { user } = useAuth();
     const [isDarkMode, setIsDarkMode] = useState(getCookie('darkMode') === 'true');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [selectedContact, setSelectedContact] = useState(initialContacts[0]);
-    const [chatMessages, setChatMessages] = useState(initialMessages[initialContacts[0].name]);
+    // No seleccionar conversación por defecto al cargar
+    const [selectedContact, setSelectedContact] = useState(null);
+    const [chatMessages, setChatMessages] = useState([]);
     const [messageInput, setMessageInput] = useState('');
     const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [showChatOptionsMenu, setShowChatOptionsMenu] = useState(false);
@@ -132,6 +134,10 @@ const AguacateChat = () => {
 
     const [isSendPaused, setSendPaused] = useState(true);
     const [isSendStopped, setSendStopped] = useState(false);
+
+    // Estados para animación del micrófono (botón de audio)
+    const [isMicPaused, setMicPaused] = useState(true);
+    const [isMicStopped, setMicStopped] = useState(false);
 
     const [isPhotoPaused, setPhotoPaused] = useState(true);
     const [isPhotoStopped, setPhotoStopped] = useState(false);
@@ -235,6 +241,7 @@ const AguacateChat = () => {
         pin: createLottieOptions(pin),
         callSilent: createLottieOptions(callSilent),
         information: createLottieOptions(information),
+        mic: createLottieOptions(animationMic),
     };
 
     useEffect(() => {
@@ -245,12 +252,15 @@ const AguacateChat = () => {
         setCookie('darkMode', isDarkMode.toString());
     }, [isDarkMode]);
 
-    useEffect(() => {
-        const chatArea = document.getElementById('chatArea');
-        if (chatArea) {
-            chatArea.scrollTop = chatArea.scrollHeight;
-        }
-    }, [chatMessages]);
+    // Evitar scroll visible: asegurar que el último mensaje sea visible sin animación
+    // Se usa useLayoutEffect para posicionar el scroll antes del pintado
+    const chatAreaRef = useRef(null);
+    useLayoutEffect(() => {
+        if (!selectedContact) return; // sin chat seleccionado no movemos scroll
+        const el = chatAreaRef.current;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
+    }, [chatMessages, selectedContact]);
 
     // Mantener referencia de la conversación seleccionada para Realtime global
     const selectedConvIdRef = useRef(null);
@@ -684,11 +694,7 @@ const AguacateChat = () => {
                 const convs = await fetchUserConversations(user.id);
                 if (!alive) return;
                 setConversations(convs);
-                // Seleccionar por defecto la primera conversación y cargar sus mensajes
-                if (convs.length > 0 && !selectedContact?.conversationId) {
-                    const firstContact = conversationsToContacts(convs)[0];
-                    await selectContact(firstContact);
-                }
+                // Importante: NO seleccionar automáticamente ninguna conversación
             } catch (e) {
                 console.error('Error cargando conversaciones:', e);
             } finally {
@@ -749,6 +755,23 @@ const AguacateChat = () => {
         setPersonalization(values);
         // Aquí puedes aplicar los cambios al chat, fondo, etc.
     };
+
+    // Permitir salir del chat seleccionado con la tecla Escape
+    useEffect(() => {
+        const handleEsc = (e) => {
+            if (e.key === 'Escape' || e.key === 'Esc') {
+                if (selectedContact) {
+                    // Deseleccionar chat y limpiar UI relacionada
+                    setSelectedContact(null);
+                    setChatMessages([]);
+                    setShowChatOptionsMenu(false);
+                    setShowAttachMenu(false);
+                }
+            }
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    }, [selectedContact]);
 
     return (
         <div className="flex h-screen overflow-hidden">
@@ -814,7 +837,7 @@ const AguacateChat = () => {
                     {filteredContacts.map((contact, index) => (
                         <div
                             key={index}
-                            className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact.name === contact.name ? 'theme-bg-chat' : ''}`}
+                            className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact?.name === contact.name ? 'theme-bg-chat' : ''}`}
                             onClick={() => selectContact(contact)}
                         >
                             <div className="flex items-center gap-3">
@@ -869,199 +892,216 @@ const AguacateChat = () => {
 
             {/* Área principal del chat */}
             <div className="flex-1 flex flex-col">
-                <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
-                            ☰
-                        </button>
-                        {selectedContact?.avatar_url ? (
-                            <img
-                                src={selectedContact.avatar_url}
-                                alt={selectedContact.name}
-                                className="w-12 h-12 rounded-full object-cover"
-                            />
-                        ) : (
-                            <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
-                                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
-                                </svg>
-                            </div>
-                        )}
-                        <div>
-                            <h2 id="chatName" className="font-semibold theme-text-primary">{selectedContact.name}</h2>
-                            <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : selectedContact.status}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="relative">
-                            <button onClick={toggleChatOptions} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity flex flex-col gap-1 items-center justify-center w-10 h-10" title="Opciones del chat">
-                                <span className="w-1 h-1 bg-current rounded-full"></span>
-                                <span className="w-1 h-1 bg-current rounded-full"></span>
-                                <span className="w-1 h-1 bg-current rounded-full"></span>
+                {/* Header del área principal: solo cuando hay chat seleccionado */}
+                {selectedContact && (
+                    <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
+                                ☰
                             </button>
-                            <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu ? '' : 'hidden'}`}>
-                                <button 
-                                    onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
-                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
-                                    onMouseEnter={() => {
-                                        setTrashStopped(true);
-                                        setTimeout(() => {
-                                            setTrashStopped(false);
-                                            setTrashPaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setTrashPaused(true)}
-                                >
-                                    <div className="w-5 h-5">
-                                        <Lottie options={lottieOptions.trash} isPaused={isTrashPaused} isStopped={isTrashStopped}/>
-                                    </div>
-                                    <span>Limpiar chat</span>
+                            {selectedContact?.avatar_url ? (
+                                <img
+                                    src={selectedContact.avatar_url}
+                                    alt={selectedContact.name}
+                                    className="w-12 h-12 rounded-full object-cover"
+                                />
+                            ) : (
+                                <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
+                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                    </svg>
+                                </div>
+                            )}
+                            <div>
+                                <h2 id="chatName" className="font-semibold theme-text-primary">{selectedContact.name}</h2>
+                                <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : selectedContact.status}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="relative">
+                                <button onClick={toggleChatOptions} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity flex flex-col gap-1 items-center justify-center w-10 h-10" title="Opciones del chat" disabled={!selectedContact}>
+                                    <span className="w-1 h-1 bg-current rounded-full"></span>
+                                    <span className="w-1 h-1 bg-current rounded-full"></span>
+                                    <span className="w-1 h-1 bg-current rounded-full"></span>
                                 </button>
-                                <button onClick={() => { toast.success('Notificaciones silenciadas.'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
-                                    onMouseEnter={() => {
-                                        setMuteStopped(true);
-                                        setTimeout(() => {
-                                            setMuteStopped(false);
-                                            setMutePaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setMutePaused(true)}
-                                >
-                                    <div className="w-5 h-5">
-                                        <Lottie
-                                            options={lottieOptions.mute}
-                                            isPaused={isMutePaused}
-                                            isStopped={isMuteStopped}
-                                            height={24} width={24}
-                                        />
-                                    </div>
-                                    <span>Silenciar notificaciones</span>
-                                </button>
-                                <button 
-                                    onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} 
-                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
-                                    onMouseEnter={() => {
-                                        setPinStopped(true);
-                                        setTimeout(() => {
-                                            setPinStopped(false);
-                                            setPinPaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setPinPaused(true)}
-                                >
-                                    <div className="w-5 h-5">
-                                        <Lottie 
-                                            options={lottieOptions.pin} 
-                                            isPaused={isPinPaused} 
-                                            isStopped={isPinStopped} 
-                                            height={24} width={24} 
-                                        />
-                                    </div>
-                                    <span>Fijar conversación</span>
-                                </button>
-                                <button 
-                                    onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} 
-                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
-                                    onMouseEnter={() => {
-                                        setCallSilentStopped(true);
-                                        setTimeout(() => {
-                                            setCallSilentStopped(false);
-                                            setCallSilentPaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setCallSilentPaused(true)}
-                                >
-                                    <div className="w-5 h-5">
-                                        <Lottie 
-                                            options={lottieOptions.callSilent} 
-                                            isPaused={isCallSilentPaused} 
-                                            isStopped={isCallSilentStopped} 
-                                            height={24} width={24} 
-                                        />
-                                    </div>
-                                    <span>Bloquear contacto</span>
-                                </button>
-                                <button 
-                                    onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
-                                    className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2"
-                                    onMouseEnter={() => {
-                                        setInformationStopped(true);
-                                        setTimeout(() => {
-                                            setInformationStopped(false);
-                                            setInformationPaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setInformationPaused(true)}
-                                >
-                                    <div className="w-5 h-5">
-                                        <Lottie 
-                                            options={lottieOptions.information} 
-                                            isPaused={isInformationPaused} 
-                                            isStopped={isInformationStopped} 
-                                            height={24} width={24} 
-                                        />
-                                    </div>
-                                    <span>Ver información</span>
-                                </button>
+                                <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu && selectedContact ? '' : 'hidden'}`}>
+                                    <button 
+                                        onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                        onMouseEnter={() => {
+                                            setTrashStopped(true);
+                                            setTimeout(() => {
+                                                setTrashStopped(false);
+                                                setTrashPaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setTrashPaused(true)}
+                                    >
+                                        <div className="w-5 h-5">
+                                            <Lottie options={lottieOptions.trash} isPaused={isTrashPaused} isStopped={isTrashStopped}/>
+                                        </div>
+                                        <span>Limpiar chat</span>
+                                    </button>
+                                    <button onClick={() => { toast.success('Notificaciones silenciadas.'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
+                                        onMouseEnter={() => {
+                                            setMuteStopped(true);
+                                            setTimeout(() => {
+                                                setMuteStopped(false);
+                                                setMutePaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setMutePaused(true)}
+                                    >
+                                        <div className="w-5 h-5">
+                                            <Lottie
+                                                options={lottieOptions.mute}
+                                                isPaused={isMutePaused}
+                                                isStopped={isMuteStopped}
+                                                height={24} width={24}
+                                            />
+                                        </div>
+                                        <span>Silenciar notificaciones</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} 
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                        onMouseEnter={() => {
+                                            setPinStopped(true);
+                                            setTimeout(() => {
+                                                setPinStopped(false);
+                                                setPinPaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setPinPaused(true)}
+                                    >
+                                        <div className="w-5 h-5">
+                                            <Lottie 
+                                                options={lottieOptions.pin} 
+                                                isPaused={isPinPaused} 
+                                                isStopped={isPinStopped} 
+                                                height={24} width={24} 
+                                            />
+                                        </div>
+                                        <span>Fijar conversación</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} 
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                        onMouseEnter={() => {
+                                            setCallSilentStopped(true);
+                                            setTimeout(() => {
+                                                setCallSilentStopped(false);
+                                                setCallSilentPaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setCallSilentPaused(true)}
+                                    >
+                                        <div className="w-5 h-5">
+                                            <Lottie 
+                                                options={lottieOptions.callSilent} 
+                                                isPaused={isCallSilentPaused} 
+                                                isStopped={isCallSilentStopped} 
+                                                height={24} width={24} 
+                                            />
+                                        </div>
+                                        <span>Bloquear contacto</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2"
+                                        onMouseEnter={() => {
+                                            setInformationStopped(true);
+                                            setTimeout(() => {
+                                                setInformationStopped(false);
+                                                setInformationPaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setInformationPaused(true)}
+                                    >
+                                        <div className="w-5 h-5">
+                                            <Lottie 
+                                                options={lottieOptions.information} 
+                                                isPaused={isInformationPaused} 
+                                                isStopped={isInformationStopped} 
+                                                height={24} width={24} 
+                                            />
+                                        </div>
+                                        <span>Ver información</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
 
-                <div id="chatArea" className="flex-1 overflow-y-auto p-4 space-y-4 chat-container scroll-smooth">
-                    {chatMessages.map((message, index) => (
-                        <div key={index} className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
-                            {message.type === 'received' && (
-                                selectedContact?.avatar_url ? (
-                                    <img
-                                        src={selectedContact.avatar_url}
-                                        alt={selectedContact.name}
-                                        className="w-10 h-10 rounded-full object-cover mr-2"
-                                    />
-                                ) : (
-                                    <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center mr-2">
-                                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
-                                        </svg>
+                <div id="chatArea" ref={chatAreaRef} className="flex-1 overflow-y-auto p-4 space-y-4 chat-container">
+                    {!selectedContact ? (
+                        <div className="h-full w-full flex items-center justify-center">
+                            <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
+                                <h3 className="text-xl font-semibold theme-text-primary mb-2">¡Bienvenido a AguacaChat! 🥑</h3>
+                                <p className="theme-text-secondary">Selecciona una conversación de la lista o crea un nuevo chat para comenzar a chatear.</p>
+                                <div className="mt-6 flex gap-3 justify-center">
+                                    <button onClick={createNewChat} className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white hover:opacity-90 transition-opacity">Nuevo chat</button>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            {chatMessages.map((message, index) => (
+                                <div key={index} className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
+                                    {message.type === 'received' && (
+                                        selectedContact?.avatar_url ? (
+                                            <img
+                                                src={selectedContact.avatar_url}
+                                                alt={selectedContact.name}
+                                                className="w-10 h-10 rounded-full object-cover mr-2"
+                                            />
+                                        ) : (
+                                            <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center mr-2">
+                                                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                                </svg>
+                                            </div>
+                                        )
+                                    )}
+                                    <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col`}>
+                                        <div>
+                                            <MessageRenderer text={message.text} chunkSize={450} />
+                                        </div>
+                                        <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
+                                            {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                        </div>
                                     </div>
-                                )
+                                </div>
+                            ))}
+                            {/* Indicador de escribiendo */}
+                            {selectedContact && isTyping && (
+                                <div className="flex justify-start">
+                                        {selectedContact?.avatar_url ? (
+                                            <img
+                                                src={selectedContact.avatar_url}
+                                                alt={selectedContact.name}
+                                                className="w-8 h-8 rounded-full object-cover mr-2"
+                                            />
+                                        ) : (
+                                            <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
+                                                {selectedContact?.initials}
+                                            </div>
+                                        )}
+                                    <div className="message-received max-w-xs lg:max-w-md px-4 py-2 rounded-2xl rounded-bl-md">
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0s'}}></span>
+                                            <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></span>
+                                            <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></span>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
-                            <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col`}>
-                                <div>
-                                    <MessageRenderer text={message.text} chunkSize={450} />
-                                </div>
-                                <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
-                                    {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                    
-                    {/* NUEVO: Indicador de escribiendo */}
-                    {isTyping && (
-                        <div className="flex justify-start">
-                                {selectedContact?.avatar_url ? (
-                                    <img
-                                        src={selectedContact.avatar_url}
-                                        alt={selectedContact.name}
-                                        className="w-8 h-8 rounded-full object-cover mr-2"
-                                    />
-                                ) : (
-                                    <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
-                                        {selectedContact.initials}
-                                    </div>
-                                )}
-                            <div className="message-received max-w-xs lg:max-w-md px-4 py-2 rounded-2xl rounded-bl-md">
-                                <div className="flex items-center gap-1">
-                                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0s'}}></span>
-                                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></span>
-                                    <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></span>
-                                </div>
-                            </div>
-                        </div>
+                        </>
                     )}
                 </div>
 
+                {selectedContact && (
                 <div className="theme-bg-secondary theme-border border-t p-4">
                     <div className="flex items-center gap-3">
                         {/* 4. REEMPLAZO DEL ICONO DE ADJUNTAR */}
@@ -1152,14 +1192,14 @@ const AguacateChat = () => {
                             }}
                             onMouseLeave={() => setSmilePaused(true)}
                         >
-                             <div className="w-8 h-8">
+                            <div className="w-8 h-8">
                                 <Lottie options={lottieOptions.smile} isPaused={isSmilePaused} isStopped={isSmileStopped}/>
                             </div>
                         </button>
                         <div className="flex-1 relative flex items-end">
                             <textarea
                                 id="messageInput"
-                                placeholder="Escribe un mensaje..."
+                                placeholder={selectedContact ? "Escribe un mensaje..." : "Selecciona una conversación para empezar"}
                                 className="w-full px-7 py-4 pr-20 rounded-full theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary resize-none"
                                 style={{
                                     minHeight: '44px',
@@ -1177,26 +1217,54 @@ const AguacateChat = () => {
                                 }}
                                 onKeyPress={handleKeyPress}
                                 rows={1}
+                                disabled={!selectedContact}
                             />
-                            <button
-                                onClick={sendMessage}
-                                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity"
-                                onMouseEnter={() => {
-                                    setSendStopped(true);
-                                    setTimeout(() => {
-                                        setSendStopped(false);
-                                        setSendPaused(false);
-                                    }, 10);
-                                }}
-                                onMouseLeave={() => setSendPaused(true)}
-                            >
-                                <div className="w-7 h-7">
-                                    <Lottie options={lottieOptions.send} isPaused={isSendPaused} isStopped={isSendStopped}/>
-                                </div>
-                            </button>
+                            {messageInput.trim().length === 0 ? (
+                                <button
+                                    onClick={() => {
+                                        // Placeholder: aquí podrías iniciar la grabación de audio
+                                        toast.success('Grabar audio');
+                                    }}
+                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity"
+                                    disabled={!selectedContact}
+                                    onMouseEnter={() => {
+                                        setMicStopped(true);
+                                        setTimeout(() => {
+                                            setMicStopped(false);
+                                            setMicPaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setMicPaused(true)}
+                                    title="Enviar audio"
+                                >
+                                    <div className="w-7 h-7">
+                                        <Lottie options={lottieOptions.mic} isPaused={isMicPaused} isStopped={isMicStopped}/>
+                                    </div>
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={sendMessage}
+                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity"
+                                    disabled={!selectedContact}
+                                    onMouseEnter={() => {
+                                        setSendStopped(true);
+                                        setTimeout(() => {
+                                            setSendStopped(false);
+                                            setSendPaused(false);
+                                        }, 10);
+                                    }}
+                                    onMouseLeave={() => setSendPaused(true)}
+                                    title="Enviar mensaje"
+                                >
+                                    <div className="w-7 h-7">
+                                        <Lottie options={lottieOptions.send} isPaused={isSendPaused} isStopped={isSendStopped}/>
+                                    </div>
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
+                )}
             </div>
 
             {/* Modal de selección de contactos */}
