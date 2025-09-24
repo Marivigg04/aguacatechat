@@ -428,11 +428,10 @@ const AguacateChat = () => {
                                     content: publicUrl,
                                     type: 'audio',
                                 });
-                                const label = usedType.includes('ogg') ? 'OGG' : usedType.includes('webm') ? 'WebM' : usedType || 'audio';
-                                toast.success(`Audio subido y enviado (${label})`);
+                                toast.success(`Audio enviado`);
                             } catch (e) {
-                                console.error('Error al subir/enviar audio:', e);
-                                toast.error('No se pudo subir/enviar el audio');
+                                console.error('Error al enviar audio:', e);
+                                toast.error('No se pudo enviar el audio');
                             }
                         }
                     } else {
