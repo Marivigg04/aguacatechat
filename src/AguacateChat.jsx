@@ -13,7 +13,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -137,6 +137,19 @@ const AguacateChat = () => {
             setIsImageModalClosing(false);
         }, 300);
     };
+
+    // Track window focus
+    const [isWindowFocused, setIsWindowFocused] = useState(() => (typeof document !== 'undefined' ? document.hasFocus() : true));
+    useEffect(() => {
+        const onFocus = () => setIsWindowFocused(true);
+        const onBlur = () => setIsWindowFocused(false);
+        window.addEventListener('focus', onFocus);
+        window.addEventListener('blur', onBlur);
+        return () => {
+            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('blur', onBlur);
+        }
+    }, []);
 
     // Estado de búsqueda en "Nuevo Chat" (modal)
     const [searchUserQuery, setSearchUserQuery] = useState('');
@@ -643,8 +656,8 @@ const AguacateChat = () => {
                         setChatMessages((prev) => [
                             ...prev,
                             m.type === 'audio'
-                                ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at }
-                                : { id: m.id, type: 'received', text: m.content, created_at: m.created_at },
+                                ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : [] }
+                                : { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] },
                         ]);
                     } else if (evt === 'UPDATE') {
                         const m = payload.new;
@@ -653,8 +666,8 @@ const AguacateChat = () => {
                         setChatMessages((prev) => prev.map(msg => (
                             msg.id === m.id
                                 ? (m.type === 'audio'
-                                    ? { ...msg, audioUrl: m.content, text: '(Audio)', created_at: m.created_at }
-                                    : { ...msg, text: m.content, created_at: m.created_at })
+                                    ? { ...msg, audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : msg.seen }
+                                    : { ...msg, text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : msg.seen })
                                 : msg
                         )));
                     } else if (evt === 'DELETE') {
@@ -852,6 +865,8 @@ const AguacateChat = () => {
         setOldestCursor(null);
         setLoadingOlder(false);
         shouldScrollToBottomRef.current = true; // al abrir chat, ir al final
+        // Reset de buffer de vistos al cambiar de conversación
+        try { seenBufferRef.current.clear(); } catch {}
         // Cargar última página si hay conversationId
         try {
             if (contact?.conversationId) {
@@ -862,10 +877,13 @@ const AguacateChat = () => {
                     ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
                     created_at: m.created_at,
                     messageType: m.type || 'text',
+                    seen: Array.isArray(m.seen) ? m.seen : [],
                 }));
                 setChatMessages(mapped);
                 setHasMoreOlder(hasMore);
                 setOldestCursor(nextCursor);
+                // Intentar marcar como visto lo que ya esté en pantalla
+                setTimeout(() => { tryMarkVisibleAsSeen(); }, 0);
             }
         } catch (e) {
             console.error('No se pudieron cargar mensajes:', e);
@@ -893,6 +911,7 @@ const AguacateChat = () => {
                 ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
                 created_at: m.created_at,
                 messageType: m.type || 'text',
+                seen: Array.isArray(m.seen) ? m.seen : [],
             }));
             setChatMessages(prev => [...mapped, ...prev]);
             setHasMoreOlder(hasMore);
@@ -903,6 +922,71 @@ const AguacateChat = () => {
             setLoadingOlder(false);
         }
     };
+
+    // Helper to detect if an element is visible in the viewport of chat area
+    const isMessageVisible = (el) => {
+        const container = chatAreaRef.current
+        if (!el || !container) return false
+        const cRect = container.getBoundingClientRect()
+        const r = el.getBoundingClientRect()
+        // consider visible if at least half height is inside
+        const visibleTop = Math.max(r.top, cRect.top)
+        const visibleBottom = Math.min(r.bottom, cRect.bottom)
+        const visibleHeight = Math.max(0, visibleBottom - visibleTop)
+        return visibleHeight >= Math.min(r.height, 36) / 2
+    }
+
+    // Maintain a set to avoid duplicate network updates
+    const seenBufferRef = useRef(new Set())
+
+    // Attempt to mark as seen messages that are on screen when focus or scroll changes
+    const tryMarkVisibleAsSeen = async () => {
+        try {
+            if (!isWindowFocused) return
+            if (!user?.id) return
+            const container = chatAreaRef.current
+            if (!container) return
+            // query all message nodes with data attributes
+            const nodes = container.querySelectorAll('[data-message-id]')
+            const updates = []
+            nodes.forEach((node) => {
+                const id = node.getAttribute('data-message-id')
+                const isOwn = node.getAttribute('data-message-own') === '1'
+                if (!id || isOwn) return
+                // find message in state
+                const msg = chatMessages.find(m => String(m.id) === String(id))
+                if (!msg) return
+                const alreadySeen = Array.isArray(msg.seen) && msg.seen.includes(user.id)
+                if (alreadySeen) return
+                if (!isMessageVisible(node)) return
+                const key = `${id}:${user.id}`
+                if (seenBufferRef.current.has(key)) return
+                seenBufferRef.current.add(key)
+                updates.push({ id })
+            })
+            // Apply updates sequentially to avoid RLS/race issues
+            for (const u of updates) {
+                try {
+                    const res = await appendUserToMessageSeen(u.id, user.id)
+                    if (res?.updated) {
+                        setChatMessages(prev => prev.map(m => m.id === u.id ? { ...m, seen: Array.isArray(m.seen) ? [...m.seen, user.id] : [user.id] } : m))
+                    }
+                } catch (err) {
+                    // allow retry in future
+                    seenBufferRef.current.delete(`${u.id}:${user.id}`)
+                    console.error('No se pudo marcar como visto:', err)
+                }
+            }
+        } catch (err) {
+            console.error(err)
+        }
+    }
+
+    // Re-check on focus, scroll, and when messages change
+    useEffect(() => {
+        tryMarkVisibleAsSeen()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isWindowFocused, chatMessages, selectedContact?.conversationId])
 
     const sendMessage = async () => {
         const content = messageInput.trim();
@@ -1023,6 +1107,39 @@ const AguacateChat = () => {
     };
 
     const contacts = conversationsToContacts(conversations);
+
+    // Cálculo del ancla para "visto" al estilo Messenger
+    // Regla: mostrar mini avatar del otro usuario en:
+    // - El último mensaje TUYO (sent) que esa persona haya visto (message.seen incluye su id)
+    // - Si después de ese visto la otra persona escribió (mensaje received posterior),
+    //   entonces mostrar en su último mensaje (received)
+    const otherUserId = selectedContact?.profileId || null;
+    const lastSeenSentIndex = React.useMemo(() => {
+        if (!otherUserId || !Array.isArray(chatMessages) || chatMessages.length === 0) return -1;
+        for (let i = chatMessages.length - 1; i >= 0; i--) {
+            const m = chatMessages[i];
+            if (m?.type === 'sent') {
+                const seenArr = Array.isArray(m?.seen) ? m.seen : [];
+                if (seenArr.includes(otherUserId)) return i;
+            }
+        }
+        return -1;
+    }, [chatMessages, otherUserId]);
+    const lastReceivedIndex = React.useMemo(() => {
+        if (!Array.isArray(chatMessages) || chatMessages.length === 0) return -1;
+        for (let i = chatMessages.length - 1; i >= 0; i--) {
+            if (chatMessages[i]?.type === 'received') return i;
+        }
+        return -1;
+    }, [chatMessages]);
+    const readReceiptIndex = React.useMemo(() => {
+        // Solo mostrar si existe al menos un mensaje tuyo visto por la otra persona
+        if (lastSeenSentIndex === -1) return -1;
+        // Si la otra persona escribió después de ese visto, anclar en su último mensaje
+        if (lastReceivedIndex > lastSeenSentIndex) return lastReceivedIndex;
+        // De lo contrario, anclar en tu último mensaje visto
+        return lastSeenSentIndex;
+    }, [lastSeenSentIndex, lastReceivedIndex]);
     const filteredContacts = contacts.filter(contact =>
         (contact.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (contact.lastMessage || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -1560,6 +1677,8 @@ const AguacateChat = () => {
                         if (el.scrollTop <= 80 && hasMoreOlder && !loadingOlder) {
                             loadOlderMessages();
                         }
+                        // intentar marcar visibles como vistos durante el scroll
+                        tryMarkVisibleAsSeen();
                     }}
                 >
                     {!selectedContact ? (
@@ -1585,7 +1704,12 @@ const AguacateChat = () => {
                             {chatMessages.map((message, index) => {
                                 const isOwn = message.type === 'sent';
                                 return (
-                                    <div key={index} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}>
+                                    <div
+                                        key={index}
+                                        className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}
+                                        data-message-id={message.id}
+                                        data-message-own={isOwn ? '1' : '0'}
+                                    >
                                         {/* Avatar para recibidos */}
                                         {!isOwn && (
                                             selectedContact?.avatar_url ? (
@@ -1622,6 +1746,42 @@ const AguacateChat = () => {
                                             <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
                                                 {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                             </div>
+                                            {/* Mini avatar de recibo de lectura (estilo Messenger) */}
+                                            {index === readReceiptIndex && selectedContact && (
+                                                selectedContact?.avatar_url ? (
+                                                    <img
+                                                        src={selectedContact.avatar_url}
+                                                        alt={`Leído por ${selectedContact.name || 'contacto'}`}
+                                                        className="w-5 h-5 rounded-full shadow"
+                                                        style={{
+                                                            position: 'absolute',
+                                                            bottom: '-10px',
+                                                            right: isOwn ? '-10px' : 'auto',
+                                                            left: isOwn ? 'auto' : '-10px',
+                                                            border: '2px solid',
+                                                            borderColor: 'var(--bg-secondary)'
+                                                        }}
+                                                        title="Leído"
+                                                        aria-label="Leído"
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        className="w-5 h-5 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary shadow flex items-center justify-center text-[10px] text-white font-bold"
+                                                        style={{
+                                                            position: 'absolute',
+                                                            bottom: '-10px',
+                                                            right: isOwn ? '-10px' : 'auto',
+                                                            left: isOwn ? 'auto' : '-10px',
+                                                            border: '2px solid',
+                                                            borderColor: 'var(--bg-secondary)'
+                                                        }}
+                                                        title="Leído"
+                                                        aria-label="Leído"
+                                                    >
+                                                        {selectedContact?.initials?.slice(0,2) || '•'}
+                                                    </div>
+                                                )
+                                            )}
                                             {/* Botón de tres puntos solo para mensajes propios, dentro de la burbuja arriba a la derecha */}
                                             {isOwn && (
                                                 <button

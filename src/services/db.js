@@ -251,7 +251,7 @@ export async function fetchMessagesPage(conversationId, { limit = 30, before = n
   if (!conversationId) return { messages: [], hasMore: false, nextCursor: null }
   let query = supabase
     .from('messages')
-    .select('id, sender_id, content, type, created_at')
+    .select('id, sender_id, content, type, created_at, seen')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit + 1) // fetch one extra to detect if there are more
@@ -294,4 +294,29 @@ export async function uploadAudioToBucket({ blob, conversationId, userId, mimeTy
   const publicUrl = pub?.publicUrl
   if (!publicUrl) throw new Error('No se pudo obtener URL pública del audio')
   return { publicUrl, path }
+}
+
+// Append a userId to messages.seen array, without overwriting the whole array.
+// It first reads current seen, avoids duplicates, and updates only if needed.
+export async function appendUserToMessageSeen(messageId, userId) {
+  if (!messageId || !userId) return { updated: false }
+  // 1) Read current seen
+  const { data: row, error: selErr } = await supabase
+    .from('messages')
+    .select('id, seen')
+    .eq('id', messageId)
+    .single()
+  if (selErr) throw selErr
+  const current = Array.isArray(row?.seen) ? row.seen : []
+  if (current.includes(userId)) {
+    return { updated: false }
+  }
+  const next = [...current, userId]
+  // 2) Update with merged array
+  const { error: updErr } = await supabase
+    .from('messages')
+    .update({ seen: next })
+    .eq('id', messageId)
+  if (updErr) throw updErr
+  return { updated: true, seen: next }
 }
