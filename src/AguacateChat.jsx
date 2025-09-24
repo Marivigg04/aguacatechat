@@ -104,6 +104,10 @@ const AguacateChat = () => {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [showPersonalizationModal, setShowPersonalizationModal] = useState(false);
+    // Multimedia picker (recientes en sesión)
+    // Estructura: { id, type: 'image'|'video', name, size, lastModified, url, addedAt }
+    const [recentMedia, setRecentMedia] = useState([]);
+    const filePickerRef = useRef(null);
     const [personalization, setPersonalization] = useState({
         backgroundType: 'solid',
         backgroundColor: '#f8fafc',
@@ -184,8 +188,6 @@ const AguacateChat = () => {
     // Estados para animación de information
     const [isInformationPaused, setInformationPaused] = useState(true);
     const [isInformationStopped, setInformationStopped] = useState(false);
-
-
 
     // Lista real de conversaciones del usuario
     const [conversations, setConversations] = useState([]);
@@ -1538,56 +1540,103 @@ const AguacateChat = () => {
                         </button>
                         {showAttachMenu && (
                             <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                                <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col">
-                                    <div className="p-4 theme-border border-b flex items-center justify-between">
-                                        <h3 className="text-lg font-bold theme-text-primary">Adjuntar archivo</h3>
-                                        <button onClick={() => setShowAttachMenu(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
+                                <div className="theme-bg-secondary rounded-2xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl">
+                                    <div className="p-5 theme-border border-b flex items-center justify-between">
+                                        <h3 className="text-lg md:text-xl font-bold theme-text-primary">Selecciona multimedia</h3>
+                                        <button onClick={() => setShowAttachMenu(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" aria-label="Cerrar modal">
                                             ✕
                                         </button>
                                     </div>
-                                    <div className="flex flex-col gap-2 p-4">
-                                        <button
-                                            className="flex items-center gap-2 p-2 rounded transition-colors"
-                                            onClick={() => { alert('Enviar foto'); setShowAttachMenu(false); }}
-                                            onMouseEnter={() => {
-                                                setPhotoStopped(true);
-                                                setTimeout(() => {
-                                                    setPhotoStopped(false);
-                                                    setPhotoPaused(false);
-                                                }, 10);
+                                    <div className="p-4 overflow-y-auto">
+                                        <p className="theme-text-secondary text-sm mb-3">Fotos y videos recientes de esta sesión</p>
+                                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                                            {/* Ver más (siempre a la izquierda) */}
+                                            <button
+                                                onClick={() => filePickerRef.current?.click()}
+                                                className="flex flex-col items-center justify-center aspect-square rounded-lg theme-border border theme-bg-chat hover:opacity-90 transition-all"
+                                            >
+                                                <div
+                                                    className="w-10 h-10"
+                                                    onMouseEnter={() => {
+                                                        setLinkStopped(true);
+                                                        setTimeout(() => {
+                                                            setLinkStopped(false);
+                                                            setLinkPaused(false);
+                                                        }, 10);
+                                                    }}
+                                                    onMouseLeave={() => setLinkPaused(true)}
+                                                >
+                                                    <Lottie options={lottieOptions.link} isPaused={isLinkPaused} isStopped={isLinkStopped} />
+                                                </div>
+                                                <span className="mt-1 text-sm theme-text-primary">Ver más</span>
+                                                <span className="text-[10px] theme-text-secondary">Abrir explorador</span>
+                                            </button>
+
+                                            {/* Recientes */}
+                                            {recentMedia.slice(0, 5).map((m) => (
+                                                <button
+                                                    key={m.id}
+                                                    className="relative group aspect-square rounded-lg overflow-hidden theme-border border hover:ring-2 hover:ring-teal-primary transition-all"
+                                                    title={m.name}
+                                                    onClick={() => {
+                                                        // Solo feedback visual por ahora
+                                                        toast.success(`${m.type === 'image' ? 'Foto' : 'Video'} seleccionado: ${m.name}`);
+                                                        setShowAttachMenu(false);
+                                                    }}
+                                                >
+                                                    {m.type === 'image' ? (
+                                                        <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <video src={m.url} className="w-full h-full object-cover" muted playsInline />
+                                                    )}
+                                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors"></div>
+                                                    <span className="absolute bottom-1 left-1 text-[10px] px-1.5 py-0.5 rounded bg-black/60 text-white capitalize">{m.type}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        {/* Input oculto para abrir el explorador */}
+                                        <input
+                                            ref={filePickerRef}
+                                            type="file"
+                                            accept="image/*,video/*"
+                                            multiple
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const files = Array.from(e.target.files || []);
+                                                if (files.length === 0) return;
+                                                setRecentMedia((prev) => {
+                                                    let next = [...prev];
+                                                    files.forEach((f, idx) => {
+                                                        const now = Date.now();
+                                                        const item = {
+                                                            id: `${now}-${idx}-${f.name}`,
+                                                            type: f.type.startsWith('video') ? 'video' : 'image',
+                                                            name: f.name,
+                                                            size: f.size,
+                                                            lastModified: f.lastModified || now,
+                                                            url: URL.createObjectURL(f),
+                                                            addedAt: now + idx,
+                                                        };
+                                                        next.push(item);
+                                                        while (next.length > 4) {
+                                                            const removed = next.shift();
+                                                            try { URL.revokeObjectURL(removed.url); } catch {}
+                                                        }
+                                                    });
+                                                    return next;
+                                                });
+                                                // Permitir volver a seleccionar el mismo archivo
+                                                try { e.target.value = ''; } catch {}
                                             }}
-                                            onMouseLeave={() => {
-                                                setPhotoPaused(true);
-                                                setPhotoStopped(true);
-                                                setTimeout(() => setPhotoStopped(false), 10);
-                                            }}
-                                        >
-                                            <div className="w-8 h-8">
-                                                <Lottie options={lottieOptions.photo} isPaused={isPhotoPaused} isStopped={isPhotoStopped} />
+                                        />
+
+                                        {/* Estado vacío */}
+                                        {recentMedia.length === 0 && (
+                                            <div className="mt-4 text-center theme-text-secondary text-sm">
+                                                No hay elementos recientes aún. Usa "Ver más" para elegir archivos.
                                             </div>
-                                            <span className="theme-text-primary">Enviar foto</span>
-                                        </button>
-                                        <button
-                                            className="flex items-center gap-2 p-2 rounded transition-colors"
-                                            onClick={() => { alert('Enviar video'); setShowAttachMenu(false); }}
-                                            onMouseEnter={() => {
-                                                setVideoStopped(true);
-                                                setTimeout(() => {
-                                                    setVideoStopped(false);
-                                                    setVideoPaused(false);
-                                                }, 10);
-                                            }}
-                                            onMouseLeave={() => {
-                                                setVideoPaused(true);
-                                                setVideoStopped(true);
-                                                setTimeout(() => setVideoStopped(false), 10);
-                                            }}
-                                        >
-                                            <div className="w-8 h-8">
-                                                <Lottie options={lottieOptions.video} isPaused={isVideoPaused} isStopped={isVideoStopped} />
-                                            </div>
-                                            <span className="theme-text-primary">Enviar video</span>
-                                        </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
