@@ -1353,21 +1353,19 @@ const AguacateChat = () => {
                                                     </svg>
                                                     <span>Foto</span>
                                                 </>
-                                            ) : (
-                                                contact.lastMessage
-                                            )}
-                                        </p>
-                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            {contact.lastMessageType === 'audio' ? (
-                                                <span className="inline-flex items-center gap-1">
-                                                    <span role="img" aria-label="audio">🎤</span>
+                                            ) : contact.lastMessageType === 'audio' ? (
+                                                <>
+                                                    {/* Icono de micrófono */}
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                        <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zM11 19.93V22h2v-2.07A8.001 8.001 0 0020 12h-2a6 6 0 11-12 0H4a8.001 8.001 0 007 7.93z" />
+                                                    </svg>
                                                     <span>
                                                         {(() => {
                                                             const secs = audioPreviewDurations[contact.lastMessageId];
                                                             return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
                                                         })()}
                                                     </span>
-                                                </span>
+                                                </>
                                             ) : (
                                                 contact.lastMessage
                                             )}
@@ -1598,7 +1596,7 @@ const AguacateChat = () => {
                                                         onClick={() => { setIsImageModalEntering(true); setImagePreviewUrl(message.text); setTimeout(() => setIsImageModalEntering(false), 10); }}
                                                     />
                                                 ) : (message.messageType === 'audio' || message.audioUrl) ? (
-                                                    <AudioPlayer src={message.audioUrl || message.text} className="w-full max-w-xs" />
+                                                    <AudioPlayer src={message.audioUrl || message.text} className="w-full max-w-xs" variant="compact" />
                                                 ) : (
                                                     <MessageRenderer text={message.text} chunkSize={450} />
                                                 )}
