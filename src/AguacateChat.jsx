@@ -905,51 +905,45 @@ const AguacateChat = () => {
         }
     };
 
-    const sendPhoto = async () => {
-        if (!selectedPhoto || !selectedContact?.conversationId || isUploadingPhoto) return;
+    // Reutilizable: envía una foto (File/Blob) comprimiéndola y subiéndola al bucket 'chatphotos'
+    const sendPhotoFile = async (file) => {
+        if (!file || !selectedContact?.conversationId || isUploadingPhoto) return;
         if (!user?.id) {
             toast.error('Debes iniciar sesión para enviar fotos');
             return;
         }
         setIsUploadingPhoto(true);
         try {
-            // Comprimir la imagen antes de subir
             const options = {
-                maxSizeMB: 1, // ~1MB objetivo
-                maxWidthOrHeight: 1920, // limitar dimensiones
+                maxSizeMB: 1,
+                maxWidthOrHeight: 1920,
                 useWebWorker: true,
                 maxIteration: 10,
                 initialQuality: 0.8,
             };
 
-            let fileToUpload = selectedPhoto;
+            let fileToUpload = file;
             try {
-                const compressed = await imageCompression(selectedPhoto, options);
-                // Log de tamaños
-                const originalKb = (selectedPhoto.size / 1024).toFixed(0);
+                const compressed = await imageCompression(file, options);
+                const originalKb = (file.size / 1024).toFixed(0);
                 const compressedKb = (compressed.size / 1024).toFixed(0);
                 console.log(`Compresión imagen: ${originalKb}KB -> ${compressedKb}KB`);
-                // const savedPct = selectedPhoto.size > 0 ? Math.max(0, Math.round((1 - (compressed.size / selectedPhoto.size)) * 100)) : 0;
-                // toast deshabilitado por preferencia del usuario
                 fileToUpload = compressed;
             } catch (compressErr) {
                 console.warn('Fallo al comprimir, subiendo original:', compressErr);
             }
 
-            // Asegurar extensión acorde al tipo
-            const ext = (fileToUpload.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+            const ext = ((fileToUpload.type || '').split('/')[1] || 'jpg').replace('jpeg', 'jpg');
             const fileName = `${Date.now()}.${ext}`;
-            // Nota: el path es relativo al bucket, no incluye el nombre del bucket
             const path = `${user?.id}/${fileName}`;
 
-            // Añadir mensaje optimista con preview local
             const tempId = `tmp-img-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const localPreviewUrl = URL.createObjectURL(fileToUpload);
             setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localPreviewUrl, created_at: new Date().toISOString(), messageType: 'image' }]);
 
             const { error: uploadError } = await supabase.storage
                 .from('chatphotos')
-                .upload(path, fileToUpload, { upsert: true, contentType: fileToUpload.type });
+                .upload(path, fileToUpload, { upsert: true, contentType: fileToUpload.type || 'image/jpeg' });
 
             if (uploadError) {
                 console.error('Error subiendo foto:', uploadError);
@@ -977,8 +971,6 @@ const AguacateChat = () => {
             });
 
             toast.success('Foto enviada');
-            closePhotoPreviewModal();
-            // Reemplazar el optimista local por la URL pública
             setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, text: photoUrl } : m));
         } catch (e) {
             console.error('Error enviando foto:', e);
@@ -986,6 +978,13 @@ const AguacateChat = () => {
         } finally {
             setIsUploadingPhoto(false);
         }
+    };
+
+    const sendPhoto = async () => {
+        if (!selectedPhoto) return;
+        await sendPhotoFile(selectedPhoto);
+        // Si venía del modal de vista previa, ciérralo y limpia selección
+        closePhotoPreviewModal();
     };
 
     const closePhotoPreviewModal = () => {
@@ -1764,9 +1763,36 @@ const AguacateChat = () => {
                                                     className="relative group aspect-square rounded-lg overflow-hidden theme-border border hover:ring-2 hover:ring-teal-primary transition-all"
                                                     title={m.name}
                                                     onClick={() => {
-                                                        // Solo feedback visual por ahora
-                                                        toast.success(`${m.type === 'image' ? 'Foto' : 'Video'} seleccionado: ${m.name}`);
-                                                        setShowAttachMenu(false);
+                                                        if (m.type === 'image') {
+                                                            // Intentar reconstruir un File si es posible usando fetch del blob URL
+                                                            const doSend = async () => {
+                                                                try {
+                                                                    // Si tenemos un objeto File original por haber sido seleccionado en este flujo
+                                                                    if (m.file instanceof File) {
+                                                                        await sendPhotoFile(m.file);
+                                                                    } else if (m.url?.startsWith('blob:')) {
+                                                                        const resp = await fetch(m.url);
+                                                                        const blob = await resp.blob();
+                                                                        // Crear un File para mantener nombre y tipo
+                                                                        const fileName = m.name || `photo-${Date.now()}.jpg`;
+                                                                        const mime = blob.type || 'image/jpeg';
+                                                                        const file = new File([blob], fileName, { type: mime });
+                                                                        await sendPhotoFile(file);
+                                                                    } else {
+                                                                        toast.error('No se pudo acceder a la foto reciente');
+                                                                    }
+                                                                } catch (err) {
+                                                                    console.error('Fallo enviando foto reciente:', err);
+                                                                    toast.error('No se pudo enviar la foto reciente');
+                                                                }
+                                                            };
+                                                            doSend();
+                                                            setShowAttachMenu(false);
+                                                        } else {
+                                                            // Por ahora solo enviamos fotos automáticamente
+                                                            toast.success(`Video seleccionado: ${m.name}`);
+                                                            setShowAttachMenu(false);
+                                                        }
                                                     }}
                                                 >
                                                     {m.type === 'image' ? (
@@ -1801,6 +1827,7 @@ const AguacateChat = () => {
                                                             size: f.size,
                                                             lastModified: f.lastModified || now,
                                                             url: URL.createObjectURL(f),
+                                                            file: f,
                                                             addedAt: now + idx,
                                                         };
                                                         next.push(item);
