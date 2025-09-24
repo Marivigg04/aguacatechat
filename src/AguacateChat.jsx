@@ -4,6 +4,7 @@ import imageCompression from 'browser-image-compression';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
+import AudioPlayer from './AudioPlayer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
 
 import Sidebar from './Sidebar';
@@ -12,7 +13,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesByConversation, updateTable } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -33,7 +34,7 @@ import bocina from './animations/mute.json';
 import pin from './animations/Pin.json';
 import callSilent from './animations/Call_silent.json';
 import information from './animations/information.json';
-import animationMic from './animations/wired-flat-188-microphone-recording-hover-recording.json';
+import animationMic from './animations/wired-outline-188-microphone-recording-morph-button.json';
 
 // Funciones para manejar cookies
 const getCookie = (name) => {
@@ -50,12 +51,20 @@ const setCookie = (name, value, days = 365) => {
 };
 
 const AguacateChat = () => {
+    // Estado para modo de selección de mensajes a fijar
+    const [pinMode, setPinMode] = useState(false);
+    const [selectedMessagesToPin, setSelectedMessagesToPin] = useState([]);
     const { user } = useAuth();
     const [isDarkMode, setIsDarkMode] = useState(getCookie('darkMode') === 'true');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     // No seleccionar conversación por defecto al cargar
     const [selectedContact, setSelectedContact] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
+    // Paginación de mensajes
+    const PAGE_SIZE = 20;
+    const [hasMoreOlder, setHasMoreOlder] = useState(false);
+    const [oldestCursor, setOldestCursor] = useState(null); // ISO date of oldest loaded message
+    const [loadingOlder, setLoadingOlder] = useState(false);
     const [messageInput, setMessageInput] = useState('');
     const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [showChatOptionsMenu, setShowChatOptionsMenu] = useState(false);
@@ -77,6 +86,22 @@ const AguacateChat = () => {
         fontSize: 16
     });
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
+
+    // Grabación de audio (MediaRecorder)
+    const [isRecording, setIsRecording] = useState(false);
+    const [isRecordingPaused, setIsRecordingPaused] = useState(false);
+    const [recordingElapsed, setRecordingElapsed] = useState(0); // seconds
+    const MAX_RECORD_SECS = 120; // 2 minutes limit
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const audioStreamRef = useRef(null);
+    const recordingStartRef = useRef(0);
+    const accumulatedElapsedRef = useRef(0); // seconds
+    const recordingIntervalRef = useRef(null);
+    const discardOnStopRef = useRef(false);
+    const limitReachedRef = useRef(false);
+    // MIME elegido para la grabación (preferir OGG/Opus si es posible)
+    const recorderMimeRef = useRef('');
     const fmtErr = (err) => {
         try {
             if (!err) return '';
@@ -167,6 +192,8 @@ const AguacateChat = () => {
     // Lista real de conversaciones del usuario
     const [conversations, setConversations] = useState([]);
     const [loadingConversations, setLoadingConversations] = useState(true);
+    // Cache de duraciones para previsualización de audios (por id de mensaje)
+    const [audioPreviewDurations, setAudioPreviewDurations] = useState({});
 
     // Derivar contactos a partir de conversaciones (directas) y perfiles
     const conversationsToContacts = (convs) => {
@@ -201,6 +228,8 @@ const AguacateChat = () => {
                 status: c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex),
                 lastMessage: lastContent,
                 lastMessageType: lastType,
+                lastMessageId: lastId,
+                lastAudioUrl,
                 time: formatTime(lastAt),
                 initials: deriveInitials(name),
                 profileId: c?.otherProfile?.id,
@@ -224,6 +253,13 @@ const AguacateChat = () => {
         }
     });
 
+    const createLottieOptionsLoop = (animationData) => ({
+        loop: true,
+        autoplay: true,
+        animationData,
+        rendererSettings: { preserveAspectRatio: 'xMidYMid slice' },
+    });
+
     const lottieOptions = {
         trash: createLottieOptions(animationTrash),
         search: createLottieOptions(animationSearch),
@@ -245,7 +281,251 @@ const AguacateChat = () => {
         callSilent: createLottieOptions(callSilent),
         information: createLottieOptions(information),
         mic: createLottieOptions(animationMic),
+        micRecording: createLottieOptionsLoop(animationMic),
     };
+
+    const clearRecordingTimer = () => {
+        if (recordingIntervalRef.current) {
+            clearInterval(recordingIntervalRef.current);
+            recordingIntervalRef.current = null;
+        }
+    };
+
+    const startRecordingTimer = () => {
+        clearRecordingTimer();
+        recordingIntervalRef.current = setInterval(() => {
+            const now = Date.now();
+            const current = (now - recordingStartRef.current) / 1000;
+            const total = accumulatedElapsedRef.current + current;
+            setRecordingElapsed(Math.floor(total));
+            if (!isRecordingPaused && total >= MAX_RECORD_SECS) {
+                limitReachedRef.current = true;
+                accumulatedElapsedRef.current = MAX_RECORD_SECS;
+                setRecordingElapsed(MAX_RECORD_SECS);
+                try { pauseRecording(); } catch {}
+                toast('Has alcanzado el límite de 2:00', { icon: '⏸️' });
+            }
+        }, 250);
+    };
+
+    const formatSeconds = (total) => {
+        const s = Math.max(0, Math.floor(total || 0));
+        const m = Math.floor(s / 60);
+        const ss = s % 60;
+        return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    };
+
+    // Elegir el mejor MIME soportado por el navegador para MediaRecorder
+    const chooseRecorderMime = () => {
+        try {
+            if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+            const candidates = [
+                'audio/ogg;codecs=opus',
+                'audio/ogg',
+                'audio/webm;codecs=opus',
+                'audio/webm',
+            ];
+            for (const t of candidates) {
+                if (MediaRecorder.isTypeSupported(t)) return t;
+            }
+            return '';
+        } catch {
+            return '';
+        }
+    };
+
+    // Comenzar grabación de audio
+    const startRecording = async () => {
+        if (!selectedContact) return;
+        if (isRecording) return;
+        try {
+            // Reset limit when starting a fresh recording
+            limitReachedRef.current = false;
+            // Solicitar acceso al micrófono
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioStreamRef.current = stream;
+
+            // Elegir MIME preferido (OGG/Opus si está disponible)
+            const preferredMime = chooseRecorderMime();
+            recorderMimeRef.current = preferredMime || '';
+
+            let mr;
+            try {
+                if (preferredMime) {
+                    mr = new MediaRecorder(stream, { mimeType: preferredMime, audioBitsPerSecond: 96000 });
+                } else {
+                    mr = new MediaRecorder(stream);
+                }
+            } catch (err) {
+                // Fallback: intentar sin opciones
+                console.warn('Fallo al crear MediaRecorder con MIME preferido, probando sin opciones:', err);
+                mr = new MediaRecorder(stream);
+            }
+
+            mediaRecorderRef.current = mr;
+            audioChunksRef.current = [];
+
+            mr.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) {
+                    audioChunksRef.current.push(e.data);
+                }
+            };
+            mr.onstop = async () => {
+                clearRecordingTimer();
+                try {
+                    if (!discardOnStopRef.current) {
+                        // Usar el tipo real del recorder si está disponible
+                        const usedType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || recorderMimeRef.current || 'audio/webm';
+                        const blob = new Blob(audioChunksRef.current, { type: usedType });
+                        const localUrl = URL.createObjectURL(blob);
+                        // Optimista: mostrar audio local en el chat mientras sube
+                        setChatMessages((prev) => [
+                            ...prev,
+                            { type: 'sent', audioUrl: localUrl, text: '(Audio)', created_at: new Date().toISOString() },
+                        ]);
+
+                        if (!selectedContact?.conversationId) {
+                            toast.error('No hay conversación activa para subir el audio');
+                        } else {
+                            try {
+                                const { publicUrl } = await uploadAudioToBucket({
+                                    blob,
+                                    conversationId: selectedContact.conversationId,
+                                    userId: user?.id,
+                                    mimeType: usedType,
+                                });
+                                await insertMessage({
+                                    conversationId: selectedContact.conversationId,
+                                    senderId: user?.id,
+                                    content: publicUrl,
+                                    type: 'audio',
+                                });
+                                const label = usedType.includes('ogg') ? 'OGG' : usedType.includes('webm') ? 'WebM' : usedType || 'audio';
+                                toast.success(`Audio subido y enviado (${label})`);
+                            } catch (e) {
+                                console.error('Error al subir/enviar audio:', e);
+                                toast.error('No se pudo subir/enviar el audio');
+                            }
+                        }
+                    } else {
+                        toast('Grabación cancelada', { icon: '🗑️' });
+                    }
+                } catch (err) {
+                    console.error(err);
+                    toast.error('No se pudo procesar el audio');
+                } finally {
+                    discardOnStopRef.current = false;
+                    recorderMimeRef.current = '';
+                    accumulatedElapsedRef.current = 0;
+                    setRecordingElapsed(0);
+                    setIsRecordingPaused(false);
+                    // Liberar el micrófono
+                    if (audioStreamRef.current) {
+                        audioStreamRef.current.getTracks().forEach((t) => t.stop());
+                        audioStreamRef.current = null;
+                    }
+                }
+            };
+
+            mr.start();
+            setIsRecordingPaused(false);
+            accumulatedElapsedRef.current = 0;
+            recordingStartRef.current = Date.now();
+            setRecordingElapsed(0);
+            startRecordingTimer();
+            setIsRecording(true);
+            toast('Grabando audio... pulsa de nuevo para detener', { icon: '🎙️' });
+        } catch (err) {
+            console.error('getUserMedia error', err);
+            if (err?.name === 'NotAllowedError') {
+                toast.error('Permiso de micrófono denegado');
+            } else if (err?.name === 'NotFoundError') {
+                toast.error('No se encontró un micrófono');
+            } else if (typeof MediaRecorder === 'undefined') {
+                toast.error('MediaRecorder no está soportado en este navegador');
+            } else {
+                toast.error('Error al iniciar la grabación');
+            }
+        }
+    };
+
+    // Detener grabación de audio
+    const stopRecording = () => {
+        if (!isRecording) return;
+        try {
+            const mr = mediaRecorderRef.current;
+            if (mr && mr.state !== 'inactive') {
+                mr.stop();
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsRecording(false);
+            clearRecordingTimer();
+            setIsRecordingPaused(false);
+        }
+    };
+
+    const toggleRecording = () => {
+        if (isRecording) stopRecording(); else startRecording();
+    };
+
+    const cancelRecording = () => {
+        if (!isRecording) return;
+        discardOnStopRef.current = true;
+        stopRecording();
+    };
+
+    const pauseRecording = () => {
+        try {
+            const mr = mediaRecorderRef.current;
+            if (mr && mr.state === 'recording' && typeof mr.pause === 'function') {
+                mr.pause();
+                // acumular el tiempo hasta ahora
+                accumulatedElapsedRef.current += (Date.now() - recordingStartRef.current) / 1000;
+                clearRecordingTimer();
+                setIsRecordingPaused(true);
+                toast('Grabación en pausa', { icon: '⏸️' });
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const resumeRecording = () => {
+        try {
+            if (limitReachedRef.current) {
+                toast.error('Límite de 2 minutos alcanzado');
+                return;
+            }
+            const mr = mediaRecorderRef.current;
+            if (mr && mr.state === 'paused' && typeof mr.resume === 'function') {
+                mr.resume();
+                recordingStartRef.current = Date.now();
+                setIsRecordingPaused(false);
+                startRecordingTimer();
+                toast('Reanudando grabación', { icon: '▶️' });
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            try {
+                clearRecordingTimer();
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                    mediaRecorderRef.current.stop();
+                }
+            } catch {}
+            if (audioStreamRef.current) {
+                audioStreamRef.current.getTracks().forEach((t) => t.stop());
+                audioStreamRef.current = null;
+            }
+        };
+    }, []);
 
     useEffect(() => {
         document.body.className = isDarkMode ? 'dark-mode theme-bg-primary theme-text-primary transition-colors duration-300' : 'light-mode theme-bg-primary theme-text-primary transition-colors duration-300';
@@ -258,11 +538,28 @@ const AguacateChat = () => {
     // Evitar scroll visible: asegurar que el último mensaje sea visible sin animación
     // Se usa useLayoutEffect para posicionar el scroll antes del pintado
     const chatAreaRef = useRef(null);
+    const pendingPrependRef = useRef(false);
+    const prevScrollHeightRef = useRef(0);
+    const prevScrollTopRef = useRef(0);
+    const shouldScrollToBottomRef = useRef(false);
+    const stickToBottomRef = useRef(true);
+
     useLayoutEffect(() => {
-        if (!selectedContact) return; // sin chat seleccionado no movemos scroll
+        if (!selectedContact) return; // sin chat seleccionado, no movemos scroll
         const el = chatAreaRef.current;
         if (!el) return;
-        el.scrollTop = el.scrollHeight;
+        if (pendingPrependRef.current) {
+            const prevHeight = prevScrollHeightRef.current || 0;
+            const prevTop = prevScrollTopRef.current || 0;
+            const delta = el.scrollHeight - prevHeight;
+            el.scrollTop = delta + prevTop;
+            pendingPrependRef.current = false;
+            prevScrollHeightRef.current = 0;
+            prevScrollTopRef.current = 0;
+        } else if (shouldScrollToBottomRef.current || stickToBottomRef.current) {
+            el.scrollTop = el.scrollHeight;
+            shouldScrollToBottomRef.current = false;
+        }
     }, [chatMessages, selectedContact]);
 
     // Mantener referencia de la conversación seleccionada para Realtime global
@@ -321,14 +618,20 @@ const AguacateChat = () => {
                         if (m.sender_id === user?.id) return;
                         setChatMessages((prev) => [
                             ...prev,
-                            { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text' },
+                            m.type === 'audio'
+                                ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at }
+                                : { id: m.id, type: 'received', text: m.content, created_at: m.created_at },
                         ]);
                     } else if (evt === 'UPDATE') {
                         const m = payload.new;
                         if (!m) return;
                         if (m.conversation_id !== selectedConvIdRef.current) return;
                         setChatMessages((prev) => prev.map(msg => (
-                            msg.id === m.id ? { ...msg, text: m.content, created_at: m.created_at } : msg
+                            msg.id === m.id
+                                ? (m.type === 'audio'
+                                    ? { ...msg, audioUrl: m.content, text: '(Audio)', created_at: m.created_at }
+                                    : { ...msg, text: m.content, created_at: m.created_at })
+                                : msg
                         )));
                     } else if (evt === 'DELETE') {
                         const m = payload.old;
@@ -392,6 +695,43 @@ const AguacateChat = () => {
                 setSelectedContact(newContact);
             }
         }
+    }, [conversations]);
+
+    // Calcular duración de audios para previsualización (último mensaje por conversación)
+    useEffect(() => {
+        const pending = [];
+        for (const conv of conversations || []) {
+            const m = conv?.last_message;
+            if (m && m.type === 'audio' && m.id && m.content && audioPreviewDurations[m.id] == null) {
+                pending.push({ id: m.id, url: m.content });
+            }
+        }
+        if (pending.length === 0) return;
+        let cancelled = false;
+        pending.forEach(({ id, url }) => {
+            try {
+                const audio = new Audio();
+                const onMeta = () => {
+                    if (cancelled) return;
+                    const secs = Math.max(0, Math.round(audio.duration || 0));
+                    setAudioPreviewDurations(prev => ({ ...prev, [id]: secs }));
+                    cleanup();
+                };
+                const onError = () => {
+                    cleanup();
+                };
+                const cleanup = () => {
+                    audio.removeEventListener('loadedmetadata', onMeta);
+                    audio.removeEventListener('error', onError);
+                };
+                audio.addEventListener('loadedmetadata', onMeta);
+                audio.addEventListener('error', onError);
+                audio.preload = 'metadata';
+                audio.src = url;
+            } catch {}
+        });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conversations]);
 
     // Suscripción realtime para nuevas conversaciones
@@ -482,27 +822,60 @@ const AguacateChat = () => {
 
     const selectContact = async (contact) => {
         setSelectedContact(contact);
-        // Cargar mensajes reales si hay conversationId
+        // Reset paginación
+        setChatMessages([]);
+        setHasMoreOlder(false);
+        setOldestCursor(null);
+        setLoadingOlder(false);
+        shouldScrollToBottomRef.current = true; // al abrir chat, ir al final
+        // Cargar última página si hay conversationId
         try {
             if (contact?.conversationId) {
-                const msgs = await fetchMessagesByConversation(contact.conversationId);
-                const mapped = msgs.map(m => ({
+                const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE });
+                const mapped = messages.map(m => ({
                     id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
-                    text: m.content,
+                    ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
                     created_at: m.created_at,
                     messageType: m.type || 'text',
                 }));
                 setChatMessages(mapped);
-            } else {
-                setChatMessages([]);
+                setHasMoreOlder(hasMore);
+                setOldestCursor(nextCursor);
             }
         } catch (e) {
             console.error('No se pudieron cargar mensajes:', e);
             setChatMessages([]);
+            setHasMoreOlder(false);
+            setOldestCursor(null);
         }
         if (window.innerWidth < 768) {
             setIsSidebarOpen(false);
+        }
+    };
+
+    const loadOlderMessages = async () => {
+        if (!selectedContact?.conversationId || loadingOlder || !hasMoreOlder) return;
+        const el = chatAreaRef.current;
+    pendingPrependRef.current = true;
+    prevScrollHeightRef.current = el ? el.scrollHeight : 0;
+    prevScrollTopRef.current = el ? el.scrollTop : 0;
+        setLoadingOlder(true);
+        try {
+            const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, before: oldestCursor });
+            const mapped = messages.map(m => ({
+                id: m.id,
+                type: m.sender_id === user?.id ? 'sent' : 'received',
+                ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
+                created_at: m.created_at,
+            }));
+            setChatMessages(prev => [...mapped, ...prev]);
+            setHasMoreOlder(hasMore);
+            setOldestCursor(nextCursor);
+        } catch (e) {
+            console.error('Error cargando mensajes anteriores:', e);
+        } finally {
+            setLoadingOlder(false);
         }
     };
 
@@ -872,6 +1245,23 @@ const AguacateChat = () => {
         return () => window.removeEventListener('keydown', handleEsc);
     }, [selectedContact]);
 
+    const [messageMenuOpenId, setMessageMenuOpenId] = useState(null);
+    const messageMenuRef = useRef(null);
+
+    useEffect(() => {
+      function handleClickOutside(event) {
+        if (messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
+          setMessageMenuOpenId(null);
+        }
+      }
+      if (messageMenuOpenId !== null) {
+        document.addEventListener("mousedown", handleClickOutside);
+      }
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, [messageMenuOpenId]);
+
     return (
         <div className="flex h-screen overflow-hidden">
             {/* Componente para mostrar las notificaciones */}
@@ -905,13 +1295,7 @@ const AguacateChat = () => {
                             </button>
                         </div>
                     </div>
-                    <div className="relative" onMouseEnter={() => {
-                        setSearchStopped(true);
-                        setTimeout(() => {
-                            setSearchStopped(false);
-                            setSearchPaused(false);
-                        }, 10);
-                    }} onMouseLeave={() => setSearchPaused(true)}>
+                    <div className="relative">
                         <input
                             id="searchInput"
                             type="text"
@@ -963,6 +1347,21 @@ const AguacateChat = () => {
                                                     </svg>
                                                     <span>Foto</span>
                                                 </>
+                                            ) : (
+                                                contact.lastMessage
+                                            )}
+                                        </p>
+                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            {contact.lastMessageType === 'audio' ? (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <span role="img" aria-label="audio">🎤</span>
+                                                    <span>
+                                                        {(() => {
+                                                            const secs = audioPreviewDurations[contact.lastMessageId];
+                                                            return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
+                                                        })()}
+                                                    </span>
+                                                </span>
                                             ) : (
                                                 contact.lastMessage
                                             )}
@@ -1036,7 +1435,11 @@ const AguacateChat = () => {
                                 </button>
                                 <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu && selectedContact ? '' : 'hidden'}`}>
                                     <button 
-                                        onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
+                                        onClick={() => {
+                                            setChatMessages([]);
+                                            toast.success('Chat limpiado.');
+                                            toggleChatOptions();
+                                        }} 
                                         className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setTrashStopped(true);
@@ -1073,30 +1476,8 @@ const AguacateChat = () => {
                                         <span>Silenciar notificaciones</span>
                                     </button>
                                     <button 
-                                        onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
-                                        onMouseEnter={() => {
-                                            setPinStopped(true);
-                                            setTimeout(() => {
-                                                setPinStopped(false);
-                                                setPinPaused(false);
-                                            }, 10);
-                                        }}
-                                        onMouseLeave={() => setPinPaused(true)}
-                                    >
-                                        <div className="w-5 h-5">
-                                            <Lottie 
-                                                options={lottieOptions.pin} 
-                                                isPaused={isPinPaused} 
-                                                isStopped={isPinStopped} 
-                                                height={24} width={24} 
-                                            />
-                                        </div>
-                                        <span>Fijar conversación</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                        onClick={() => { toast.success('Contacto bloqueado.'); toggleChatOptions(); }} 
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setCallSilentStopped(true);
                                             setTimeout(() => {
@@ -1118,7 +1499,7 @@ const AguacateChat = () => {
                                     </button>
                                     <button 
                                         onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2"
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colores flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setInformationStopped(true);
                                             setTimeout(() => {
@@ -1144,7 +1525,21 @@ const AguacateChat = () => {
                     </div>
                 )}
 
-                <div id="chatArea" ref={chatAreaRef} className="flex-1 overflow-y-auto p-4 space-y-4 chat-container">
+                <div
+                    id="chatArea"
+                    ref={chatAreaRef}
+                    className="flex-1 overflow-y-auto p-4 space-y-4 chat-container"
+                    onScroll={(e) => {
+                        const el = e.currentTarget;
+                        // stick-to-bottom tracking
+                        const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 60;
+                        stickToBottomRef.current = nearBottom;
+                        // top detection for infinite load
+                        if (el.scrollTop <= 80 && hasMoreOlder && !loadingOlder) {
+                            loadOlderMessages();
+                        }
+                    }}
+                >
                     {!selectedContact ? (
                         <div className="h-full w-full flex items-center justify-center">
                             <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
@@ -1157,6 +1552,115 @@ const AguacateChat = () => {
                         </div>
                     ) : (
                         <>
+                            {/* Loader de mensajes anteriores */}
+                            {hasMoreOlder && (
+                                <div className="w-full flex justify-center">
+                                    <div className="text-xs px-3 py-1 rounded-full theme-bg-chat theme-text-secondary border theme-border">
+                                        {loadingOlder ? 'Cargando mensajes...' : 'Desliza hacia arriba para ver más'}
+                                    </div>
+                                </div>
+                            )}
+                            {chatMessages.map((message, index) => {
+                                const isOwn = message.type === 'sent';
+                                return (
+                                    <div key={index} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}>
+                                        {/* Avatar para recibidos */}
+                                        {!isOwn && (
+                                            selectedContact?.avatar_url ? (
+                                                <img
+                                                    src={selectedContact.avatar_url}
+                                                    alt={selectedContact.name}
+                                                    className="w-10 h-10 rounded-full object-cover mr-2"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center mr-2">
+                                                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                                    </svg>
+                                                </div>
+                                            )
+                                        )}
+                                        {/* Mensaje burbuja */}
+                                        <div className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col relative`}>
+                                            <div>
+                                            {message.audioUrl ? (
+                                                <AudioPlayer src={message.audioUrl} className="w-full max-w-xs" />
+                                            ) : (
+                                                    <MessageRenderer text={message.text} chunkSize={450} />
+                                            )}
+                                            </div>
+                                            <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
+                                                {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                            </div>
+                                            {/* Botón de tres puntos solo para mensajes propios, dentro de la burbuja arriba a la derecha */}
+                                            {isOwn && (
+                                                <button
+                                                    className="absolute -top-1 -right-0 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none"
+                                                    style={{ background: 'transparent', border: 'none', padding: 0 }}
+                                                    title="Más opciones"
+                                                    onClick={() => {
+                                                        if (messageMenuOpenId === index) {
+                                                            setMessageMenuOpenId(null);
+                                                        } else {
+                                                            setMessageMenuOpenId(index);
+                                                        }
+                                                    }}
+                                                >
+                                                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                                                        <circle cx="4" cy="10" r="1.5" />
+                                                        <circle cx="10" cy="10" r="1.5" />
+                                                        <circle cx="16" cy="10" r="1.5" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            {/* Menú contextual */}
+                                            {isOwn && messageMenuOpenId === index && (
+                                                <div
+                                                    ref={messageMenuRef}
+                                                    className="absolute right-5 top-6 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in"
+                                                >
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Información del mensaje (no implementado)');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Ver información
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Mensaje fijado.');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Fijar mensaje
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Editar mensaje (no implementado)');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Editar mensaje
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Mensaje eliminado.');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Eliminar mensaje
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                             {chatMessages.map((message, index) => (
                                 <div key={index} className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
                                     {message.type === 'received' && (
@@ -1317,6 +1821,33 @@ const AguacateChat = () => {
                             </div>
                         </button>
                         <div className="flex-1 relative flex items-end">
+                            {isRecording && (
+                                <div className="absolute -top-12 left-0 right-0 flex items-center justify-between gap-3 px-3 py-2 rounded-xl theme-bg-chat theme-border border">
+                                    <div className="flex items-center gap-2">
+                                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+                                        <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
+                                            Grabando {formatSeconds(Math.min(recordingElapsed, MAX_RECORD_SECS))}
+                                        </span>
+                                        <div className="w-6 h-6 opacity-80">
+                                            <Lottie options={lottieOptions.micRecording} isPaused={isRecordingPaused} isStopped={false} />
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={cancelRecording} className="px-2 py-1 rounded-md theme-bg-secondary theme-border border text-xs hover:opacity-80" title="Cancelar">
+                                            Cancelar
+                                        </button>
+                                        {isRecordingPaused ? (
+                                            <button onClick={resumeRecording} className="px-2 py-1 rounded-md bg-teal-600 text-white text-xs hover:opacity-90" title="Reanudar">
+                                                Reanudar
+                                            </button>
+                                        ) : (
+                                            <button onClick={pauseRecording} className="px-2 py-1 rounded-md bg-red-500 text-white text-xs hover:opacity-90" title="Pausar">
+                                                Pausar
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             <textarea
                                 id="messageInput"
                                 placeholder={selectedContact ? "Escribe un mensaje..." : "Selecciona una conversación para empezar"}
@@ -1339,13 +1870,10 @@ const AguacateChat = () => {
                                 rows={1}
                                 disabled={!selectedContact}
                             />
-                            {messageInput.trim().length === 0 ? (
+                            {(isRecording || messageInput.trim().length === 0) ? (
                                 <button
-                                    onClick={() => {
-                                        // Placeholder: aquí podrías iniciar la grabación de audio
-                                        toast.success('Grabar audio');
-                                    }}
-                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity"
+                                    onClick={toggleRecording}
+                                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 ${isRecording ? 'bg-red-500' : 'bg-gradient-to-r from-teal-primary to-teal-secondary'} text-white rounded-full hover:opacity-80 transition-opacity`}
                                     disabled={!selectedContact}
                                     onMouseEnter={() => {
                                         setMicStopped(true);
@@ -1355,10 +1883,10 @@ const AguacateChat = () => {
                                         }, 10);
                                     }}
                                     onMouseLeave={() => setMicPaused(true)}
-                                    title="Enviar audio"
+                                    title={isRecording ? (isRecordingPaused ? 'Reanudar grabación' : 'Pausar/Detener grabación') : 'Grabar audio'}
                                 >
                                     <div className="w-7 h-7">
-                                        <Lottie options={lottieOptions.mic} isPaused={isMicPaused} isStopped={isMicStopped}/>
+                                        <Lottie options={isRecording ? lottieOptions.micRecording : lottieOptions.mic} isPaused={isRecording ? isRecordingPaused : isMicPaused} isStopped={isRecording ? false : isMicStopped}/>
                                     </div>
                                 </button>
                             ) : (
