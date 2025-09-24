@@ -96,6 +96,7 @@ const AguacateChat = () => {
     const [isRecordingPaused, setIsRecordingPaused] = useState(false);
     const [recordingElapsed, setRecordingElapsed] = useState(0); // seconds
     const MAX_RECORD_SECS = 120; // 2 minutes limit
+    const MIN_RECORD_SECS = 1; // 1 seconds limit
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
     const audioStreamRef = useRef(null);
@@ -104,6 +105,7 @@ const AguacateChat = () => {
     const recordingIntervalRef = useRef(null);
     const discardOnStopRef = useRef(false);
     const limitReachedRef = useRef(false);
+    const effectiveDurationRef = useRef(0); // duración efectiva al detener
     // MIME elegido para la grabación (preferir OGG/Opus si es posible)
     const recorderMimeRef = useRef('');
     const fmtErr = (err) => {
@@ -378,6 +380,14 @@ const AguacateChat = () => {
             mr.onstop = async () => {
                 clearRecordingTimer();
                 try {
+                    // Si no es cancelación explícita, validar duración mínima
+                    if (!discardOnStopRef.current) {
+                        const secs = Math.floor(effectiveDurationRef.current || 0);
+                        if (secs < MIN_RECORD_SECS) {
+                            toast.error(`Audio demasiado corto (mín. ${MIN_RECORD_SECS}s)`);
+                            return; // no enviar ni agregar optimista
+                        }
+                    }
                     if (!discardOnStopRef.current) {
                         // Usar el tipo real del recorder si está disponible
                         const usedType = (mediaRecorderRef.current && mediaRecorderRef.current.mimeType) || recorderMimeRef.current || 'audio/webm';
@@ -420,6 +430,7 @@ const AguacateChat = () => {
                     toast.error('No se pudo procesar el audio');
                 } finally {
                     discardOnStopRef.current = false;
+                    effectiveDurationRef.current = 0;
                     recorderMimeRef.current = '';
                     accumulatedElapsedRef.current = 0;
                     setRecordingElapsed(0);
@@ -460,6 +471,14 @@ const AguacateChat = () => {
         try {
             const mr = mediaRecorderRef.current;
             if (mr && mr.state !== 'inactive') {
+                // Calcular duración efectiva antes de detener para validar mínimo
+                let extra = 0;
+                try {
+                    if (mr.state === 'recording' && recordingStartRef.current) {
+                        extra = (Date.now() - recordingStartRef.current) / 1000;
+                    }
+                } catch {}
+                effectiveDurationRef.current = (accumulatedElapsedRef.current || 0) + extra;
                 mr.stop();
             }
         } catch (err) {
