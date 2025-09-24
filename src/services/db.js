@@ -164,7 +164,7 @@ export async function fetchUserConversations(currentUserId) {
     // Traer mensajes de todas las conv en orden descendente y quedarnos con el primero de cada conv
     const { data: msgs, error: msgErr } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, created_at')
+      .select('id, conversation_id, sender_id, content, type, created_at')
       .in('conversation_id', convIds)
       .order('created_at', { ascending: false })
       .limit(convIds.length * 20) // margen por si hay convs sin mensajes
@@ -194,7 +194,7 @@ export async function fetchUserConversations(currentUserId) {
       created_at: conv.created_at,
       otherUserId: otherId,
       otherProfile: prof,
-      last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id } : null,
+  last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id, type: last.type } : null,
       last_message_at: last?.created_at || conv.created_at,
     })
   }
@@ -210,7 +210,7 @@ export async function fetchUserConversations(currentUserId) {
 }
 
 // Messages helpers
-export async function insertMessage({ conversationId, senderId, content }) {
+export async function insertMessage({ conversationId, senderId, content, type }) {
   if (!conversationId || !senderId || !content?.trim()) {
     throw new Error('Datos de mensaje incompletos')
   }
@@ -218,6 +218,7 @@ export async function insertMessage({ conversationId, senderId, content }) {
     conversation_id: conversationId,
     sender_id: senderId,
     content: content.trim(),
+    ...(type ? { type } : {}),
   }
   console.log('Inserting message:', payload);
   const { error } = await supabase.from('messages').insert(payload)
@@ -233,11 +234,64 @@ export async function fetchMessagesByConversation(conversationId, { limit } = {}
   if (!conversationId) return []
   let query = supabase
     .from('messages')
-    .select('id, sender_id, content, created_at')
+    .select('id, sender_id, content, type, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
   if (limit) query = query.limit(limit)
   const { data, error } = await query
   if (error) throw error
   return data || []
+}
+
+// Cursor-based pagination for messages
+// - Returns the latest "limit" messages when before is null
+// - When before is provided (ISO date), returns messages older than that timestamp
+// Always returns messages sorted ASC (oldest -> newest) for rendering
+export async function fetchMessagesPage(conversationId, { limit = 30, before = null } = {}) {
+  if (!conversationId) return { messages: [], hasMore: false, nextCursor: null }
+  let query = supabase
+    .from('messages')
+    .select('id, sender_id, content, type, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: false })
+    .limit(limit + 1) // fetch one extra to detect if there are more
+
+  if (before) {
+    query = query.lt('created_at', before)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+
+  const rows = data || []
+  const hasMore = rows.length > limit
+  const trimmed = hasMore ? rows.slice(0, limit) : rows
+  const messages = trimmed.slice().reverse() // ASC for UI
+  const nextCursor = messages.length > 0 ? messages[0].created_at : before
+
+  return { messages, hasMore, nextCursor }
+}
+
+// Upload an audio blob to 'chataudios' bucket and return its public URL
+export async function uploadAudioToBucket({ blob, conversationId, userId, mimeType }) {
+  if (!blob) throw new Error('No audio blob provided')
+  const bucket = 'chataudios'
+  const ts = new Date().toISOString().replace(/[:.]/g, '-')
+  const rand = Math.random().toString(16).slice(2)
+  const ext = mimeType?.includes('ogg') ? 'ogg' : (mimeType?.includes('webm') ? 'webm' : 'bin')
+  const path = `${userId || 'unknown'}/${conversationId || 'misc'}/${ts}_${rand}.${ext}`
+
+  const { error: uploadErr } = await supabase.storage.from(bucket).upload(path, blob, {
+    contentType: mimeType || 'application/octet-stream',
+    upsert: false,
+  })
+  if (uploadErr) {
+    console.error('Error subiendo audio:', uploadErr)
+    throw uploadErr
+  }
+
+  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
+  const publicUrl = pub?.publicUrl
+  if (!publicUrl) throw new Error('No se pudo obtener URL pública del audio')
+  return { publicUrl, path }
 }
