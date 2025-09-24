@@ -579,6 +579,7 @@ const AguacateChat = () => {
     const prevScrollTopRef = useRef(0);
     const shouldScrollToBottomRef = useRef(false);
     const stickToBottomRef = useRef(true);
+    const chatMessagesRef = useRef([]);
 
     useLayoutEffect(() => {
         if (!selectedContact) return; // sin chat seleccionado, no movemos scroll
@@ -597,6 +598,9 @@ const AguacateChat = () => {
             shouldScrollToBottomRef.current = false;
         }
     }, [chatMessages, selectedContact]);
+
+    // Mantener ref de mensajes para accesos en timers
+    useEffect(() => { chatMessagesRef.current = chatMessages; }, [chatMessages]);
 
     // Mantener referencia de la conversación seleccionada para Realtime global
     const selectedConvIdRef = useRef(null);
@@ -662,13 +666,48 @@ const AguacateChat = () => {
                         const m = payload.new;
                         if (!m) return;
                         if (m.conversation_id !== selectedConvIdRef.current) return;
-                        setChatMessages((prev) => prev.map(msg => (
-                            msg.id === m.id
-                                ? (m.type === 'audio'
-                                    ? { ...msg, audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : msg.seen }
-                                    : { ...msg, text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : msg.seen })
-                                : msg
-                        )));
+
+                        const applyUpdate = (row) => {
+                            setChatMessages((prev) => prev.map((msg) => {
+                                if (msg.id !== row.id) return msg;
+                                const next = { ...msg };
+                                // messageType si viene en la fila
+                                if (typeof row.type === 'string') {
+                                    next.messageType = row.type || 'text';
+                                }
+                                // contenido (si viene). Mantener el anterior si no llega.
+                                const effectiveType = (typeof row.type === 'string' ? row.type : msg.messageType) || 'text';
+                                if (row.content != null) {
+                                    if (effectiveType === 'audio') {
+                                        next.audioUrl = row.content;
+                                        next.text = '(Audio)';
+                                    } else {
+                                        next.text = row.content;
+                                        if (next.audioUrl && effectiveType !== 'audio') delete next.audioUrl;
+                                    }
+                                }
+                                if (row.created_at) next.created_at = row.created_at;
+                                if (Array.isArray(row.seen)) next.seen = row.seen;
+                                return next;
+                            }));
+                        };
+
+                        // Si por alguna razón el payload no trae 'seen' (o viene indefinido), hacemos un fetch puntual
+                        if (typeof m.seen === 'undefined' || m.seen === null) {
+                            supabase
+                                .from('messages')
+                                .select('id, content, type, created_at, seen, conversation_id')
+                                .eq('id', m.id)
+                                .single()
+                                .then(({ data, error }) => {
+                                    if (error || !data) return;
+                                    if (data.conversation_id !== selectedConvIdRef.current) return;
+                                    applyUpdate(data);
+                                })
+                                .catch(() => {});
+                        } else {
+                            applyUpdate(m);
+                        }
                     } else if (evt === 'DELETE') {
                         const m = payload.old;
                         if (!m) return;
@@ -1143,6 +1182,107 @@ const AguacateChat = () => {
         (contact.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (contact.lastMessage || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    // Estado/refs para animar el icono de leído cuando "baja"
+    const [animateReadReceipt, setAnimateReadReceipt] = useState(false);
+    const prevReadReceiptIndexRef = useRef(-1);
+    // Overlay: posición Y absoluta del icono de leído respecto a chatArea
+    const [readReceiptTop, setReadReceiptTop] = useState(null);
+    const readReceiptRef = useRef(null);
+    useEffect(() => {
+        // Evitar animación durante prepend de mensajes antiguos
+        if (pendingPrependRef.current) {
+            prevReadReceiptIndexRef.current = readReceiptIndex;
+            return;
+        }
+        const prev = prevReadReceiptIndexRef.current;
+        if (typeof readReceiptIndex === 'number' && readReceiptIndex !== -1) {
+            if (typeof prev === 'number' && prev !== -1 && readReceiptIndex > prev) {
+                prevReadReceiptIndexRef.current = readReceiptIndex;
+                setAnimateReadReceipt(true);
+                const t = setTimeout(() => setAnimateReadReceipt(false), 350);
+                return () => clearTimeout(t);
+            }
+        }
+        prevReadReceiptIndexRef.current = readReceiptIndex;
+    }, [readReceiptIndex]);
+
+    // Reset al cambiar de conversación
+    useEffect(() => {
+        prevReadReceiptIndexRef.current = -1;
+        setAnimateReadReceipt(false);
+        setReadReceiptTop(null);
+    }, [selectedContact?.conversationId]);
+
+    // Recalcular posición del icono de leído en el overlay derecho
+    const recalcReadReceiptPosition = () => {
+        try {
+            const container = chatAreaRef.current;
+            if (!container) return;
+            if (readReceiptIndex == null || readReceiptIndex < 0) {
+                setReadReceiptTop(null);
+                return;
+            }
+            // Buscar el nodo del mensaje ancla
+            const nodes = container.querySelectorAll('[data-message-id]');
+            const targetNode = nodes[readReceiptIndex];
+            if (!targetNode) {
+                setReadReceiptTop(null);
+                return;
+            }
+            const cRect = container.getBoundingClientRect();
+            const r = targetNode.getBoundingClientRect();
+            // Posicionar cerca de la base de la burbuja, con un pequeño offset
+            const bubbleBaseY = r.bottom - 10; // 10px por encima para no salir del contenedor
+            const top = bubbleBaseY - cRect.top + container.scrollTop;
+            setReadReceiptTop(Math.max(0, top));
+        } catch {}
+    };
+
+    // Recalcular cuando cambian mensajes, índice de leído, o tamaño de ventana
+    useEffect(() => {
+        recalcReadReceiptPosition();
+        const onResize = () => recalcReadReceiptPosition();
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [chatMessages, readReceiptIndex, selectedContact?.conversationId]);
+
+    // Fallback: sondear periódicamente el estado 'seen' de los últimos mensajes por si algún UPDATE no llega por realtime
+    useEffect(() => {
+        if (!selectedContact?.conversationId) return;
+        let cancelled = false;
+        const intervalMs = 2500; // 2.5s, ligero para no saturar
+        const tick = async () => {
+            try {
+                const msgs = chatMessagesRef.current || [];
+                if (msgs.length === 0) return;
+                // Tomar hasta 50 ids más recientes para reducir carga
+                const recent = msgs.slice(-50);
+                const ids = recent.map(m => m.id).filter(Boolean);
+                if (ids.length === 0) return;
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('id, seen, content, type, created_at, conversation_id')
+                    .in('id', ids);
+                if (error || !Array.isArray(data)) return;
+                if (cancelled) return;
+                const map = new Map(data.map(r => [r.id, r]));
+                setChatMessages(prev => prev.map(m => {
+                    const r = map.get(m.id);
+                    if (!r) return m;
+                    // Si hay novedad en 'seen', aplícala
+                    const incomingSeen = Array.isArray(r.seen) ? r.seen : m.seen;
+                    if (JSON.stringify(incomingSeen) !== JSON.stringify(m.seen)) {
+                        return { ...m, seen: incomingSeen };
+                    }
+                    return m;
+                }));
+            } catch {}
+        };
+        const timer = setInterval(tick, intervalMs);
+        return () => { cancelled = true; clearInterval(timer); };
+    }, [selectedContact?.conversationId]);
 
     const toggleNewChatMenu = () => {
         setShowNewChatMenu(!showNewChatMenu);
@@ -1666,7 +1806,7 @@ const AguacateChat = () => {
                 <div
                     id="chatArea"
                     ref={chatAreaRef}
-                    className="flex-1 overflow-y-auto p-4 space-y-4 chat-container"
+                    className="flex-1 overflow-y-auto p-4 space-y-4 chat-container relative"
                     onScroll={(e) => {
                         const el = e.currentTarget;
                         // stick-to-bottom tracking
@@ -1678,6 +1818,8 @@ const AguacateChat = () => {
                         }
                         // intentar marcar visibles como vistos durante el scroll
                         tryMarkVisibleAsSeen();
+                        // recalcular posición del icono de leído
+                        recalcReadReceiptPosition();
                     }}
                 >
                     {!selectedContact ? (
@@ -1745,42 +1887,7 @@ const AguacateChat = () => {
                                             <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
                                                 {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                             </div>
-                                            {/* Mini avatar de recibo de lectura (estilo Messenger) */}
-                                            {index === readReceiptIndex && selectedContact && (
-                                                selectedContact?.avatar_url ? (
-                                                    <img
-                                                        src={selectedContact.avatar_url}
-                                                        alt={`Leído por ${selectedContact.name || 'contacto'}`}
-                                                        className="w-5 h-5 rounded-full shadow"
-                                                        style={{
-                                                            position: 'absolute',
-                                                            bottom: '-10px',
-                                                            right: isOwn ? '-10px' : 'auto',
-                                                            left: isOwn ? 'auto' : '-10px',
-                                                            border: '2px solid',
-                                                            borderColor: 'var(--bg-secondary)'
-                                                        }}
-                                                        title="Leído"
-                                                        aria-label="Leído"
-                                                    />
-                                                ) : (
-                                                    <div
-                                                        className="w-5 h-5 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary shadow flex items-center justify-center text-[10px] text-white font-bold"
-                                                        style={{
-                                                            position: 'absolute',
-                                                            bottom: '-10px',
-                                                            right: isOwn ? '-10px' : 'auto',
-                                                            left: isOwn ? 'auto' : '-10px',
-                                                            border: '2px solid',
-                                                            borderColor: 'var(--bg-secondary)'
-                                                        }}
-                                                        title="Leído"
-                                                        aria-label="Leído"
-                                                    >
-                                                        {selectedContact?.initials?.slice(0,2) || '•'}
-                                                    </div>
-                                                )
-                                            )}
+                                            {/* Eliminado: el icono de leído ahora va en un overlay fijo a la derecha */}
                                             {/* Botón de tres puntos solo para mensajes propios, dentro de la burbuja arriba a la derecha */}
                                             {isOwn && (
                                                 <button
@@ -1871,6 +1978,42 @@ const AguacateChat = () => {
                                             <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0.4s'}}></span>
                                         </div>
                                     </div>
+                                </div>
+                            )}
+                            {/* Overlay fijo del icono de leído, anclado a la banda derecha del chat */}
+                            {selectedContact && readReceiptTop != null && (
+                                <div
+                                    className={`absolute`}
+                                    style={{
+                                        right: 4,
+                                        top: readReceiptTop,
+                                        zIndex: 10,
+                                        pointerEvents: 'none',
+                                    }}
+                                    aria-label="Leído"
+                                    title="Leído"
+                                >
+                                    {selectedContact?.avatar_url ? (
+                                        <img
+                                            src={selectedContact.avatar_url}
+                                            alt={`Leído por ${selectedContact.name || 'contacto'}`}
+                                            className={`w-5 h-5 rounded-full shadow read-receipt ${animateReadReceipt ? 'read-receipt-animate' : ''}`}
+                                            style={{
+                                                border: '2px solid',
+                                                borderColor: 'var(--bg-secondary)'
+                                            }}
+                                        />
+                                    ) : (
+                                        <div
+                                            className={`w-5 h-5 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary shadow flex items-center justify-center text-[10px] text-white font-bold read-receipt ${animateReadReceipt ? 'read-receipt-animate' : ''}`}
+                                            style={{
+                                                border: '2px solid',
+                                                borderColor: 'var(--bg-secondary)'
+                                            }}
+                                        >
+                                            {selectedContact?.initials?.slice(0,2) || '•'}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </>

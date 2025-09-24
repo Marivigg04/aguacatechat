@@ -167,3 +167,17 @@ body {
   color: var(--text-primary);
 }
 
+/* Animación del icono de leído (caída suave hacia abajo) */
+.read-receipt {
+  will-change: transform, opacity;
+}
+
+@keyframes read-receipt-drop {
+  0% { transform: translateY(-8px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.read-receipt-animate {
+  animation: read-receipt-drop 300ms ease-out both;
+}
+
