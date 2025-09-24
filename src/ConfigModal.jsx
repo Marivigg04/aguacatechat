@@ -21,7 +21,19 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
         showStatus: true,
     });
 
-    if (!showConfigModal) {
+    // Estado para animación de cierre
+    const [isClosing, setIsClosing] = useState(false);
+
+    // Función para cerrar el modal con animación (adaptada de ProfileModal)
+    const handleCloseModal = () => {
+        setIsClosing(true);
+        setTimeout(() => {
+            setShowConfigModal(false);
+            setIsClosing(false);
+        }, 400);
+    };
+
+    if (!showConfigModal && !isClosing) {
         return null;
     }
 
@@ -43,34 +55,43 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
         // Fondo semi-transparente que cubre toda la pantalla
         <div
             className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
-            onClick={() => setShowConfigModal(false)}
+            onClick={handleCloseModal}
             style={{
-                animation: showConfigModal ? 'fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-in'
+                animation: isClosing ? 'fadeOut 0.3s ease-in forwards' : 'fadeIn 0.3s ease-out forwards'
             }}
         >
             {/* Contenedor principal del modal */}
             <div
                 className={`theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl
                     transition-all duration-700
-                    ${showConfigModal ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-8'}
+                    ${isClosing 
+                        ? 'opacity-0 scale-90 translate-y-8' 
+                        : 'opacity-100 scale-100 translate-y-0'
+                    }
                 `}
                 style={{
                     transitionProperty: 'opacity, transform',
                     transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)',
-                    animation: showConfigModal ? 'slideInLeft 0.4s ease-out' : 'slideOutLeft 0.3s ease-in'
+                    animation: isClosing
+                        ? 'slideOutRight 0.4s ease-in forwards'
+                        : 'slideInLeft 0.4s ease-out forwards'
                 }}
                 onClick={e => e.stopPropagation()}
             >
                 {/* 1. Encabezado del Modal */}
-                <div className="p-6 theme-border border-b flex items-center justify-between">
+                <div className="p-6 theme-border border-b flex items-center justify-between relative">
                     <h2 className="text-xl font-bold theme-text-primary">Configuración</h2>
                     <button
-                        onClick={() => setShowConfigModal(false)}
-                        className="absolute top-6 right-6 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 text-gray-600 hover:text-gray-800"
+                        onClick={handleCloseModal}
+                        className={`
+                            ml-4 p-2 rounded-full
+                            transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
+                            theme-bg-chat
+                        `}
                         title="Cerrar modal"
                         style={{ zIndex: 10 }}
                     >
-                        <span className="text-lg font-light">✕</span>
+                        <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                     </button>
                 </div>
 
@@ -122,7 +143,7 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                                 handleToggle={() => setPrivacy(prev => ({ ...prev, readReceipts: !prev.readReceipts }))}
                             />
                         )}
-                         {renderSettingItem(
+                        {renderSettingItem(
                             UserCircleIcon,
                             'Mostrar Estado "En Línea"',
                             'Permite que tus contactos vean cuándo estás activo.',
@@ -134,10 +155,10 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                     </div>
                 </div>
 
-                 {/* 3. Pie del Modal */}
-                 <div className="p-4 theme-border border-t flex justify-end">
+                {/* 3. Pie del Modal */}
+                <div className="p-4 theme-border border-t flex justify-end">
                     <button
-                        onClick={() => setShowConfigModal(false)}
+                        onClick={handleCloseModal}
                         className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold hover:opacity-90 transition-opacity"
                     >
                         Hecho
@@ -154,23 +175,23 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                     to { opacity: 0; }
                 }
                 @keyframes slideInLeft {
-                    from { 
-                        opacity: 0; 
-                        transform: translateX(-30px);
+                    from {
+                        opacity: 0;
+                        transform: translateX(-30px) scale(0.95);
                     }
-                    to { 
-                        opacity: 1; 
-                        transform: translateX(0);
+                    to {
+                        opacity: 1;
+                        transform: translateX(0) scale(1);
                     }
                 }
-                @keyframes slideOutLeft {
-                    from { 
-                        opacity: 1; 
-                        transform: translateX(0);
+                @keyframes slideOutRight {
+                    from {
+                        opacity: 1;
+                        transform: translateX(0) scale(1);
                     }
-                    to { 
-                        opacity: 0; 
-                        transform: translateX(-30px);
+                    to {
+                        opacity: 0;
+                        transform: translateX(30px) scale(0.95);
                     }
                 }
             `}</style>

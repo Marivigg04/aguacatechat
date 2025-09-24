@@ -40,21 +40,33 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
     onClose();
   };
 
-  // Animación de entrada igual que ConfigModal
+  // Estado para animación de cierre
+  const [isClosing, setIsClosing] = useState(false);
+
+  // Función para cerrar el modal con animación (adaptada)
+  const handleCloseModal = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      onClose();
+    }, 400);
+  };
+
+  // Animación de entrada/salida igual que ProfileModal
   const modalClass = `theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl
     transition-all duration-700
-    ${isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-8'}
+    ${isClosing ? 'opacity-0 scale-90 translate-y-8' : 'opacity-100 scale-100 translate-y-0'}
     modal-transition
   `;
 
-  if (!isOpen) return null;
+  if (!isOpen && !isClosing) return null;
 
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
+      onClick={handleCloseModal}
       style={{
-        animation: isOpen ? 'fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-in'
+        animation: isClosing ? 'fadeOut 0.3s ease-in forwards' : 'fadeIn 0.3s ease-out forwards'
       }}
     >
       <div
@@ -62,19 +74,41 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
         style={{
           transitionProperty: 'opacity, transform',
           transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)',
-          animation: isOpen ? 'slideInLeft 0.4s ease-out' : 'slideOutLeft 0.3s ease-in'
+          animation: isClosing
+            ? 'slideOutRight 0.4s ease-in forwards'
+            : 'slideInLeft 0.4s ease-out forwards'
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* Encabezado con icono y color */}
         <div className="relative flex items-center justify-between p-6 theme-border border-b mb-2">
           <h2 className="text-xl font-bold theme-text-primary">Personalización del Chat</h2>
-          <button className="absolute top-6 right-6 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 text-gray-600 hover:text-gray-800" onClick={onClose} title="Cerrar modal" style={{zIndex:10}}>✕</button>
+          <button
+            className="
+              ml-4 p-2 rounded-full
+              transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
+              theme-bg-chat
+            "
+            onClick={handleCloseModal}
+            title="Cerrar modal"
+            style={{ zIndex: 10 }}
+          >
+            <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
+          </button>
         </div>
-  {/* Fondo del chat */}
-  <div className="mb-6 px-6 py-4 rounded-xl bg-gray-50 border border-gray-200 w-11/12 mx-auto">
+        {/* Fondo del chat */}
+        <div className="mb-6 px-6 py-4 rounded-xl theme-bg-chat theme-border border w-11/12 mx-auto">
           <label className="block font-semibold mb-2 text-teal-primary">Fondo del chat</label>
-          <select value={backgroundType} onChange={e => setPersonalization({ ...personalization, backgroundType: e.target.value })} className="w-full p-2 rounded-lg border focus:ring-2 focus:ring-teal-primary">
+          <select
+            value={backgroundType}
+            onChange={e => setPersonalization({ ...personalization, backgroundType: e.target.value })}
+            className="w-full p-2 rounded-lg border focus:ring-2 focus:ring-teal-primary theme-bg-chat theme-text-primary"
+            style={{
+              // Para navegadores que soportan, el fondo y texto del select se adapta al modo oscuro
+              backgroundColor: 'var(--bg-chat)',
+              color: 'var(--text-primary)'
+            }}
+          >
             {backgrounds.map(bg => (
               <option key={bg.value} value={bg.value}>{bg.label}</option>
             ))}
@@ -97,8 +131,8 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
             </div>
           )}
         </div>
-  {/* Colores de burbujas */}
-  <div className="mb-6 px-6 py-4 rounded-xl bg-gray-50 border border-gray-200 flex flex-col md:flex-row gap-6 w-11/12 mx-auto">
+        {/* Colores de burbujas */}
+        <div className="mb-6 px-6 py-4 rounded-xl theme-bg-chat theme-border border flex flex-col md:flex-row gap-6 w-11/12 mx-auto">
           <div className="flex-1">
             <label className="block font-semibold mb-2 text-teal-primary">Burbuja enviada</label>
             <input type="color" value={bubbleColors.sent} onChange={e => setPersonalization({ ...personalization, bubbleColors: { ...bubbleColors, sent: e.target.value } })} className="w-10 h-10 rounded border" />
@@ -108,16 +142,46 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
             <input type="color" value={bubbleColors.received} onChange={e => setPersonalization({ ...personalization, bubbleColors: { ...bubbleColors, received: e.target.value } })} className="w-10 h-10 rounded border" />
           </div>
         </div>
-  {/* Tamaño de fuente */}
-  <div className="mb-6 px-6 py-4 rounded-xl bg-gray-50 border border-gray-200 flex items-center gap-4 w-11/12 mx-auto">
+        {/* Tamaño de fuente */}
+        <div className="mb-6 px-6 py-4 rounded-xl theme-bg-chat theme-border border flex items-center gap-4 w-11/12 mx-auto">
           <label className="block font-semibold text-teal-primary">Tamaño de fuente de mensajes</label>
           <input type="range" min={12} max={24} value={fontSize} onChange={e => setPersonalization({ ...personalization, fontSize: Number(e.target.value) })} className="w-32" />
-          <span className="ml-2 font-semibold text-gray-700">{fontSize}px</span>
+          <span className="ml-2 font-semibold theme-text-primary">{fontSize}px</span>
         </div>
         <div className="pb-6 w-11/12 mx-auto">
           <button className="w-full py-3 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-xl font-bold text-lg shadow-lg hover:opacity-90 transition-all duration-300" onClick={handleApply}>Aplicar cambios</button>
         </div>
       </div>
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes fadeOut {
+          from { opacity: 1; }
+          to { opacity: 0; }
+        }
+        @keyframes slideInLeft {
+          from {
+            opacity: 0;
+            transform: translateX(-30px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+          }
+        }
+        @keyframes slideOutRight {
+          from {
+            opacity: 1;
+            transform: translateX(0) scale(1);
+          }
+          to {
+            opacity: 0;
+            transform: translateX(30px) scale(0.95);
+          }
+        }
+      `}</style>
     </div>
   );
 }

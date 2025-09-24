@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Lottie from 'react-lottie';
-import { FaEye, FaEyeSlash, FaPen } from 'react-icons/fa'; // Agrega este import al inicio
+import { FaEye, FaEyeSlash, FaPen } from 'react-icons/fa';
 import { supabase } from './services/supabaseClient';
 import { useAuth } from './context/AuthContext.jsx'
 import { useNavigate } from 'react-router-dom'
@@ -36,11 +36,11 @@ const ProfileModal = ({
     isLockProfileStopped
 }) => {
     // Estados locales para edición de información de perfil
-    // (independiente de los props, para evitar problemas de sincronización)
     const [isEditingInfo, setIsEditingInfo] = useState(false);
     const [newProfileInfo, setNewProfileInfo] = useState('');
     const { signOut, user } = useAuth();
     const navigate = useNavigate();
+    
     // Estados locales para la ventana de cambiar contraseña
     const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
@@ -49,6 +49,9 @@ const ProfileModal = ({
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+    // Estado para controlar animaciones de salida
+    const [isClosing, setIsClosing] = useState(false);
 
     // Estado para la info de perfil desde Supabase
     const [profileInfoDb, setProfileInfoDb] = useState('');
@@ -60,9 +63,8 @@ const ProfileModal = ({
 
     // Helpers: validación, recorte y utilidades de imagen
     const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-    // Soporte de tipos comunes en navegadores (bucket público)
     const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    const TARGET_SIZE = 512; // tamaño final cuadrado
+    const TARGET_SIZE = 512;
 
     function extractPathFromPublicUrl(url) {
         if (!url) return null;
@@ -83,7 +85,6 @@ const ProfileModal = ({
     }
 
     async function processImageToSquare(file, size = TARGET_SIZE) {
-        // Devuelve { blob, mime, ext, previewUrl }
         const img = new Image();
         const objectUrl = URL.createObjectURL(file);
         try {
@@ -113,11 +114,19 @@ const ProfileModal = ({
         }
     }
 
+    // Función para cerrar el modal con animación
+    const handleCloseModal = () => {
+        setIsClosing(true);
+        setTimeout(() => {
+            setShowProfileModal(false);
+            setIsClosing(false);
+        }, 400);
+    };
+
     React.useEffect(() => {
         async function fetchProfileInfo() {
             if (!user?.id) return;
             try {
-                // Import dinámico para evitar problemas de SSR
                 const { selectFrom } = await import('./services/db');
                 const data = await selectFrom('profiles', {
                     columns: 'profileInformation, avatar_url',
@@ -134,386 +143,258 @@ const ProfileModal = ({
         fetchProfileInfo();
     }, [user?.id, showProfileModal]);
 
+    // Renderizar solo si el modal debe mostrarse o está cerrándose
+    if (!showProfileModal && !isClosing) {
+        return null;
+    }
+
     return (
-        showProfileModal && (
+        <div
+            className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
+            onClick={handleCloseModal}
+            style={{
+                animation: isClosing ? 'fadeOut 0.3s ease-in forwards' : 'fadeIn 0.3s ease-out forwards'
+            }}
+        >
             <div
-                className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
-                onClick={() => setShowProfileModal(false)}
-                style={{
-                    animation: showProfileModal ? 'fadeIn 0.3s ease-out' : 'fadeOut 0.3s ease-in'
-                }}
-            >
-                <div
-                    className={`theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl
+                className={`theme-bg-secondary rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl
                     transition-all duration-700
-                    ${showProfileModal ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-90 translate-y-8'}
+                    ${isClosing 
+                        ? 'opacity-0 scale-90 translate-y-8' 
+                        : 'opacity-100 scale-100 translate-y-0'
+                    }
                 `}
                 style={{
                     transitionProperty: 'opacity, transform',
                     transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)',
-                    animation: showProfileModal ? 'slideInLeft 0.4s ease-out' : 'slideOutLeft 0.3s ease-in'
+                    animation: isClosing
+                        ? 'slideOutRight 0.4s ease-in forwards'
+                        : 'slideInLeft 0.4s ease-out forwards'
                 }}
                 onClick={e => e.stopPropagation()}
-                >
-                    <div className="p-6 theme-border border-b flex items-center justify-between">
-                        <h3 className="text-xl font-bold theme-text-primary">Perfil</h3>
-                        <button
-                            onClick={() => setShowProfileModal(false)}
-                            className="absolute top-6 right-6 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 text-gray-600 hover:text-gray-800"
-                            title="Cerrar modal"
-                            style={{ zIndex: 10 }}
-                        >
-                            <span className="text-lg font-light">✕</span>
-                        </button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-                        {/* Botón avatar con overlay de lápiz en hover y selector de imagen */}
-                        <div className="flex flex-col items-center mb-4">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={async (e) => {
-                                    const file = e.target.files?.[0];
-                                    if (!file || !user?.id) return;
+            >
+                <div className="p-6 theme-border border-b flex items-center justify-between relative">
+                    <h3 className="text-xl font-bold theme-text-primary">Perfil</h3>
+                    <button
+                        onClick={handleCloseModal}
+                        className={`
+                            ml-4 p-2 rounded-full
+                            transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
+                            theme-bg-chat
+                        `}
+                        title="Cerrar modal"
+                        style={{ zIndex: 10 }}
+                    >
+                        <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                    {/* Botón avatar con overlay de lápiz en hover y selector de imagen */}
+                    <div className="flex flex-col items-center mb-4">
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file || !user?.id) return;
 
-                                    // Validaciones
-                                    const errorMsg = validateFile(file);
-                                    if (errorMsg) {
-                                        if (window.toast) window.toast.error(errorMsg);
-                                        else {
-                                            try { const { default: toast } = await import('react-hot-toast'); toast.error(errorMsg); } catch {}
+                                const errorMsg = validateFile(file);
+                                if (errorMsg) {
+                                    if (window.toast) window.toast.error(errorMsg);
+                                    else {
+                                        try { const { default: toast } = await import('react-hot-toast'); toast.error(errorMsg); } catch {}
+                                    }
+                                    return;
+                                }
+
+                                if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+                                let processed;
+                                try {
+                                    processed = await processImageToSquare(file);
+                                } catch (err) {
+                                    if (window.toast) window.toast.error('No se pudo procesar la imagen');
+                                    else { try { const { default: toast } = await import('react-hot-toast'); toast.error('No se pudo procesar la imagen'); } catch {} }
+                                    return;
+                                }
+                                const { blob, mime, ext, previewUrl } = processed;
+                                setAvatarPreview(previewUrl);
+                                setUploadingAvatar(true);
+                                try {
+                                    const { data: sessRes } = await supabase.auth.getSession();
+                                    const authUid = sessRes?.session?.user?.id || null;
+                                    if (!authUid) {
+                                        const msg = 'No hay sesión activa. Inicia sesión para actualizar tu foto.';
+                                        if (window.toast) window.toast.error(msg); else { try { const { default: toast } = await import('react-hot-toast'); toast.error(msg); } catch {}
                                         }
-                                        return;
+                                        throw new Error('Missing auth session');
                                     }
 
-                                    // Recorte/resize previo y vista previa del procesado
-                                    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-                                    let processed;
-                                    try {
-                                        processed = await processImageToSquare(file);
-                                    } catch (err) {
-                                        if (window.toast) window.toast.error('No se pudo procesar la imagen');
-                                        else { try { const { default: toast } = await import('react-hot-toast'); toast.error('No se pudo procesar la imagen'); } catch {} }
-                                        return;
+                                    const oldPath = extractPathFromPublicUrl(avatarUrl);
+                                    const fileName = `${Date.now()}.${ext}`;
+                                    const path = `${authUid}/${fileName}`;
+                                    if (import.meta.env?.DEV) {
+                                        console.debug('[Avatar] Subiendo a', { bucket: 'userphotos', path, mime, authUid, userId: user?.id });
                                     }
-                                    const { blob, mime, ext, previewUrl } = processed;
-                                    setAvatarPreview(previewUrl);
-                                    setUploadingAvatar(true);
-                                    try {
-                                        // Verificar sesión/UID de auth para construir la ruta correcta (RLS depende de auth.uid())
-                                        const { data: sessRes } = await supabase.auth.getSession();
-                                        const authUid = sessRes?.session?.user?.id || null;
-                                        if (!authUid) {
-                                            const msg = 'No hay sesión activa. Inicia sesión para actualizar tu foto.';
-                                            if (window.toast) window.toast.error(msg); else { try { const { default: toast } = await import('react-hot-toast'); toast.error(msg); } catch {}
-                                            }
-                                            throw new Error('Missing auth session');
-                                        }
-
-                                        // Construir ruta de almacenamiento
-                                        const oldPath = extractPathFromPublicUrl(avatarUrl);
-                                        const fileName = `${Date.now()}.${ext}`;
-                                        const path = `${authUid}/${fileName}`; // usar auth.uid para cumplir RLS
+                                    
+                                    const { error: uploadError } = await supabase.storage
+                                        .from('userphotos')
+                                        .upload(path, blob, { upsert: true, contentType: mime, cacheControl: '31536000' });
+                                    if (uploadError) {
+                                        const firstSeg = path.split('/')[0];
+                                        const details = `UID=${authUid} | path=${path} | firstSeg=${firstSeg}`;
+                                        if (window.toast) window.toast.error(`No se pudo subir la imagen. ${details}`);
+                                        else { try { const { default: toast } = await import('react-hot-toast'); toast.error(`No se pudo subir la imagen. ${details}`); } catch {} }
                                         if (import.meta.env?.DEV) {
-                                            console.debug('[Avatar] Subiendo a', { bucket: 'userphotos', path, mime, authUid, userId: user?.id });
+                                            console.error('[Avatar] Error en upload:', uploadError, { authUid, path, firstSeg });
                                         }
-                                        // Subir al bucket userphotos
-                                        const { error: uploadError } = await supabase.storage
-                                            .from('userphotos')
-                                            // Bucket público: añadimos cacheControl para aprovechar CDN. Como usamos nombres únicos por timestamp,
-                                            // no tendremos problemas de caché al actualizar.
-                                            .upload(path, blob, { upsert: true, contentType: mime, cacheControl: '31536000' });
-                                        if (uploadError) {
-                                            const firstSeg = path.split('/')[0];
-                                            const details = `UID=${authUid} | path=${path} | firstSeg=${firstSeg}`;
-                                            if (window.toast) window.toast.error(`No se pudo subir la imagen. ${details}`);
-                                            else { try { const { default: toast } = await import('react-hot-toast'); toast.error(`No se pudo subir la imagen. ${details}`); } catch {} }
-                                            if (import.meta.env?.DEV) {
-                                                console.error('[Avatar] Error en upload:', uploadError, { authUid, path, firstSeg });
-                                            }
-                                            throw uploadError;
-                                        }
-
-                                        // Obtener URL pública
-                                        const { data: publicData, error: pubErr } = supabase.storage
-                                            .from('userphotos')
-                                            .getPublicUrl(path);
-                                        if (pubErr) {
-                                            if (import.meta.env?.DEV) {
-                                                console.error('[Avatar] Error obteniendo URL pública:', pubErr);
-                                            }
-                                            throw pubErr;
-                                        }
-                                        const publicUrl = publicData.publicUrl;
-
-                                        // Guardar en profiles.avatar_url
-                                        const { data: sess2 } = await supabase.auth.getSession();
-                                        const profileId = sess2?.session?.user?.id || user?.id;
-                                        const { updateTable } = await import('./services/db');
-                                        await updateTable('profiles', { id: profileId }, { avatar_url: publicUrl });
-
-                                        // Actualizar UI a la URL pública y liberar el objeto local
-                                        if (previewUrl) URL.revokeObjectURL(previewUrl);
-                                        setAvatarPreview(null);
-                                        setAvatarUrl(publicUrl);
-                                        // Notificar a otros componentes (e.g., Sidebar) que el avatar cambió
-                                        try {
-                                            window.dispatchEvent(new CustomEvent('profile:avatar-updated', { detail: publicUrl }));
-                                        } catch {}
-
-                                        // Eliminar avatar anterior si existía
-                                        if (oldPath) {
-                                            try {
-                                                await supabase.storage.from('userphotos').remove([oldPath]);
-                                            } catch (delErr) {
-                                                console.warn('No se pudo eliminar la imagen anterior:', delErr);
-                                            }
-                                        }
-
-                                        // Notificación opcional
-                                        if (window.toast) window.toast.success('Foto actualizada');
-                                        else {
-                                            try {
-                                                const { default: toast } = await import('react-hot-toast');
-                                                toast.success('Foto actualizada');
-                                            } catch {}
-                                        }
-
-                                        // Callback opcional para capas superiores
-                                        if (typeof myProfile?.onPhotoSelected === 'function') {
-                                            try { myProfile.onPhotoSelected(file, publicUrl); } catch {}
-                                        }
-                                    } catch (err) {
-                                        // Si falla, mantener (o limpiar) la vista previa local y avisar
-                                        const details = err?.message || err?.error?.message || String(err);
-                                        const msgBase = 'No se pudo actualizar la foto';
-                                        const msg = import.meta.env?.DEV ? `${msgBase}: ${details}` : msgBase;
-                                        if (window.toast) window.toast.error(msg);
-                                        else {
-                                            try {
-                                                const { default: toast } = await import('react-hot-toast');
-                                                toast.error(msg);
-                                            } catch {}
-                                        }
-                                        console.error('[Avatar] Error completo:', err);
-                                    } finally {
-                                        setUploadingAvatar(false);
+                                        throw uploadError;
                                     }
-                                }}
-                            />
-                            <button
-                                type="button"
-                                className="relative group w-32 h-32 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary text-white flex items-center justify-center shadow-lg overflow-hidden"
-                                onClick={() => fileInputRef.current?.click()}
-                                title="Cambiar foto de perfil"
-                            >
-                                {avatarPreview || avatarUrl ? (
-                                    <img src={avatarPreview || avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="font-bold text-5xl select-none">{myProfile.initials}</span>
-                                )}
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                    <FaPen className="text-white text-2xl" />
-                                </div>
-                                {uploadingAvatar && (
-                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                        <span className="text-white text-sm">Subiendo...</span>
-                                    </div>
-                                )}
-                            </button>
-                            {/* Nombre y edición con transición suave */}
-                            <div className="w-full flex flex-col items-center mt-5">
-                                <div className={`transition-all duration-300 w-full`}>
-                                    {!isEditingName ? (
-                                        <div className="flex items-center gap-4 justify-center">
-                                            <span className="font-semibold theme-text-primary text-3xl">{myProfile.name}</span>
-                                            <div
-                                                className="w-7 h-7"
-                                                onClick={() => {
-                                                    setIsEditingName(true);
-                                                    setTimeout(() => {
-                                                        document.getElementById('profileNameInput')?.focus();
-                                                    }, 100);
-                                                }}
-                                                onMouseEnter={() => {
-                                                    setEditProfileStopped(true);
-                                                    setTimeout(() => {
-                                                        setEditProfileStopped(false);
-                                                        setEditProfilePaused(false);
-                                                    }, 10);
-                                                }}
-                                                onMouseLeave={() => setEditProfilePaused(true)}
-                                                style={{ cursor: 'pointer' }}
-                                                title="Cambiar nombre del perfil"
-                                            >
-                                                <Lottie options={lottieOptions.editProfile} isPaused={isEditProfilePaused} isStopped={isEditProfileStopped} />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <form
-                                            className="flex flex-col items-center gap-2 w-full"
-                                            onSubmit={e => {
-                                                e.preventDefault();
-                                                if (newProfileName.trim()) {
-                                                    myProfile.name = newProfileName.trim();
-                                                    setIsEditingName(false);
-                                                }
-                                            }}
-                                        >
-                                            <input
-                                                id="profileNameInput"
-                                                type="text"
-                                                className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
-                                                value={newProfileName}
-                                                onChange={e => setNewProfileName(e.target.value)}
-                                                onBlur={() => {
-                                                    if (newProfileName.trim()) {
-                                                        myProfile.name = newProfileName.trim();
-                                                    }
-                                                    setIsEditingName(false);
-                                                }}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter') {
-                                                        if (newProfileName.trim()) {
-                                                            myProfile.name = newProfileName.trim();
-                                                        }
-                                                        setIsEditingName(false);
-                                                    }
-                                                    if (e.key === 'Escape') {
-                                                        setNewProfileName(myProfile.name);
-                                                        setIsEditingName(false);
-                                                    }
-                                                }}
-                                                autoFocus
-                                            />
-                                            <div className="flex gap-2 mt-1">
-                                                <button
-                                                    type="submit"
-                                                    className="p-1 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
-                                                    title="Guardar"
-                                                >
-                                                    Guardar
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
-                                                    onClick={() => {
-                                                        setNewProfileName(myProfile.name);
-                                                        setIsEditingName(false);
-                                                    }}
-                                                    title="Cancelar"
-                                                >
-                                                    Cancelar
-                                                </button>
-                                            </div>
-                                        </form>
-                                    )}
-                                </div>
+
+                                    const { data: publicData, error: pubErr } = supabase.storage
+                                        .from('userphotos')
+                                        .getPublicUrl(path);
+                                    if (pubErr) {
+                                        if (import.meta.env?.DEV) {
+                                            console.error('[Avatar] Error obteniendo URL pública:', pubErr);
+                                        }
+                                        throw pubErr;
+                                    }
+                                    const publicUrl = publicData.publicUrl;
+
+                                    const { data: sess2 } = await supabase.auth.getSession();
+                                    const profileId = sess2?.session?.user?.id || user?.id;
+                                    const { updateTable } = await import('./services/db');
+                                    await updateTable('profiles', { id: profileId }, { avatar_url: publicUrl });
+
+                                    if (previewUrl) URL.revokeObjectURL(previewUrl);
+                                    setAvatarPreview(null);
+                                    setAvatarUrl(publicUrl);
+                                    try {
+                                        window.dispatchEvent(new CustomEvent('profile:avatar-updated', { detail: publicUrl }));
+                                    } catch {}
+
+                                    if (oldPath) {
+                                        try {
+                                            await supabase.storage.from('userphotos').remove([oldPath]);
+                                        } catch (delErr) {
+                                            console.warn('No se pudo eliminar la imagen anterior:', delErr);
+                                        }
+                                    }
+
+                                    if (window.toast) window.toast.success('Foto actualizada');
+                                    else {
+                                        try {
+                                            const { default: toast } = await import('react-hot-toast');
+                                            toast.success('Foto actualizada');
+                                        } catch {}
+                                    }
+
+                                    if (typeof myProfile?.onPhotoSelected === 'function') {
+                                        try { myProfile.onPhotoSelected(file, publicUrl); } catch {}
+                                    }
+                                } catch (err) {
+                                    const details = err?.message || err?.error?.message || String(err);
+                                    const msgBase = 'No se pudo actualizar la foto';
+                                    const msg = import.meta.env?.DEV ? `${msgBase}: ${details}` : msgBase;
+                                    if (window.toast) window.toast.error(msg);
+                                    else {
+                                        try {
+                                            const { default: toast } = await import('react-hot-toast');
+                                            toast.error(msg);
+                                        } catch {}
+                                    }
+                                    console.error('[Avatar] Error completo:', err);
+                                } finally {
+                                    setUploadingAvatar(false);
+                                }
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className="relative group w-32 h-32 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary text-white flex items-center justify-center shadow-lg overflow-hidden"
+                            onClick={() => fileInputRef.current?.click()}
+                            title="Cambiar foto de perfil"
+                        >
+                            {avatarPreview || avatarUrl ? (
+                                <img src={avatarPreview || avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                            ) : (
+                                <span className="font-bold text-5xl select-none">{myProfile.initials}</span>
+                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <FaPen className="text-white text-2xl" />
                             </div>
-                        </div>
-                        {/* Se eliminó el número de teléfono */}
-                        {/* Información del perfil editable con transición suave */}
-                        <div className="flex flex-col gap-1 mb-2">
-                            <span className="text-sm theme-text-secondary">Información del perfil:</span>
+                            {uploadingAvatar && (
+                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                    <span className="text-white text-sm">Subiendo...</span>
+                                </div>
+                            )}
+                        </button>
+                        {/* Nombre y edición con transición suave */}
+                        <div className="w-full flex flex-col items-center mt-5">
                             <div className={`transition-all duration-300 w-full`}>
-                                {!isEditingInfo ? (
-                                    <div className="flex items-center gap-2 w-full">
-                                        <span className="theme-text-primary text-base flex-1 font-semibold">
-                                            {profileInfoDb && profileInfoDb.trim() !== ''
-                                                ? profileInfoDb
-                                                : <span className="theme-text-primary font-semibold">Sin información</span>
-                                            }
-                                        </span>
+                                {!isEditingName ? (
+                                    <div className="flex items-center gap-4 justify-center">
+                                        <span className="font-semibold theme-text-primary text-3xl">{myProfile.name}</span>
                                         <div
                                             className="w-7 h-7"
                                             onClick={() => {
-                                                setNewProfileInfo(profileInfoDb || '');
-                                                setIsEditingInfo(true);
+                                                setIsEditingName(true);
                                                 setTimeout(() => {
-                                                    document.getElementById('profileInfoInput')?.focus();
+                                                    document.getElementById('profileNameInput')?.focus();
                                                 }, 100);
                                             }}
                                             onMouseEnter={() => {
-                                                setInfoProfileStopped(true);
+                                                setEditProfileStopped(true);
                                                 setTimeout(() => {
-                                                    setInfoProfileStopped(false);
-                                                    setInfoProfilePaused(false);
+                                                    setEditProfileStopped(false);
+                                                    setEditProfilePaused(false);
                                                 }, 10);
                                             }}
-                                            onMouseLeave={() => setInfoProfilePaused(true)}
+                                            onMouseLeave={() => setEditProfilePaused(true)}
                                             style={{ cursor: 'pointer' }}
-                                            title="Editar información del perfil"
+                                            title="Cambiar nombre del perfil"
                                         >
-                                            <Lottie options={lottieOptions.infoProfile} isPaused={isInfoProfilePaused} isStopped={isInfoProfileStopped} />
+                                            <Lottie options={lottieOptions.editProfile} isPaused={isEditProfilePaused} isStopped={isEditProfileStopped} />
                                         </div>
                                     </div>
                                 ) : (
                                     <form
                                         className="flex flex-col items-center gap-2 w-full"
-                                        onSubmit={async e => {
+                                        onSubmit={e => {
                                             e.preventDefault();
-                                            if (newProfileInfo.trim()) {
-                                                try {
-                                                    const { updateTable } = await import('./services/db');
-                                                    await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
-                                                    setProfileInfoDb(newProfileInfo.trim());
-                                                    if (window.toast) window.toast.success('Información actualizada');
-                                                    else {
-                                                        const { default: toast } = await import('react-hot-toast');
-                                                        toast.success('Información actualizada');
-                                                    }
-                                                } catch (err) {
-                                                    if (window.toast) window.toast.error('Error al guardar');
-                                                    else {
-                                                        const { default: toast } = await import('react-hot-toast');
-                                                        toast.error('Error al guardar');
-                                                    }
-                                                }
-                                                setIsEditingInfo(false);
+                                            if (newProfileName.trim()) {
+                                                myProfile.name = newProfileName.trim();
+                                                setIsEditingName(false);
                                             }
                                         }}
                                     >
                                         <input
-                                            id="profileInfoInput"
+                                            id="profileNameInput"
                                             type="text"
-                                            className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary font-semibold"
-                                            value={newProfileInfo}
-                                            onChange={e => setNewProfileInfo(e.target.value)}
-                                            onFocus={e => {
-                                                if (e.target.value === '' || e.target.value === undefined) {
-                                                    setNewProfileInfo('');
+                                            className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
+                                            value={newProfileName}
+                                            onChange={e => setNewProfileName(e.target.value)}
+                                            onBlur={() => {
+                                                if (newProfileName.trim()) {
+                                                    myProfile.name = newProfileName.trim();
                                                 }
+                                                setIsEditingName(false);
                                             }}
-                                            onBlur={async () => {
-                                                if (newProfileInfo.trim()) {
-                                                    try {
-                                                        const { updateTable } = await import('./services/db');
-                                                        await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
-                                                        setProfileInfoDb(newProfileInfo.trim());
-                                                    } catch {}
-                                                }
-                                                setIsEditingInfo(false);
-                                            }}
-                                            onKeyDown={async e => {
+                                            onKeyDown={e => {
                                                 if (e.key === 'Enter') {
-                                                    if (newProfileInfo.trim()) {
-                                                        try {
-                                                            const { updateTable } = await import('./services/db');
-                                                            await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
-                                                            setProfileInfoDb(newProfileInfo.trim());
-                                                        } catch {}
+                                                    if (newProfileName.trim()) {
+                                                        myProfile.name = newProfileName.trim();
                                                     }
-                                                    setIsEditingInfo(false);
+                                                    setIsEditingName(false);
                                                 }
                                                 if (e.key === 'Escape') {
-                                                    setNewProfileInfo(profileInfoDb || '');
-                                                    setIsEditingInfo(false);
+                                                    setNewProfileName(myProfile.name);
+                                                    setIsEditingName(false);
                                                 }
                                             }}
                                             autoFocus
-                                            placeholder="Agrega tu información de perfil aquí"
                                         />
                                         <div className="flex gap-2 mt-1">
                                             <button
@@ -527,8 +408,8 @@ const ProfileModal = ({
                                                 type="button"
                                                 className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
                                                 onClick={() => {
-                                                    setNewProfileInfo(profileInfo);
-                                                    setIsEditingInfo(false);
+                                                    setNewProfileName(myProfile.name);
+                                                    setIsEditingName(false);
                                                 }}
                                                 title="Cancelar"
                                             >
@@ -539,146 +420,301 @@ const ProfileModal = ({
                                 )}
                             </div>
                         </div>
-                        {/* Se eliminó el botón "Cambiar imagen de perfil" */}
+                    </div>
+                    {/* Información del perfil editable */}
+                    <div className="flex flex-col gap-1 mb-2">
+                        <span className="text-sm theme-text-secondary">Información del perfil:</span>
+                        <div className={`transition-all duration-300 w-full`}>
+                            {!isEditingInfo ? (
+                                <div className="flex items-center gap-2 w-full">
+                                    <span className="theme-text-primary text-base flex-1 font-semibold">
+                                        {profileInfoDb && profileInfoDb.trim() !== ''
+                                            ? profileInfoDb
+                                            : <span className="theme-text-primary font-semibold">Sin información</span>
+                                        }
+                                    </span>
+                                    <div
+                                        className="w-7 h-7"
+                                        onClick={() => {
+                                            setNewProfileInfo(profileInfoDb || '');
+                                            setIsEditingInfo(true);
+                                            setTimeout(() => {
+                                                document.getElementById('profileInfoInput')?.focus();
+                                            }, 100);
+                                        }}
+                                        onMouseEnter={() => {
+                                            setInfoProfileStopped(true);
+                                            setTimeout(() => {
+                                                setInfoProfileStopped(false);
+                                                setInfoProfilePaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setInfoProfilePaused(true)}
+                                        style={{ cursor: 'pointer' }}
+                                        title="Editar información del perfil"
+                                    >
+                                        <Lottie options={lottieOptions.infoProfile} isPaused={isInfoProfilePaused} isStopped={isInfoProfileStopped} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <form
+                                    className="flex flex-col items-center gap-2 w-full"
+                                    onSubmit={async e => {
+                                        e.preventDefault();
+                                        if (newProfileInfo.trim()) {
+                                            try {
+                                                const { updateTable } = await import('./services/db');
+                                                await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                setProfileInfoDb(newProfileInfo.trim());
+                                                if (window.toast) window.toast.success('Información actualizada');
+                                                else {
+                                                    const { default: toast } = await import('react-hot-toast');
+                                                    toast.success('Información actualizada');
+                                                }
+                                            } catch (err) {
+                                                if (window.toast) window.toast.error('Error al guardar');
+                                                else {
+                                                    const { default: toast } = await import('react-hot-toast');
+                                                    toast.error('Error al guardar');
+                                                }
+                                            }
+                                            setIsEditingInfo(false);
+                                        }
+                                    }}
+                                >
+                                    <input
+                                        id="profileInfoInput"
+                                        type="text"
+                                        className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary font-semibold"
+                                        value={newProfileInfo}
+                                        onChange={e => setNewProfileInfo(e.target.value)}
+                                        onFocus={e => {
+                                            if (e.target.value === '' || e.target.value === undefined) {
+                                                setNewProfileInfo('');
+                                            }
+                                        }}
+                                        onBlur={async () => {
+                                            if (newProfileInfo.trim()) {
+                                                try {
+                                                    const { updateTable } = await import('./services/db');
+                                                    await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                    setProfileInfoDb(newProfileInfo.trim());
+                                                } catch {}
+                                            }
+                                            setIsEditingInfo(false);
+                                        }}
+                                        onKeyDown={async e => {
+                                            if (e.key === 'Enter') {
+                                                if (newProfileInfo.trim()) {
+                                                    try {
+                                                        const { updateTable } = await import('./services/db');
+                                                        await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                        setProfileInfoDb(newProfileInfo.trim());
+                                                    } catch {}
+                                                }
+                                                setIsEditingInfo(false);
+                                            }
+                                            if (e.key === 'Escape') {
+                                                setNewProfileInfo(profileInfoDb || '');
+                                                setIsEditingInfo(false);
+                                            }
+                                        }}
+                                        autoFocus
+                                        placeholder="Agrega tu información de perfil aquí"
+                                    />
+                                    <div className="flex gap-2 mt-1">
+                                        <button
+                                            type="submit"
+                                            className="p-1 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
+                                            title="Guardar"
+                                        >
+                                            Guardar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
+                                            onClick={() => {
+                                                setNewProfileInfo(profileInfoDb);
+                                                setIsEditingInfo(false);
+                                            }}
+                                            title="Cancelar"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                    {/* Botón cambiar contraseña */}
+                    <button
+                        className="flex items-center gap-2 p-2 rounded transition-colors"
+                        onClick={() => setShowEditPasswordModal(true)}
+                        onMouseEnter={() => {
+                            setTypingProfileStopped(true);
+                            setTimeout(() => {
+                                setTypingProfileStopped(false);
+                                setTypingProfilePaused(false);
+                            }, 10);
+                        }}
+                        onMouseLeave={() => setTypingProfilePaused(true)}
+                    >
+                        <div className="w-7 h-7">
+                            <Lottie options={lottieOptions.typingProfile} isPaused={isTypingProfilePaused} isStopped={isTypingProfileStopped} />
+                        </div>
+                        <span className="theme-text-primary">Cambiar contraseña</span>
+                    </button>
+                    {/* Botón Cerrar sesión */}
+                    <div className="flex justify-center mt-2">
                         <button
-                            className="flex items-center gap-2 p-2 rounded transition-colors"
-                            onClick={() => setShowEditPasswordModal(true)}
+                            className="flex items-center gap-2 px-3 py-1 rounded transition-colors bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90"
+                            style={{ fontSize: '0.95rem', minWidth: '120px' }}
+                            onClick={async () => {
+                                await signOut();
+                                handleCloseModal();
+                                navigate('/login');
+                            }}
                             onMouseEnter={() => {
-                                setTypingProfileStopped(true);
+                                setLockProfileStopped(true);
                                 setTimeout(() => {
-                                    setTypingProfileStopped(false);
-                                    setTypingProfilePaused(false);
+                                    setLockProfileStopped(false);
+                                    setLockProfilePaused(false);
                                 }, 10);
                             }}
-                            onMouseLeave={() => setTypingProfilePaused(true)}
+                            onMouseLeave={() => setLockProfilePaused(true)}
                         >
-                            <div className="w-7 h-7">
-                                <Lottie options={lottieOptions.typingProfile} isPaused={isTypingProfilePaused} isStopped={isTypingProfileStopped} />
+                            <div className="w-6 h-6">
+                                <Lottie options={lottieOptions.lockProfile} isPaused={isLockProfilePaused} isStopped={isLockProfileStopped} />
                             </div>
-                            <span className="theme-text-primary">Cambiar contraseña</span>
+                            <span className="font-semibold">Cerrar sesión</span>
                         </button>
-                        {/* Botón Cerrar sesión reducido y centrado */}
-                        <div className="flex justify-center mt-2">
-                            <button
-                                className="flex items-center gap-2 px-3 py-1 rounded transition-colors bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90"
-                                style={{ fontSize: '0.95rem', minWidth: '120px' }}
-                                onClick={async () => {
-                                    await signOut();
-                                    setShowProfileModal(false);
-                                    navigate('/login');
-                                }}
-                                onMouseEnter={() => {
-                                    setLockProfileStopped(true);
-                                    setTimeout(() => {
-                                        setLockProfileStopped(false);
-                                        setLockProfilePaused(false);
-                                    }, 10);
-                                }}
-                                onMouseLeave={() => setLockProfilePaused(true)}
-                            >
-                                <div className="w-6 h-6">
-                                    <Lottie options={lottieOptions.lockProfile} isPaused={isLockProfilePaused} isStopped={isLockProfileStopped} />
-                                </div>
-                                <span className="font-semibold">Cerrar sesión</span>
-                            </button>
-                        </div>
                     </div>
                 </div>
-                {/* Ventana emergente para cambiar contraseña */}
-                {showEditPasswordModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                        <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                            <div className="p-4 theme-border border-b flex items-center justify-between">
-                                <h3 className="text-lg font-bold theme-text-primary">Cambiar contraseña</h3>
-                                <button onClick={() => setShowEditPasswordModal(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
-                                    ✕
+            </div>
+            {/* Modal cambiar contraseña */}
+            {showEditPasswordModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                    <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 theme-border border-b flex items-center justify-between">
+                            <h3 className="text-lg font-bold theme-text-primary">Cambiar contraseña</h3>
+                            <button onClick={() => setShowEditPasswordModal(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
+                                ✕
+                            </button>
+                        </div>
+                        <form
+                            className="flex flex-col gap-3 p-4"
+                            onSubmit={e => {
+                                e.preventDefault();
+                                if (newPassword && newPassword === confirmPassword) {
+                                    alert('Contraseña cambiada correctamente');
+                                    setCurrentPassword('');
+                                    setNewPassword('');
+                                    setConfirmPassword('');
+                                    setShowEditPasswordModal(false);
+                                } else {
+                                    alert('Las contraseñas no coinciden');
+                                }
+                            }}
+                        >
+                            <div className="relative">
+                                <input
+                                    type={showCurrentPassword ? "text" : "password"}
+                                    placeholder="Contraseña actual"
+                                    className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
+                                    value={currentPassword}
+                                    onChange={e => setCurrentPassword(e.target.value)}
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
+                                    onClick={() => setShowCurrentPassword(v => !v)}
+                                    tabIndex={-1}
+                                    aria-label="Mostrar/Ocultar contraseña actual"
+                                >
+                                    {showCurrentPassword ? <FaEyeSlash /> : <FaEye />}
                                 </button>
                             </div>
-                            <form
-                                className="flex flex-col gap-3 p-4"
-                                onSubmit={e => {
-                                    e.preventDefault();
-                                    if (newPassword && newPassword === confirmPassword) {
-                                        alert('Contraseña cambiada correctamente');
-                                        setCurrentPassword('');
-                                        setNewPassword('');
-                                        setConfirmPassword('');
-                                        setShowEditPasswordModal(false);
-                                    } else {
-                                        alert('Las contraseñas no coinciden');
-                                    }
-                                }}
-                            >
-                                <div className="relative">
-                                    <input
-                                        type={showCurrentPassword ? "text" : "password"}
-                                        placeholder="Contraseña actual"
-                                        className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
-                                        value={currentPassword}
-                                        onChange={e => setCurrentPassword(e.target.value)}
-                                        required
-                                    />
-                                    <button
-                                        type="button"
-                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
-                                        onClick={() => setShowCurrentPassword(v => !v)}
-                                        tabIndex={-1}
-                                        aria-label="Mostrar/Ocultar contraseña actual"
-                                    >
-                                        {showCurrentPassword ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                </div>
-                                <div className="relative">
-                                    <input
-                                        type={showNewPassword ? "text" : "password"}
-                                        placeholder="Nueva contraseña"
-                                        className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
-                                        value={newPassword}
-                                        onChange={e => setNewPassword(e.target.value)}
-                                        required
-                                    />
-                                    <button
-                                        type="button"
-                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
-                                        onClick={() => setShowNewPassword(v => !v)}
-                                        tabIndex={-1}
-                                        aria-label="Mostrar/Ocultar nueva contraseña"
-                                    >
-                                        {showNewPassword ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                </div>
-                                <div className="relative">
-                                    <input
-                                        type={showConfirmPassword ? "text" : "password"}
-                                        placeholder="Confirmar nueva contraseña"
-                                        className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
-                                        value={confirmPassword}
-                                        onChange={e => setConfirmPassword(e.target.value)}
-                                        required
-                                    />
-                                    <button
-                                        type="button"
-                                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
-                                        onClick={() => setShowConfirmPassword(v => !v)}
-                                        tabIndex={-1}
-                                        aria-label="Mostrar/Ocultar confirmación"
-                                    >
-                                        {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
-                                    </button>
-                                </div>
+                            <div className="relative">
+                                <input
+                                    type={showNewPassword ? "text" : "password"}
+                                    placeholder="Nueva contraseña"
+                                    className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
+                                    value={newPassword}
+                                    onChange={e => setNewPassword(e.target.value)}
+                                    required
+                                />
                                 <button
-                                    type="submit"
-                                    className="p-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
+                                    type="button"
+                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
+                                    onClick={() => setShowNewPassword(v => !v)}
+                                    tabIndex={-1}
+                                    aria-label="Mostrar/Ocultar nueva contraseña"
                                 >
-                                    Guardar
+                                    {showNewPassword ? <FaEyeSlash /> : <FaEye />}
                                 </button>
-                            </form>
-                        </div>
+                            </div>
+                            <div className="relative">
+                                <input
+                                    type={showConfirmPassword ? "text" : "password"}
+                                    placeholder="Confirmar nueva contraseña"
+                                    className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
+                                    value={confirmPassword}
+                                    onChange={e => setConfirmPassword(e.target.value)}
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-teal-primary"
+                                    onClick={() => setShowConfirmPassword(v => !v)}
+                                    tabIndex={-1}
+                                    aria-label="Mostrar/Ocultar confirmación"
+                                >
+                                    {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                                </button>
+                            </div>
+                            <button
+                                type="submit"
+                                className="p-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90 transition-opacity"
+                            >
+                                Guardar
+                            </button>
+                        </form>
                     </div>
-                )}
-            </div>
-        )
-    );
-};
+                </div>
+            )}
+            <style jsx>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes fadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+                @keyframes slideInLeft {
+                    from {
+                        opacity: 0;
+                        transform: translateX(-30px) scale(0.95);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateX(0) scale(1);
+                    }
+                }
+                @keyframes slideOutRight {
+                    from {
+                        opacity: 1;
+                        transform: translateX(0) scale(1);
+                    }
+                    to {
+                        opacity: 0;
+                        transform: translateX(30px) scale(0.95);
+                    }
+                }
+            `}</style>
+        </div>
+    )
+}
 
 export default ProfileModal;
