@@ -224,6 +224,9 @@ const AguacateChat = () => {
             const lastContentRaw = c?.last_message?.content || '';
             const lastContent = lastType === 'image' ? 'Foto' : lastContentRaw;
             const lastAt = c?.last_message_at || c?.created_at;
+            // Derivados del último mensaje
+            const lastId = c?.last_message?.id ?? null;
+            const lastAudioUrl = lastType === 'audio' ? c?.last_message?.content : undefined;
             // console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             return {
                 name,
