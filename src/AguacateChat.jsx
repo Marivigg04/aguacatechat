@@ -32,38 +32,7 @@ import bocina from './animations/mute.json';
 import pin from './animations/Pin.json';
 import callSilent from './animations/Call_silent.json';
 import information from './animations/information.json';
-import animationMic from './animations/wired-flat-188-microphone-recording-hover-recording.json';
-
-const initialContacts = [
-    { name: 'Ana García', status: '🟢', lastMessage: '¡Hola! ¿Cómo estás?', time: '14:30', initials: 'AG' },
-    { name: 'Carlos López', status: '🟡', lastMessage: 'Perfecto, nos vemos mañana', time: '13:45', initials: 'CL' },
-    { name: 'María Rodríguez', status: '🔴', lastMessage: 'Gracias por la información', time: '12:20', initials: 'MR' },
-    { name: 'Equipo Desarrollo', status: '🟢', lastMessage: 'La nueva versión está lista', time: '11:55', initials: 'ED', unread: 3 },
-];
-
-const initialMessages = {
-    'Ana García': [
-        { type: 'received', text: '¡Hola! ¿Cómo estás? Espero que tengas un excelente día' },
-        { type: 'sent', text: '¡Hola Ana! Todo muy bien, gracias. ¿Y tú qué tal?' },
-        { type: 'received', text: 'Muy bien también. ¿Tienes tiempo para una videollamada?' },
-        { type: 'sent', text: '¡Por supuesto! Dame 5 minutos y te llamo' }
-    ],
-    'Carlos López': [
-        { type: 'received', text: 'Oye, ¿viste el proyecto nuevo?' },
-        { type: 'sent', text: 'Sí, se ve muy interesante' },
-        { type: 'received', text: 'Perfecto, nos vemos mañana para revisarlo' }
-    ],
-    'María Rodríguez': [
-        { type: 'sent', text: 'Te envié la información que pediste' },
-        { type: 'received', text: 'Gracias por la información, muy útil' },
-        { type: 'sent', text: '¡De nada! Cualquier cosa me avisas' }
-    ],
-    'Equipo Desarrollo': [
-        { type: 'received', text: 'La nueva versión está lista para testing' },
-        { type: 'sent', text: 'Excelente, empiezo las pruebas ahora' },
-        { type: 'received', text: 'Perfecto, cualquier bug me avisas' }
-    ]
-};
+import animationMic from './animations/wired-outline-188-microphone-recording-morph-button.json';
 
 // Funciones para manejar cookies
 const getCookie = (name) => {
@@ -80,6 +49,9 @@ const setCookie = (name, value, days = 365) => {
 };
 
 const AguacateChat = () => {
+    // Estado para modo de selección de mensajes a fijar
+    const [pinMode, setPinMode] = useState(false);
+    const [selectedMessagesToPin, setSelectedMessagesToPin] = useState([]);
     const { user } = useAuth();
     const [isDarkMode, setIsDarkMode] = useState(getCookie('darkMode') === 'true');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -773,6 +745,23 @@ const AguacateChat = () => {
         return () => window.removeEventListener('keydown', handleEsc);
     }, [selectedContact]);
 
+    const [messageMenuOpenId, setMessageMenuOpenId] = useState(null);
+    const messageMenuRef = useRef(null);
+
+    useEffect(() => {
+      function handleClickOutside(event) {
+        if (messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
+          setMessageMenuOpenId(null);
+        }
+      }
+      if (messageMenuOpenId !== null) {
+        document.addEventListener("mousedown", handleClickOutside);
+      }
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside);
+      };
+    }, [messageMenuOpenId]);
+
     return (
         <div className="flex h-screen overflow-hidden">
             {/* Componente para mostrar las notificaciones */}
@@ -806,13 +795,7 @@ const AguacateChat = () => {
                             </button>
                         </div>
                     </div>
-                    <div className="relative" onMouseEnter={() => {
-                        setSearchStopped(true);
-                        setTimeout(() => {
-                            setSearchStopped(false);
-                            setSearchPaused(false);
-                        }, 10);
-                    }} onMouseLeave={() => setSearchPaused(true)}>
+                    <div className="relative">
                         <input
                             id="searchInput"
                             type="text"
@@ -926,7 +909,11 @@ const AguacateChat = () => {
                                 </button>
                                 <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu && selectedContact ? '' : 'hidden'}`}>
                                     <button 
-                                        onClick={() => { alert('Limpiar chat'); toggleChatOptions(); }} 
+                                        onClick={() => {
+                                            setChatMessages([]);
+                                            toast.success('Chat limpiado.');
+                                            toggleChatOptions();
+                                        }} 
                                         className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setTrashStopped(true);
@@ -963,30 +950,8 @@ const AguacateChat = () => {
                                         <span>Silenciar notificaciones</span>
                                     </button>
                                     <button 
-                                        onClick={() => { alert('Fijar conversación'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
-                                        onMouseEnter={() => {
-                                            setPinStopped(true);
-                                            setTimeout(() => {
-                                                setPinStopped(false);
-                                                setPinPaused(false);
-                                            }, 10);
-                                        }}
-                                        onMouseLeave={() => setPinPaused(true)}
-                                    >
-                                        <div className="w-5 h-5">
-                                            <Lottie 
-                                                options={lottieOptions.pin} 
-                                                isPaused={isPinPaused} 
-                                                isStopped={isPinStopped} 
-                                                height={24} width={24} 
-                                            />
-                                        </div>
-                                        <span>Fijar conversación</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => { alert('Bloquear contacto'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
+                                        onClick={() => { toast.success('Contacto bloqueado.'); toggleChatOptions(); }} 
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setCallSilentStopped(true);
                                             setTimeout(() => {
@@ -1008,7 +973,7 @@ const AguacateChat = () => {
                                     </button>
                                     <button 
                                         onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors flex items-center gap-2"
+                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colores flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setInformationStopped(true);
                                             setTimeout(() => {
@@ -1047,33 +1012,103 @@ const AguacateChat = () => {
                         </div>
                     ) : (
                         <>
-                            {chatMessages.map((message, index) => (
-                                <div key={index} className={`flex ${message.type === 'sent' ? 'justify-end' : 'justify-start'}`}>
-                                    {message.type === 'received' && (
-                                        selectedContact?.avatar_url ? (
-                                            <img
-                                                src={selectedContact.avatar_url}
-                                                alt={selectedContact.name}
-                                                className="w-10 h-10 rounded-full object-cover mr-2"
-                                            />
-                                        ) : (
-                                            <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center mr-2">
-                                                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
-                                                </svg>
+                            {chatMessages.map((message, index) => {
+                                const isOwn = message.type === 'sent';
+                                return (
+                                    <div key={index} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}>
+                                        {/* Avatar para recibidos */}
+                                        {!isOwn && (
+                                            selectedContact?.avatar_url ? (
+                                                <img
+                                                    src={selectedContact.avatar_url}
+                                                    alt={selectedContact.name}
+                                                    className="w-10 h-10 rounded-full object-cover mr-2"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center mr-2">
+                                                    <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                                    </svg>
+                                                </div>
+                                            )
+                                        )}
+                                        {/* Mensaje burbuja */}
+                                        <div className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col relative`}>
+                                            <div>
+                                                <MessageRenderer text={message.text} chunkSize={450} />
                                             </div>
-                                        )
-                                    )}
-                                    <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col`}>
-                                        <div>
-                                            <MessageRenderer text={message.text} chunkSize={450} />
-                                        </div>
-                                        <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
-                                            {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                            <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
+                                                {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                            </div>
+                                            {/* Botón de tres puntos solo para mensajes propios, dentro de la burbuja arriba a la derecha */}
+                                            {isOwn && (
+                                                <button
+                                                    className="absolute -top-1 -right-0 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none"
+                                                    style={{ background: 'transparent', border: 'none', padding: 0 }}
+                                                    title="Más opciones"
+                                                    onClick={() => {
+                                                        if (messageMenuOpenId === index) {
+                                                            setMessageMenuOpenId(null);
+                                                        } else {
+                                                            setMessageMenuOpenId(index);
+                                                        }
+                                                    }}
+                                                >
+                                                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+                                                        <circle cx="4" cy="10" r="1.5" />
+                                                        <circle cx="10" cy="10" r="1.5" />
+                                                        <circle cx="16" cy="10" r="1.5" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            {/* Menú contextual */}
+                                            {isOwn && messageMenuOpenId === index && (
+                                                <div
+                                                    ref={messageMenuRef}
+                                                    className="absolute right-5 top-6 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in"
+                                                >
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Información del mensaje (no implementado)');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Ver información
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Mensaje fijado.');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Fijar mensaje
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Editar mensaje (no implementado)');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Editar mensaje
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Mensaje eliminado.');
+                                                            setMessageMenuOpenId(null);
+                                                        }}
+                                                    >
+                                                        Eliminar mensaje
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                             {/* Indicador de escribiendo */}
                             {selectedContact && isTyping && (
                                 <div className="flex justify-start">
