@@ -1,5 +1,6 @@
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import imageCompression from 'browser-image-compression';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
@@ -33,37 +34,6 @@ import pin from './animations/Pin.json';
 import callSilent from './animations/Call_silent.json';
 import information from './animations/information.json';
 import animationMic from './animations/wired-flat-188-microphone-recording-hover-recording.json';
-
-const initialContacts = [
-    { name: 'Ana García', status: '🟢', lastMessage: '¡Hola! ¿Cómo estás?', time: '14:30', initials: 'AG' },
-    { name: 'Carlos López', status: '🟡', lastMessage: 'Perfecto, nos vemos mañana', time: '13:45', initials: 'CL' },
-    { name: 'María Rodríguez', status: '🔴', lastMessage: 'Gracias por la información', time: '12:20', initials: 'MR' },
-    { name: 'Equipo Desarrollo', status: '🟢', lastMessage: 'La nueva versión está lista', time: '11:55', initials: 'ED', unread: 3 },
-];
-
-const initialMessages = {
-    'Ana García': [
-        { type: 'received', text: '¡Hola! ¿Cómo estás? Espero que tengas un excelente día' },
-        { type: 'sent', text: '¡Hola Ana! Todo muy bien, gracias. ¿Y tú qué tal?' },
-        { type: 'received', text: 'Muy bien también. ¿Tienes tiempo para una videollamada?' },
-        { type: 'sent', text: '¡Por supuesto! Dame 5 minutos y te llamo' }
-    ],
-    'Carlos López': [
-        { type: 'received', text: 'Oye, ¿viste el proyecto nuevo?' },
-        { type: 'sent', text: 'Sí, se ve muy interesante' },
-        { type: 'received', text: 'Perfecto, nos vemos mañana para revisarlo' }
-    ],
-    'María Rodríguez': [
-        { type: 'sent', text: 'Te envié la información que pediste' },
-        { type: 'received', text: 'Gracias por la información, muy útil' },
-        { type: 'sent', text: '¡De nada! Cualquier cosa me avisas' }
-    ],
-    'Equipo Desarrollo': [
-        { type: 'received', text: 'La nueva versión está lista para testing' },
-        { type: 'sent', text: 'Excelente, empiezo las pruebas ahora' },
-        { type: 'received', text: 'Perfecto, cualquier bug me avisas' }
-    ]
-};
 
 // Funciones para manejar cookies
 const getCookie = (name) => {
@@ -107,6 +77,35 @@ const AguacateChat = () => {
         fontSize: 16
     });
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
+    const fmtErr = (err) => {
+        try {
+            if (!err) return '';
+            if (typeof err === 'string') return err;
+            if (err.message) return err.message;
+            if (err.error_description) return err.error_description;
+            if (err.error) return String(err.error);
+            return JSON.stringify(err);
+        } catch {
+            return '';
+        }
+    };
+
+    // Estados para la vista previa de foto
+    const [selectedPhoto, setSelectedPhoto] = useState(null);
+    const [showPhotoPreviewModal, setShowPhotoPreviewModal] = useState(false);
+    const [isPhotoModalClosing, setIsPhotoModalClosing] = useState(false);
+    const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+    // Modal de zoom de imagen en chat
+    const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
+    const [isImageModalClosing, setIsImageModalClosing] = useState(false);
+    const [isImageModalEntering, setIsImageModalEntering] = useState(false);
+    const closeImagePreview = () => {
+        setIsImageModalClosing(true);
+        setTimeout(() => {
+            setImagePreviewUrl(null);
+            setIsImageModalClosing(false);
+        }, 300);
+    };
 
     // Estado de búsqueda en "Nuevo Chat" (modal)
     const [searchUserQuery, setSearchUserQuery] = useState('');
@@ -192,13 +191,16 @@ const AguacateChat = () => {
         return (convs || []).map((c) => {
             const username = c?.otherProfile?.username || 'Usuario';
             const name = username.trim();
-            const lastContent = c?.last_message?.content || '';
+            const lastType = c?.last_message?.type || 'text';
+            const lastContentRaw = c?.last_message?.content || '';
+            const lastContent = lastType === 'image' ? 'Foto' : lastContentRaw;
             const lastAt = c?.last_message_at || c?.created_at;
-            console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
+            // console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             return {
                 name,
                 status: c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex),
                 lastMessage: lastContent,
+                lastMessageType: lastType,
                 time: formatTime(lastAt),
                 initials: deriveInitials(name),
                 profileId: c?.otherProfile?.id,
@@ -207,6 +209,7 @@ const AguacateChat = () => {
                 conversationId: c?.conversationId,
                 last_message_at: lastAt,
                 lastConex: c?.otherProfile?.lastConex,
+                last_message: c?.last_message ? { ...c.last_message, type: lastType } : null,
             };
         });
     };
@@ -264,6 +267,7 @@ const AguacateChat = () => {
 
     // Mantener referencia de la conversación seleccionada para Realtime global
     const selectedConvIdRef = useRef(null);
+    const photoInputRef = useRef(null);
 
     useEffect(() => {
         selectedConvIdRef.current = selectedContact?.conversationId || null;
@@ -294,8 +298,10 @@ const AguacateChat = () => {
                                 if (c.conversationId === m.conversation_id) {
                                     return {
                                         ...c,
-                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id },
+                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: m.type || 'text' },
                                         last_message_at: m.created_at,
+                                        lastMessage: (m.type || 'text') === 'image' ? 'Foto' : m.content,
+                                        lastMessageType: m.type || 'text',
                                     };
                                 }
                                 return c;
@@ -315,7 +321,7 @@ const AguacateChat = () => {
                         if (m.sender_id === user?.id) return;
                         setChatMessages((prev) => [
                             ...prev,
-                            { id: m.id, type: 'received', text: m.content, created_at: m.created_at },
+                            { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text' },
                         ]);
                     } else if (evt === 'UPDATE') {
                         const m = payload.new;
@@ -351,14 +357,14 @@ const AguacateChat = () => {
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'profiles' },
                 (payload) => {
-                    console.log('Profile realtime event:', payload);
+                    // console.log('Profile realtime event:', payload);
                     const updatedProfile = payload.new;
                     if (!updatedProfile) return;
-                    console.log('Updating profile:', updatedProfile.id, 'isOnline:', updatedProfile.isOnline);
+                    // console.log('Updating profile:', updatedProfile.id, 'isOnline:', updatedProfile.isOnline);
                     // Actualizar el perfil en las conversaciones
                     setConversations((prev) => prev.map((c) => {
                         if (c.otherProfile?.id === updatedProfile.id) {
-                            console.log('Found matching conversation for user:', updatedProfile.id);
+                            // console.log('Found matching conversation for user:', updatedProfile.id);
                             return {
                                 ...c,
                                 otherProfile: { ...c.otherProfile, isOnline: updatedProfile.isOnline, lastConex: updatedProfile.lastConex },
@@ -369,7 +375,7 @@ const AguacateChat = () => {
                 }
             )
             .subscribe((status) => {
-                console.log('Profiles realtime subscription status:', status);
+                // console.log('Profiles realtime subscription status:', status);
             });
 
         return () => {
@@ -485,6 +491,7 @@ const AguacateChat = () => {
                     type: m.sender_id === user?.id ? 'sent' : 'received',
                     text: m.content,
                     created_at: m.created_at,
+                    messageType: m.type || 'text',
                 }));
                 setChatMessages(mapped);
             } else {
@@ -507,7 +514,7 @@ const AguacateChat = () => {
             return;
         }
     const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString() };
+    const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text' };
         setChatMessages(prev => [...prev, optimistic]);
         setMessageInput('');
         try {
@@ -517,6 +524,98 @@ const AguacateChat = () => {
             toast.error('No se pudo enviar el mensaje');
             // opcional: revertir optimismo o marcar como fallido
         }
+    };
+
+    const sendPhoto = async () => {
+        if (!selectedPhoto || !selectedContact?.conversationId || isUploadingPhoto) return;
+        if (!user?.id) {
+            toast.error('Debes iniciar sesión para enviar fotos');
+            return;
+        }
+        setIsUploadingPhoto(true);
+        try {
+            // Comprimir la imagen antes de subir
+            const options = {
+                maxSizeMB: 1, // ~1MB objetivo
+                maxWidthOrHeight: 1920, // limitar dimensiones
+                useWebWorker: true,
+                maxIteration: 10,
+                initialQuality: 0.8,
+            };
+
+            let fileToUpload = selectedPhoto;
+            try {
+                const compressed = await imageCompression(selectedPhoto, options);
+                // Log de tamaños
+                const originalKb = (selectedPhoto.size / 1024).toFixed(0);
+                const compressedKb = (compressed.size / 1024).toFixed(0);
+                console.log(`Compresión imagen: ${originalKb}KB -> ${compressedKb}KB`);
+                // const savedPct = selectedPhoto.size > 0 ? Math.max(0, Math.round((1 - (compressed.size / selectedPhoto.size)) * 100)) : 0;
+                // toast deshabilitado por preferencia del usuario
+                fileToUpload = compressed;
+            } catch (compressErr) {
+                console.warn('Fallo al comprimir, subiendo original:', compressErr);
+            }
+
+            // Asegurar extensión acorde al tipo
+            const ext = (fileToUpload.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+            const fileName = `${Date.now()}.${ext}`;
+            // Nota: el path es relativo al bucket, no incluye el nombre del bucket
+            const path = `${user?.id}/${fileName}`;
+
+            // Añadir mensaje optimista con preview local
+            const tempId = `tmp-img-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const localPreviewUrl = URL.createObjectURL(fileToUpload);
+            setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localPreviewUrl, created_at: new Date().toISOString(), messageType: 'image' }]);
+
+            const { error: uploadError } = await supabase.storage
+                .from('chatphotos')
+                .upload(path, fileToUpload, { upsert: true, contentType: fileToUpload.type });
+
+            if (uploadError) {
+                console.error('Error subiendo foto:', uploadError);
+                toast.error(`No se pudo subir la foto: ${fmtErr(uploadError)}`);
+                return;
+            }
+
+            const { data: publicData, error: pubErr } = supabase.storage
+                .from('chatphotos')
+                .getPublicUrl(path);
+
+            if (pubErr) {
+                console.error('Error obteniendo URL:', pubErr);
+                toast.error(`No se pudo obtener la URL de la foto: ${fmtErr(pubErr)}`);
+                return;
+            }
+
+            const photoUrl = publicData.publicUrl;
+
+            await insertMessage({
+                conversationId: selectedContact.conversationId,
+                senderId: user?.id,
+                content: photoUrl,
+                type: 'image'
+            });
+
+            toast.success('Foto enviada');
+            closePhotoPreviewModal();
+            // Reemplazar el optimista local por la URL pública
+            setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, text: photoUrl } : m));
+        } catch (e) {
+            console.error('Error enviando foto:', e);
+            toast.error(`No se pudo enviar la foto: ${fmtErr(e)}`);
+        } finally {
+            setIsUploadingPhoto(false);
+        }
+    };
+
+    const closePhotoPreviewModal = () => {
+        setIsPhotoModalClosing(true);
+        setTimeout(() => {
+            setShowPhotoPreviewModal(false);
+            setIsPhotoModalClosing(false);
+            setSelectedPhoto(null);
+        }, 300);
     };
 
     const handleKeyPress = (e) => {
@@ -856,7 +955,18 @@ const AguacateChat = () => {
                                         <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
                                     </div>
                                     <div className="flex justify-between items-center mt-1">
-                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{contact.lastMessage}</p>
+                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
+                                            {contact.lastMessageType === 'image' ? (
+                                                <>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                        <path d="M4 5a2 2 0 012-2h2.172a2 2 0 001.414-.586l.828-.828A2 2 0 0111.828 1h.344a2 2 0 011.414.586l.828.828A2 2 0 0015.828 3H18a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v12h12V5H6zm6 3a4 4 0 110 8 4 4 0 010-8z" />
+                                                    </svg>
+                                                    <span>Foto</span>
+                                                </>
+                                            ) : (
+                                                contact.lastMessage
+                                            )}
+                                        </p>
                                         {contact.unread > 0 && (
                                             <span className="bg-teal-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                                                 {contact.unread}
@@ -1066,7 +1176,17 @@ const AguacateChat = () => {
                                     )}
                                     <div className={`${message.type === 'sent' ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col`}>
                                         <div>
-                                            <MessageRenderer text={message.text} chunkSize={450} />
+                                            {message.messageType === 'image' ? (
+                                                <img
+                                                    src={message.text}
+                                                    alt="Imagen"
+                                                    loading="lazy"
+                                                    className="rounded-lg cursor-pointer w-64 h-64 object-cover"
+                                                    onClick={() => { setIsImageModalEntering(true); setImagePreviewUrl(message.text); setTimeout(() => setIsImageModalEntering(false), 10); }}
+                                                />
+                                            ) : (
+                                                <MessageRenderer text={message.text} chunkSize={450} />
+                                            )}
                                         </div>
                                         <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
                                             {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -1134,7 +1254,7 @@ const AguacateChat = () => {
                                     <div className="flex flex-col gap-2 p-4">
                                         <button
                                             className="flex items-center gap-2 p-2 rounded transition-colors"
-                                            onClick={() => { alert('Enviar foto'); setShowAttachMenu(false); }}
+                                            onClick={() => { photoInputRef.current.click(); setShowAttachMenu(false); }}
                                             onMouseEnter={() => {
                                                 setPhotoStopped(true);
                                                 setTimeout(() => {
@@ -1412,6 +1532,91 @@ const AguacateChat = () => {
                 personalization={personalization}
                 setPersonalization={setPersonalization}
             />
+
+            {/* Input oculto para seleccionar fotos */}
+            <input
+                type="file"
+                ref={photoInputRef}
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        setSelectedPhoto(file);
+                        setShowPhotoPreviewModal(true);
+                    }
+                }}
+            />
+
+            {/* Modal de vista previa de foto */}
+            {(showPhotoPreviewModal || isPhotoModalClosing) && (
+                <div
+                    className={`fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm transition-opacity duration-300 ${
+                        isPhotoModalClosing ? 'opacity-0' : 'opacity-100'
+                    }`}
+                    onClick={closePhotoPreviewModal}
+                >
+                    <div
+                        className={`bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-md w-full mx-4 transform transition-all duration-300 modal-transition ${
+                            isPhotoModalClosing ? 'opacity-0 scale-90 translate-y-8' : 'opacity-100 scale-100 translate-y-0'
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Vista previa de foto</h3>
+                        <div className="mb-4">
+                            <img
+                                src={selectedPhoto ? URL.createObjectURL(selectedPhoto) : ''}
+                                alt="Vista previa"
+                                className="w-full h-64 object-cover rounded-lg"
+                            />
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={closePhotoPreviewModal}
+                                disabled={isUploadingPhoto}
+                                className={`px-4 py-2 rounded-lg transition-colors ${isUploadingPhoto ? 'opacity-60 cursor-not-allowed' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={sendPhoto}
+                                disabled={isUploadingPhoto}
+                                className={`px-4 py-2 rounded-lg transition-colors text-white ${isUploadingPhoto ? 'bg-blue-400 cursor-wait' : 'bg-blue-500 hover:bg-blue-600'}`}
+                            >
+                                {isUploadingPhoto ? 'Enviando…' : 'Enviar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Modal de zoom para imágenes del chat con animación */}
+            {(imagePreviewUrl || isImageModalClosing) && (
+                <div
+                    className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
+                        (isImageModalClosing || isImageModalEntering) ? 'opacity-0' : 'opacity-100'
+                    }`}
+                    onClick={closeImagePreview}
+                >
+                    <div
+                        className={`transform transition-all duration-300 modal-transition ${
+                            (isImageModalClosing || isImageModalEntering) ? 'opacity-0 scale-90 translate-y-4' : 'opacity-100 scale-100 translate-y-0'
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <img
+                            src={imagePreviewUrl || ''}
+                            alt="Vista ampliada"
+                            className="max-w-[90vw] max-h-[85vh] rounded-xl shadow-2xl"
+                        />
+                    </div>
+                    <button
+                        className="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 hover:bg-white shadow"
+                        onClick={(e) => { e.stopPropagation(); closeImagePreview(); }}
+                    >
+                        Cerrar
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
