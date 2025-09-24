@@ -190,6 +190,8 @@ const AguacateChat = () => {
     // Lista real de conversaciones del usuario
     const [conversations, setConversations] = useState([]);
     const [loadingConversations, setLoadingConversations] = useState(true);
+    // Cache de duraciones para previsualización de audios (por id de mensaje)
+    const [audioPreviewDurations, setAudioPreviewDurations] = useState({});
 
     // Derivar contactos a partir de conversaciones (directas) y perfiles
     const conversationsToContacts = (convs) => {
@@ -215,12 +217,18 @@ const AguacateChat = () => {
             const username = c?.otherProfile?.username || 'Usuario';
             const name = username.trim();
             const lastContent = c?.last_message?.content || '';
+            const lastType = c?.last_message?.type || null;
+            const lastId = c?.last_message?.id || null;
+            const lastAudioUrl = lastType === 'audio' ? lastContent : null;
             const lastAt = c?.last_message_at || c?.created_at;
             console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             return {
                 name,
                 status: c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex),
                 lastMessage: lastContent,
+                lastMessageType: lastType,
+                lastMessageId: lastId,
+                lastAudioUrl,
                 time: formatTime(lastAt),
                 initials: deriveInitials(name),
                 profileId: c?.otherProfile?.id,
@@ -682,6 +690,43 @@ const AguacateChat = () => {
                 setSelectedContact(newContact);
             }
         }
+    }, [conversations]);
+
+    // Calcular duración de audios para previsualización (último mensaje por conversación)
+    useEffect(() => {
+        const pending = [];
+        for (const conv of conversations || []) {
+            const m = conv?.last_message;
+            if (m && m.type === 'audio' && m.id && m.content && audioPreviewDurations[m.id] == null) {
+                pending.push({ id: m.id, url: m.content });
+            }
+        }
+        if (pending.length === 0) return;
+        let cancelled = false;
+        pending.forEach(({ id, url }) => {
+            try {
+                const audio = new Audio();
+                const onMeta = () => {
+                    if (cancelled) return;
+                    const secs = Math.max(0, Math.round(audio.duration || 0));
+                    setAudioPreviewDurations(prev => ({ ...prev, [id]: secs }));
+                    cleanup();
+                };
+                const onError = () => {
+                    cleanup();
+                };
+                const cleanup = () => {
+                    audio.removeEventListener('loadedmetadata', onMeta);
+                    audio.removeEventListener('error', onError);
+                };
+                audio.addEventListener('loadedmetadata', onMeta);
+                audio.addEventListener('error', onError);
+                audio.preload = 'metadata';
+                audio.src = url;
+            } catch {}
+        });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conversations]);
 
     // Suscripción realtime para nuevas conversaciones
@@ -1185,7 +1230,21 @@ const AguacateChat = () => {
                                         <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
                                     </div>
                                     <div className="flex justify-between items-center mt-1">
-                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{contact.lastMessage}</p>
+                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            {contact.lastMessageType === 'audio' ? (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <span role="img" aria-label="audio">🎤</span>
+                                                    <span>
+                                                        {(() => {
+                                                            const secs = audioPreviewDurations[contact.lastMessageId];
+                                                            return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
+                                                        })()}
+                                                    </span>
+                                                </span>
+                                            ) : (
+                                                contact.lastMessage
+                                            )}
+                                        </p>
                                         {contact.unread > 0 && (
                                             <span className="bg-teal-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                                                 {contact.unread}
