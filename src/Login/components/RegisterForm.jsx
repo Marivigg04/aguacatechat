@@ -329,13 +329,13 @@ const RegisterForm = () => {
           placeholder="********"
           value={password}
           onChange={(e) => {
-            if (e.target.value.length <= 32) handlePasswordChange(e);
+            if (e.target.value.length <= 16) handlePasswordChange(e);
           }}
           onFocus={handlePasswordFocus}
           onBlur={handlePasswordBlur}
           required
           minLength={8}
-          maxLength={32}
+          maxLength={16}
           className={`password-input ${currentStrengthInfo.level !== 'none' ? `password-strength-border-${currentStrengthInfo.level}` : ''}`}
         />
         <span className="password-toggle-icon" onClick={toggleShowPassword}>
@@ -362,11 +362,11 @@ const RegisterForm = () => {
           placeholder="********"
           value={confirmPassword}
           onChange={(e) => {
-            if (e.target.value.length <= 32) handleConfirmPasswordChange(e);
+            if (e.target.value.length <= 16) handleConfirmPasswordChange(e);
           }}
           required
           minLength={8}
-          maxLength={32}
+          maxLength={16}
         />
         <span
           className={`password-toggle-icon ${showCheckmark ? 'hidden' : ''}`}
