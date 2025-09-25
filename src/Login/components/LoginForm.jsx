@@ -93,10 +93,10 @@ const LoginForm = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
           placeholder="********"
           value={password}
             onChange={(e) => {
-              if (e.target.value.length <= 16) setPassword(e.target.value);
+              if (e.target.value.length <= 32) setPassword(e.target.value);
             }}
           required
-            maxLength={16}
+            maxLength={32}
         />
         <span className="password-toggle-icon" onClick={toggleShowPassword}>
           <i className={showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
