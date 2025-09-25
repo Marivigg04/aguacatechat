@@ -246,6 +246,9 @@ const AguacateChat = () => {
     // Lista real de conversaciones del usuario
     const [conversations, setConversations] = useState([]);
     const [loadingConversations, setLoadingConversations] = useState(true);
+    // Control de salida suave del skeleton (fade-out antes de desmontar)
+    const [showLoadingSkeleton, setShowLoadingSkeleton] = useState(true);
+    const [skeletonExiting, setSkeletonExiting] = useState(false);
     // Cache de duraciones para previsualización de audios (por id de mensaje)
     const [audioPreviewDurations, setAudioPreviewDurations] = useState({});
 
@@ -1579,16 +1582,25 @@ const AguacateChat = () => {
       };
     }, [messageMenuOpenId]);
 
-    // Mostrar esqueleto mientras cargan las conversaciones
-    if (loadingConversations) {
-        return (
-            <div className="flex h-screen overflow-hidden theme-bg-primary theme-text-primary">
-                <LeftToolbarSkeleton />
-                <SidebarSkeleton />
-                <ChatAreaSkeleton />
-            </div>
-        );
-    }
+    // Sincronizar el estado del skeleton para permitir animación de salida
+    useEffect(() => {
+        if (!loadingConversations && showLoadingSkeleton && !skeletonExiting) {
+            // Empezar animación de salida y desmontar luego de ~360ms
+            setSkeletonExiting(true);
+            const t = setTimeout(() => {
+                setShowLoadingSkeleton(false);
+                setSkeletonExiting(false);
+            }, 380);
+            return () => clearTimeout(t);
+        }
+        // Mientras esté cargando, aseguramos que el skeleton esté visible
+        if (loadingConversations && !showLoadingSkeleton) {
+            setShowLoadingSkeleton(true);
+            setSkeletonExiting(false);
+        }
+    }, [loadingConversations]);
+
+    // Nota: en vez de hacer early return, mostraremos un overlay mientras carga para permitir el fade-out sobre el contenido ya montado.
 
     return (
         <div className="flex h-screen overflow-hidden">
@@ -2607,6 +2619,16 @@ const AguacateChat = () => {
                     >
                         Cerrar
                     </button>
+                </div>
+            )}
+            {/* Overlay de skeleton a pantalla completa mientras cargan conversaciones */}
+            {showLoadingSkeleton && (
+                <div className={`fixed inset-0 z-[60] theme-bg-primary theme-text-primary ${skeletonExiting ? 'anim-fade-out' : 'anim-fade-in'}`}>
+                    <div className="flex h-full overflow-hidden">
+                        <LeftToolbarSkeleton />
+                        <SidebarSkeleton />
+                        <ChatAreaSkeleton />
+                    </div>
                 </div>
             )}
         </div>
