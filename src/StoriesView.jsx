@@ -16,15 +16,15 @@ const stories = [
 // Novedad: Se han eliminado los comentarios "//" para definir correctamente el componente
 const StoryItem = ({ name, time, image, onClick }) => (
     <div 
-        className="flex flex-col gap-2 cursor-pointer group"
+        className="flex flex-col gap-1 cursor-pointer group"
         onClick={onClick}
     >
-        <div className="aspect-square w-full rounded-xl overflow-hidden transform group-hover:scale-105 transition-transform duration-300">
+        <div className="aspect-square w-full rounded-md overflow-hidden transform group-hover:scale-105 transition-transform duration-300">
             <img src={image} alt={name} className="w-full h-full object-cover" />
         </div>
         <div>
             <h4 className="font-semibold theme-text-primary text-sm truncate">{name}</h4>
-            <p className="text-xs theme-text-secondary">{time}</p>
+            <p className="text-xs theme-text-secondary truncate">{time}</p>
         </div>
     </div>
 );
@@ -48,12 +48,12 @@ const UploadStoryCard = ({ onFileSelect }) => {
 
     return (
         <div 
-            className="flex flex-col gap-2 cursor-pointer group"
+            className="flex flex-col gap-1 cursor-pointer group"
             onClick={handleCardClick}
         >
-            <div className="aspect-square w-full rounded-xl overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 group-hover:bg-emerald-500/20 transition-colors">
-                <ArrowUpTrayIcon className="w-10 h-10" />
-                <span className="mt-2 text-sm font-semibold">Subir historia</span>
+            <div className="aspect-square w-full rounded-md overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 group-hover:bg-emerald-500/20 transition-colors">
+                <ArrowUpTrayIcon className="w-6 h-6" />
+                <span className="mt-1 text-xs font-semibold text-center px-1">Subir historia</span>
             </div>
              <input
                 type="file"
@@ -86,12 +86,12 @@ const StoriesView = () => {
     };
 
     return (
-        <div className="flex-1 overflow-y-auto p-4">
-            <div className="px-2 pb-2">
-                <h3 className="text-sm font-semibold theme-text-secondary uppercase tracking-wider">RECIENTE</h3>
+        <div className="flex-1 overflow-y-auto p-2">
+            <div className="px-1 pb-2">
+                <h3 className="text-xs font-semibold theme-text-secondary uppercase tracking-wider">RECIENTE</h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-x-4 gap-y-6 p-2">
+            <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
                 {/* Cuadro para añadir mi estado */}
                 <UploadStoryCard onFileSelect={handleFileSelect} />
 

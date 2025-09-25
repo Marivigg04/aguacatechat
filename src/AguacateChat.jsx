@@ -1799,7 +1799,9 @@ const AguacateChat = () => {
                     </div>
                 </div>
             ) : (
-                <StoriesView />
+                <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
+                    <StoriesView />
+                </div>
             )}
 
             {/* Área principal del chat */}
