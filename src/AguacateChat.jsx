@@ -1751,8 +1751,8 @@ const AguacateChat = () => {
                     <div className="p-4 theme-border border-b">
                         <h1 className="text-xl font-bold theme-text-primary">Historias</h1>
                     </div>
-                    <div className="flex-1 flex items-center justify-center">
-                        <p className="theme-text-secondary">Aquí se mostrarán las historias.</p>
+                    <div className="flex-1 flex flex-col items-start justify-start p-4">
+                        <h2 className="text-lg font-semibold theme-text-primary">Recientes</h2>
                     </div>
                 </div>
             )}
