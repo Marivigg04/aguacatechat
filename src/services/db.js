@@ -296,6 +296,31 @@ export async function uploadAudioToBucket({ blob, conversationId, userId, mimeTy
   return { publicUrl, path }
 }
 
+// Upload a video file to 'chatvideos' bucket and return its public URL
+// Phase 1 (sin compresión ni thumbnail). Valida tamaño externo antes de llamar.
+export async function uploadVideoToBucket({ file, conversationId, userId }) {
+  if (!file) throw new Error('No video file provided')
+  const bucket = 'chatvideos'
+  const ts = new Date().toISOString().replace(/[:.]/g, '-')
+  const rand = Math.random().toString(16).slice(2)
+  const safeName = (file.name || 'video').replace(/[^a-zA-Z0-9_.-]/g, '_')
+  const ext = safeName.includes('.') ? safeName.split('.').pop() : (file.type.split('/')[1] || 'mp4')
+  const path = `${userId || 'unknown'}/${conversationId || 'misc'}/${ts}_${rand}.${ext}`
+
+  const { error: uploadErr } = await supabase.storage.from(bucket).upload(path, file, {
+    contentType: file.type || 'video/mp4',
+    upsert: false,
+  })
+  if (uploadErr) {
+    console.error('Error subiendo video:', uploadErr)
+    throw uploadErr
+  }
+  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
+  const publicUrl = pub?.publicUrl
+  if (!publicUrl) throw new Error('No se pudo obtener URL pública del video')
+  return { publicUrl, path }
+}
+
 // Append a userId to messages.seen array, without overwriting the whole array.
 // It first reads current seen, avoids duplicates, and updates only if needed.
 export async function appendUserToMessageSeen(messageId, userId) {
