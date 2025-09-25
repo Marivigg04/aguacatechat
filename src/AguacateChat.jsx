@@ -9,7 +9,7 @@ import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
 import AudioPlayer from './AudioPlayer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
-
+import StoriesView from './StoriesView';
 import Sidebar from './Sidebar';
 import ProfileModal from './ProfileModal';
 import ConfigModal from './ConfigModal';
@@ -1868,12 +1868,7 @@ const AguacateChat = () => {
                 </div>
             ) : (
                 <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
-                    <div className="p-4 theme-border border-b">
-                        <h1 className="text-xl font-bold theme-text-primary">Historias</h1>
-                    </div>
-                    <div className="flex-1 flex items-center justify-center">
-                        <p className="theme-text-secondary">Aquí se mostrarán las historias.</p>
-                    </div>
+                    <StoriesView />
                 </div>
             )}
 
@@ -2007,6 +2002,28 @@ const AguacateChat = () => {
                     id="chatArea"
                     ref={chatAreaRef}
                     className="flex-1 overflow-y-auto p-4 space-y-4 chat-container relative"
+                    // ...existing code...
+
+    style={
+        selectedContact
+            ? (
+                personalization.backgroundType === 'solid'
+                    ? { background: personalization.backgroundColor }
+                    : personalization.backgroundType === 'gradient'
+                        ? { background: 'linear-gradient(135deg, #10b981, #14b8a6)' }
+                        : personalization.backgroundType === 'image' && personalization.backgroundImage
+                            ? { backgroundImage: `url(${personalization.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                            : {}
+            )
+            : (
+                isDarkMode
+                    ? { background: '#0d1a26' } // color original del modo oscuro (theme-bg-primary)
+                    : { background: '#f8fafc' }
+            )
+    }
+    
+// ...existing code...
+                    
                     onScroll={(e) => {
                         const el = e.currentTarget;
                         // stick-to-bottom tracking
