@@ -74,8 +74,15 @@ const LoginForm = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
         id="login-email"
         placeholder="usuario@correo.com"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              // Solo letras, números, punto y arroba
+              if (/^[A-Za-z0-9.@]*$/.test(value) && value.length <= 50) {
+                setEmail(value);
+              }
+            }}
         required
+          maxLength={50}
       />
 
       <label htmlFor="login-password">Contraseña</label>
@@ -85,8 +92,11 @@ const LoginForm = ({ onNavigateToPasswordReset, onLoginSuccess }) => {
           id="login-password"
           placeholder="********"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value.length <= 32) setPassword(e.target.value);
+            }}
           required
+            maxLength={32}
         />
         <span className="password-toggle-icon" onClick={toggleShowPassword}>
           <i className={showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
