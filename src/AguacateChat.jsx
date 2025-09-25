@@ -221,6 +221,22 @@ const AguacateChat = () => {
     // Estados para animación del micrófono (botón de audio)
     const [isMicPaused, setMicPaused] = useState(true);
     const [isMicStopped, setMicStopped] = useState(false);
+    // Control de animación del micrófono: se reproduce sólo cuando isRecording es true
+    useEffect(() => {
+        if (isRecording) {
+            // Reiniciar y reproducir una vez desde el inicio
+            setMicStopped(true); // forzar reinicio al primer frame
+            // pequeño timeout para que Lottie detecte el cambio de isStopped
+            setTimeout(() => {
+                setMicStopped(false);
+                setMicPaused(false); // reproducir
+            }, 0);
+        } else {
+            // Al terminar la grabación volvemos al inicio y pausamos
+            setMicPaused(true);
+            setMicStopped(true);
+        }
+    }, [isRecording]);
 
     const [isPhotoPaused, setPhotoPaused] = useState(true);
     const [isPhotoStopped, setPhotoStopped] = useState(false);
@@ -2494,14 +2510,7 @@ const AguacateChat = () => {
                                     onClick={toggleRecording}
                                     className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 ${isRecording ? 'bg-red-500' : 'bg-gradient-to-r from-teal-primary to-teal-secondary'} text-white rounded-full hover:opacity-80 transition-opacity`}
                                     disabled={!selectedContact}
-                                    onMouseEnter={() => {
-                                        setMicStopped(true);
-                                        setTimeout(() => {
-                                            setMicStopped(false);
-                                            setMicPaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setMicPaused(true)}
+                                    // Ya no usamos hover para disparar animación; controlado por useEffect ligado a isRecording
                                     title={isRecording ? (isRecordingPaused ? 'Reanudar grabación' : 'Pausar/Detener grabación') : 'Grabar audio'}
                                 >
                                     <div className="w-7 h-7">
