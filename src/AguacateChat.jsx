@@ -131,6 +131,18 @@ const AguacateChat = () => {
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
     const [currentView, setCurrentView] = useState('chats'); // 'chats' o 'stories'
 
+    // Cambiar vista y, si se pasa a historias, deseleccionar el chat y cerrar menús relacionados
+    const handleViewChange = (view) => {
+        setCurrentView(view);
+        if (view === 'stories') {
+            // Deseleccionar chat activo y limpiar menús contextuales
+            setSelectedContact(null);
+            setShowChatOptionsMenu(false);
+            setShowAttachMenu(false);
+            setShowNewChatMenu(false);
+        }
+    };
+
     // Grabación de audio (MediaRecorder)
     const [isRecording, setIsRecording] = useState(false);
     const [isRecordingPaused, setIsRecordingPaused] = useState(false);
@@ -1711,7 +1723,7 @@ const AguacateChat = () => {
                 isConfigStopped={isConfigStopped}
                 setConfigStopped={setConfigStopped}
                 currentView={currentView}
-                onViewChange={setCurrentView}
+                onViewChange={handleViewChange}
             />
             {/* Sidebar de contactos e Historias */}
             {currentView === 'chats' ? (
