@@ -9,7 +9,7 @@ import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
 import AudioPlayer from './AudioPlayer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
-
+import StoriesView from './StoriesView';
 import Sidebar from './Sidebar';
 import ProfileModal from './ProfileModal';
 import ConfigModal from './ConfigModal';
@@ -1799,14 +1799,7 @@ const AguacateChat = () => {
                     </div>
                 </div>
             ) : (
-                <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
-                    <div className="p-4 theme-border border-b">
-                        <h1 className="text-xl font-bold theme-text-primary">Historias</h1>
-                    </div>
-                    <div className="flex-1 flex flex-col items-start justify-start p-4">
-                        <h2 className="text-lg font-semibold theme-text-primary">Recientes</h2>
-                    </div>
-                </div>
+                <StoriesView />
             )}
 
             {/* Área principal del chat */}
