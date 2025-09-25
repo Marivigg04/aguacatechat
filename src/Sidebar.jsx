@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Lottie from 'react-lottie';
 import wiredPhotoAnimation from './animations/wired-outline-54-photo-hover-pinch.json';
-import filterAnimation from './animations/Filter.json';
-import { useEffect, useState } from 'react';
+import filterAnimationData from './animations/Filter.json';
+import paperPlaneAnimation from './animations/Paper Plane.json';
+import storiesAnimationData from './animations/wired-outline-2626-logo-circle-instagram-hover-pinch.json';
 import { useAuth } from './context/AuthContext.jsx';
 
 // Carga simple del avatar desde la tabla profiles
@@ -35,8 +36,48 @@ const Sidebar = ({
     isConfigPaused,
     setConfigPaused,
     isConfigStopped,
-    setConfigStopped
+    setConfigStopped,
+    currentView,
+    onViewChange
 }) => {
+    // Custom hook local (definido dentro para cumplir Reglas de Hooks)
+    const useLottieAnimation = () => {
+        const [isPaused, setPaused] = useState(true);
+        const [isStopped, setStopped] = useState(true);
+        const lottieRef = useRef(null);
+
+        const onMouseEnter = () => {
+            setStopped(false);
+            setPaused(false);
+        };
+
+        const onMouseLeave = () => {
+            setPaused(true);
+        };
+
+        const onComplete = () => {
+            setPaused(true);
+        };
+
+        // react-lottie espera un array de listeners
+        const eventListeners = [
+            { eventName: 'complete', callback: onComplete }
+        ];
+
+        return { isPaused, isStopped, onMouseEnter, onMouseLeave, eventListeners, lottieRef };
+    };
+
+    // Instancias de animaciones (todas dentro del componente)
+    const filterAnimation = useLottieAnimation();
+    const chatsAnimation = useLottieAnimation();
+    const storiesAnimation = useLottieAnimation();
+    const profileAnimation = useLottieAnimation();
+    const personalizationAnimation = useLottieAnimation();
+    const configAnimation = useLottieAnimation();
+    const menuProfileAnimation = useLottieAnimation();
+    const menuPersonalizationAnimation = useLottieAnimation();
+    const menuConfigAnimation = useLottieAnimation();
+
     const { user } = useAuth();
     const [isFilterPaused, setFilterPaused] = useState(true);
     const [isFilterStopped, setFilterStopped] = useState(false);
@@ -44,6 +85,22 @@ const Sidebar = ({
     const [isAnimating, setIsAnimating] = useState(false);
     const [isPersonalizationPaused, setPersonalizationPaused] = useState(true);
     const [isPersonalizationStopped, setPersonalizationStopped] = useState(false);
+    const [isChatsPaused, setChatsPaused] = useState(true);
+    const [isChatsStopped, setChatsStopped] = useState(false);
+    const [isStoriesPaused, setStoriesPaused] = useState(true);
+    const [isStoriesStopped, setStoriesStopped] = useState(true);
+
+    const handleLottieHover = (setPaused, setStopped) => {
+        setStopped(true);
+        setTimeout(() => {
+            setStopped(false);
+            setPaused(false);
+        }, 10);
+    };
+
+    const handleLottieLeave = (setPaused) => {
+        setPaused(true);
+    };
 
     // Detectar modo oscuro desde el body (igual que AguacateChat.jsx)
     const [isDarkMode, setIsDarkMode] = useState(document.body.classList.contains('dark-mode'));
@@ -105,27 +162,79 @@ const Sidebar = ({
                     className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-all duration-300 ease-out transform hover:scale-105 flex flex-col gap-1 items-center shadow-lg hover:shadow-xl"
                     title="Menú"
                     onClick={handleMenuToggle}
-                    onMouseEnter={() => {
-                        setFilterStopped(true);
-                        setTimeout(() => {
-                            setFilterStopped(false);
-                            setFilterPaused(false);
-                        }, 10);
-                    }}
-                    onMouseLeave={() => setFilterPaused(true)}
+                    onMouseEnter={filterAnimation.onMouseEnter}
+                    onMouseLeave={filterAnimation.onMouseLeave}
                 >
                     <div className="w-8 h-8 flex items-center justify-center">
                         <Lottie
                             options={{
-                                loop: true,
-                                autoplay: true,
-                                animationData: filterAnimation,
+                                loop: false,
+                                autoplay: false,
+                                animationData: filterAnimationData,
                                 rendererSettings: {
                                     preserveAspectRatio: 'xMidYMid slice'
                                 }
                             }}
-                            isPaused={isFilterPaused}
-                            isStopped={isFilterStopped}
+                            isPaused={filterAnimation.isPaused}
+                            isStopped={filterAnimation.isStopped}
+                            eventListeners={filterAnimation.eventListeners}
+                            height={32}
+                            width={32}
+                        />
+                    </div>
+                </button>
+            </div>
+
+            {/* Botones de Navegación: Chats e Historias */}
+            <div className="flex flex-col items-center pt-4 gap-3">
+                {/* Botón de Chats */}
+                <button
+                    className={`p-2 rounded-lg transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg ${currentView === 'chats' ? 'theme-bg-accent' : 'theme-bg-chat'}`}
+                    title="Chats"
+                    onClick={() => onViewChange('chats')}
+                    onMouseEnter={chatsAnimation.onMouseEnter}
+                    onMouseLeave={chatsAnimation.onMouseLeave}
+                >
+                    <div className="w-8 h-8 flex items-center justify-center">
+                        <Lottie
+                            options={{
+                                loop: false,
+                                autoplay: false,
+                                animationData: paperPlaneAnimation,
+                                rendererSettings: {
+                                    preserveAspectRatio: 'xMidYMid slice'
+                                }
+                            }}
+                            isPaused={chatsAnimation.isPaused}
+                            isStopped={chatsAnimation.isStopped}
+                            eventListeners={chatsAnimation.eventListeners}
+                            height={32}
+                            width={32}
+                        />
+                    </div>
+                </button>
+
+                {/* Botón de Historias */}
+                <button
+                    className={`p-2 rounded-lg transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg ${currentView === 'stories' ? 'theme-bg-accent' : 'theme-bg-chat'}`}
+                    title="Historias"
+                    onClick={() => onViewChange('stories')}
+                    onMouseEnter={storiesAnimation.onMouseEnter}
+                    onMouseLeave={storiesAnimation.onMouseLeave}
+                >
+                    <div className="w-8 h-8 flex items-center justify-center">
+                        <Lottie
+                            options={{
+                                loop: false,
+                                autoplay: false,
+                                animationData: storiesAnimationData,
+                                rendererSettings: {
+                                    preserveAspectRatio: 'xMidYMid slice'
+                                }
+                            }}
+                            isPaused={storiesAnimation.isPaused}
+                            isStopped={storiesAnimation.isStopped}
+                            eventListeners={storiesAnimation.eventListeners}
                             height={32}
                             width={32}
                         />
@@ -140,14 +249,8 @@ const Sidebar = ({
                         className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg"
                         title="Perfil"
                         onClick={() => setShowProfileModal(true)}
-                        onMouseEnter={() => {
-                            setProfileStopped(true);
-                            setTimeout(() => {
-                                setProfileStopped(false);
-                                setProfilePaused(false);
-                            }, 10);
-                        }}
-                        onMouseLeave={() => setProfilePaused(true)}
+                        onMouseEnter={profileAnimation.onMouseEnter}
+                        onMouseLeave={profileAnimation.onMouseLeave}
                     >
                         <div className="w-7 h-7 flex items-center justify-center">
                             {avatarUrl ? (
@@ -159,7 +262,7 @@ const Sidebar = ({
                                     />
                                 </div>
                             ) : (
-                                <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
+                                <Lottie options={lottieOptions.profile} isPaused={profileAnimation.isPaused} isStopped={profileAnimation.isStopped} eventListeners={profileAnimation.eventListeners} />
                             )}
                         </div>
                     </button>
@@ -168,14 +271,8 @@ const Sidebar = ({
                         className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg"
                         title="Personalización"
                         onClick={() => setShowPersonalizationModal(true)}
-                        onMouseEnter={() => {
-                            setPersonalizationStopped(true);
-                            setTimeout(() => {
-                                setPersonalizationStopped(false);
-                                setPersonalizationPaused(false);
-                            }, 10);
-                        }}
-                        onMouseLeave={() => setPersonalizationPaused(true)}
+                        onMouseEnter={personalizationAnimation.onMouseEnter}
+                        onMouseLeave={personalizationAnimation.onMouseLeave}
                     >
                         <div className="w-7 h-7 flex items-center justify-center">
                             <Lottie
@@ -187,8 +284,9 @@ const Sidebar = ({
                                         preserveAspectRatio: 'xMidYMid slice'
                                     }
                                 }}
-                                isPaused={isPersonalizationPaused}
-                                isStopped={isPersonalizationStopped}
+                                isPaused={personalizationAnimation.isPaused}
+                                isStopped={personalizationAnimation.isStopped}
+                                eventListeners={personalizationAnimation.eventListeners}
                                 height={32}
                                 width={32}
                             />
@@ -198,17 +296,11 @@ const Sidebar = ({
                         className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg"
                         title="Configuración"
                         onClick={() => setShowConfigModal(true)}
-                        onMouseEnter={() => {
-                            setConfigStopped(true);
-                            setTimeout(() => {
-                                setConfigStopped(false);
-                                setConfigPaused(false);
-                            }, 10);
-                        }}
-                        onMouseLeave={() => setConfigPaused(true)}
+                        onMouseEnter={configAnimation.onMouseEnter}
+                        onMouseLeave={configAnimation.onMouseLeave}
                     >
                         <div className="w-7 h-7 flex items-center justify-center">
-                            <Lottie options={lottieOptions.config} isPaused={isConfigPaused} isStopped={isConfigStopped} />
+                            <Lottie options={lottieOptions.config} isPaused={configAnimation.isPaused} isStopped={configAnimation.isStopped} eventListeners={configAnimation.eventListeners} />
                         </div>
                     </button>
                 </div>
@@ -262,8 +354,55 @@ const Sidebar = ({
                                     animation: showSideMenu && !isAnimating ? 'slideInLeft 0.4s ease-out 0.1s both' : 'slideOutLeft 0.3s ease-in both'
                                 }}
                             >
-                                <div className="h-32 flex items-center justify-center text-sm">
-                                    {/* Espacio para contenido adicional del menú */}
+                                {/* Navegación principal dentro del menú expandido */}
+                                <div className="flex flex-col gap-2">
+                                    <button
+                                        className={`w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat ${currentView === 'chats' ? 'theme-bg-accent' : ''}`}
+                                        onClick={() => { onViewChange('chats'); handleCloseMenu(); }}
+                                        onMouseEnter={chatsAnimation.onMouseEnter}
+                                        onMouseLeave={chatsAnimation.onMouseLeave}
+                                    >
+                                        <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                                            <Lottie
+                                                options={{
+                                                    loop: false,
+                                                    autoplay: false,
+                                                    animationData: paperPlaneAnimation,
+                                                    rendererSettings: { preserveAspectRatio: 'xMidYMid slice' }
+                                                }}
+                                                isPaused={chatsAnimation.isPaused}
+                                                isStopped={chatsAnimation.isStopped}
+                                                eventListeners={chatsAnimation.eventListeners}
+                                                height={32}
+                                                width={32}
+                                            />
+                                        </div>
+                                        <span className="font-medium transition-all duration-300 group-hover:translate-x-1">Chats</span>
+                                    </button>
+
+                                    <button
+                                        className={`w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat ${currentView === 'stories' ? 'theme-bg-accent' : ''}`}
+                                        onClick={() => { onViewChange('stories'); handleCloseMenu(); }}
+                                        onMouseEnter={storiesAnimation.onMouseEnter}
+                                        onMouseLeave={storiesAnimation.onMouseLeave}
+                                    >
+                                        <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                                            <Lottie
+                                                options={{
+                                                    loop: false,
+                                                    autoplay: false,
+                                                    animationData: storiesAnimationData,
+                                                    rendererSettings: { preserveAspectRatio: 'xMidYMid slice' }
+                                                }}
+                                                isPaused={storiesAnimation.isPaused}
+                                                isStopped={storiesAnimation.isStopped}
+                                                eventListeners={storiesAnimation.eventListeners}
+                                                height={32}
+                                                width={32}
+                                            />
+                                        </div>
+                                        <span className="font-medium transition-all duration-300 group-hover:translate-x-1">Historias</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -284,14 +423,8 @@ const Sidebar = ({
                                     setShowProfileModal(true);
                                     handleCloseMenu();
                                 }}
-                                onMouseEnter={() => {
-                                    setProfileStopped(true);
-                                    setTimeout(() => {
-                                        setProfileStopped(false);
-                                        setProfilePaused(false);
-                                    }, 10);
-                                }}
-                                onMouseLeave={() => setProfilePaused(true)}
+                                onMouseEnter={menuProfileAnimation.onMouseEnter}
+                                onMouseLeave={menuProfileAnimation.onMouseLeave}
                             >
                                 <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                                     {avatarUrl ? (
@@ -303,7 +436,7 @@ const Sidebar = ({
                                             />
                                         </div>
                                     ) : (
-                                        <Lottie options={lottieOptions.profile} isPaused={isProfilePaused} isStopped={isProfileStopped} />
+                                        <Lottie options={lottieOptions.profile} isPaused={menuProfileAnimation.isPaused} isStopped={menuProfileAnimation.isStopped} eventListeners={menuProfileAnimation.eventListeners} />
                                     )}
                                 </div>
                                 <span className="font-medium transition-all duration-300 group-hover:translate-x-1 theme-text-primary">Perfil</span>
@@ -321,14 +454,8 @@ const Sidebar = ({
                                 }}
                             >
                                 <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                                    onMouseEnter={() => {
-                                        setPersonalizationStopped(true);
-                                        setTimeout(() => {
-                                            setPersonalizationStopped(false);
-                                            setPersonalizationPaused(false);
-                                        }, 10);
-                                    }}
-                                    onMouseLeave={() => setPersonalizationPaused(true)}
+                                    onMouseEnter={menuPersonalizationAnimation.onMouseEnter}
+                                    onMouseLeave={menuPersonalizationAnimation.onMouseLeave}
                                 >
                                     <Lottie
                                         options={{
@@ -339,8 +466,9 @@ const Sidebar = ({
                                                 preserveAspectRatio: 'xMidYMid slice'
                                             }
                                         }}
-                                        isPaused={isPersonalizationPaused}
-                                        isStopped={isPersonalizationStopped}
+                                        isPaused={menuPersonalizationAnimation.isPaused}
+                                        isStopped={menuPersonalizationAnimation.isStopped}
+                                        eventListeners={menuPersonalizationAnimation.eventListeners}
                                         height={32}
                                         width={32}
                                     />
@@ -356,13 +484,6 @@ const Sidebar = ({
                                 onClick={() => { 
                                     setShowConfigModal(true); 
                                     handleCloseMenu(); 
-                                }}
-                                onMouseEnter={() => {
-                                    setConfigStopped(true);
-                                    setTimeout(() => {
-                                        setConfigStopped(false);
-                                        setConfigPaused(false);
-                                    }, 10);
                                 }}
                                 onMouseLeave={() => setConfigPaused(true)}
                             >

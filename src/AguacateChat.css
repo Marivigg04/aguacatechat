@@ -31,7 +31,7 @@ body {
     --bg-chat: #f1f5f9; /* Fondo de inputs y elementos interactivos */
     --bg-contacts: #ffffff;
     --text-primary: #0f172a; /* Texto principal (casi negro) */
-    --text-secondary: # ; /* Verde esmeralda oscuro para texto secundario */
+  --text-secondary: #0ea5a3; /* Teal medio en light mode para acentos */
     --border-color: #e2e8f0; /* Borde muy sutil */
     --accent-gradient: linear-gradient(135deg, #10b981, #14b8a6);
 }
