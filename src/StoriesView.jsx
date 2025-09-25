@@ -71,10 +71,20 @@ const StoriesView = () => {
     // Novedad: Se ha descomentado la línea para declarar el estado `viewerOpen`
     const [viewerOpen, setViewerOpen] = useState(false);
     const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
+    const [viewedStoryIds, setViewedStoryIds] = useState(new Set());
 
-    const openViewer = (index) => {
-        setSelectedStoryIndex(index);
-        setViewerOpen(true);
+    const openViewerById = (id) => {
+        const idx = stories.findIndex(s => s.id === id);
+        if (idx >= 0) {
+            setSelectedStoryIndex(idx);
+            setViewerOpen(true);
+            // Marcar como visto
+            setViewedStoryIds(prev => {
+                const next = new Set(prev);
+                next.add(id);
+                return next;
+            });
+        }
     };
 
     const closeViewer = () => {
@@ -85,25 +95,50 @@ const StoriesView = () => {
         // Aquí puedes manejar la lógica de subida del archivo
     };
 
+    // Derivar listas: no vistos y vistos
+    const unseenStories = stories.filter(s => !viewedStoryIds.has(s.id));
+    const seenStories = stories.filter(s => viewedStoryIds.has(s.id));
+
     return (
         <div className="flex-1 overflow-y-auto p-2">
-            <div className="px-1 pb-2">
-                <h3 className="text-xs font-semibold theme-text-secondary uppercase tracking-wider">RECIENTE</h3>
+            <div className="px-1 pt-1 pb-2 theme-border border-b">
+                <h1 className="text-xl md:text-2xl font-bold theme-text-primary">Historias</h1>
+            </div>
+            <div className="mt-2 md:mt-3 px-1 pt-2 pb-2">
+                <h3 className="text-sm md:text-base font-semibold theme-text-secondary uppercase tracking-wider">RECIENTES</h3>
             </div>
             
             <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
                 {/* Cuadro para añadir mi estado */}
                 <UploadStoryCard onFileSelect={handleFileSelect} />
 
-                {/* Mapeo de las historias de los contactos */}
-                {stories.map((story, index) => (
-                    <StoryItem 
-                        key={story.id} 
-                        {...story} 
-                        onClick={() => openViewer(index)}
+                {/* Mapeo de historias no vistas */}
+                {unseenStories.map((story) => (
+                    <StoryItem
+                        key={story.id}
+                        {...story}
+                        onClick={() => openViewerById(story.id)}
                     />
                 ))}
             </div>
+
+            {/* Sección de historias ya vistas */}
+            {seenStories.length > 0 && (
+                <>
+                    <div className="mt-4 md:mt-6 px-1 pt-2 pb-2">
+                        <h3 className="text-sm md:text-base font-semibold theme-text-secondary uppercase tracking-wider">VISTOS</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
+                        {seenStories.map((story) => (
+                            <StoryItem
+                                key={story.id}
+                                {...story}
+                                onClick={() => openViewerById(story.id)}
+                            />
+                        ))}
+                    </div>
+                </>
+            )}
 
             {/* Renderizado del modal visor */}
             {viewerOpen && (
