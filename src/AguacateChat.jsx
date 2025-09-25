@@ -1,5 +1,8 @@
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import SidebarSkeleton from './components/SidebarSkeleton';
+import ChatAreaSkeleton from './components/ChatAreaSkeleton';
+import LeftToolbarSkeleton from './components/LeftToolbarSkeleton';
 import imageCompression from 'browser-image-compression';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
@@ -1575,6 +1578,17 @@ const AguacateChat = () => {
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }, [messageMenuOpenId]);
+
+    // Mostrar esqueleto mientras cargan las conversaciones
+    if (loadingConversations) {
+        return (
+            <div className="flex h-screen overflow-hidden theme-bg-primary theme-text-primary">
+                <LeftToolbarSkeleton />
+                <SidebarSkeleton />
+                <ChatAreaSkeleton />
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-screen overflow-hidden">
