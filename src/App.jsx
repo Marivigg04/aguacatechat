@@ -1,16 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import { useRef } from 'react';
+// React hooks y utilidades en una sola importación
 import './Login/styles/AuthPage.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
-const AguacateChat = lazy(() => import('./AguacateChat'));
-const AuthPage = lazy(() => import('./Login/pages/AuthPage.jsx'));
-const PasswordReset = lazy(() => import('./Login/components/PasswordReset/PasswordReset.jsx'));
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import LoadingScreen from './components/LoadingScreen.jsx';
+import ChatSkeleton from './components/ChatSkeleton.jsx';
+import { withMinDelay } from './utils/withMinDelay.js';
+const AguacateChat = lazy(() => withMinDelay(import('./AguacateChat')));
+const AuthPage = lazy(() => withMinDelay(import('./Login/pages/AuthPage.jsx')));
+const PasswordReset = lazy(() => withMinDelay(import('./Login/components/PasswordReset/PasswordReset.jsx')));
 import { useAuth } from './context/AuthContext.jsx';
 
 function App() {
   // Autenticación derivada del contexto global
   const { isAuthenticated, loading } = useAuth();
+  // Forzar que la pantalla de carga de auth dure al menos 600ms
+  const [authDelayDone, setAuthDelayDone] = useState(false);
+  useEffect(() => {
+    setAuthDelayDone(false);
+    const t = setTimeout(() => setAuthDelayDone(true), 600);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   // Navegación entre login y password reset
   const [showPasswordReset, setShowPasswordReset] = useState(false);
@@ -38,17 +47,11 @@ function App() {
   };
 
   // While loading auth state (e.g., after refresh), avoid routing redirects.
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-        <span>Cargando…</span>
-      </div>
-    );
-  }
+  if (loading || !authDelayDone) return <LoadingScreen message="Verificando sesión…" />;
 
   return (
     <Router>
-      <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Cargando…</div>}>
+  <Suspense fallback={<LoadingScreen message="Cargando interfaz…" /> }>
       <Routes>
         <Route path="/login" element={
           isAuthenticated ? (
@@ -64,11 +67,20 @@ function App() {
           )
         } />
   <Route path="/password-reset" element={<PasswordReset onNavigateToAuth={handleNavigateToLogin} />} />
-        <Route path="/chat" element={isAuthenticated ? (
-          <div style={{ height: '100vh', width: '100vw', margin: 0, padding: 0 }}>
-            <AguacateChat />
-          </div>
-        ) : <Navigate to="/login" />} />
+        <Route
+          path="/chat"
+          element={
+            isAuthenticated ? (
+              <div style={{ height: '100vh', width: '100vw', margin: 0, padding: 0 }}>
+                <Suspense fallback={<ChatSkeleton /> }>
+                  <AguacateChat />
+                </Suspense>
+              </div>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/chat" : "/login"} />} />
       </Routes>
       </Suspense>
