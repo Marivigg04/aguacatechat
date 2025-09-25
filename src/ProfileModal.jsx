@@ -143,6 +143,13 @@ const ProfileModal = ({
         fetchProfileInfo();
     }, [user?.id, showProfileModal]);
 
+    // Estado local para mostrar el nombre en el modal
+    const [profileName, setProfileName] = useState(myProfile.name);
+
+    React.useEffect(() => {
+        setProfileName(myProfile.name);
+    }, [myProfile.name]);
+
     // Renderizar solo si el modal debe mostrarse o está cerrándose
     if (!showProfileModal && !isClosing) {
         return null;
@@ -336,7 +343,7 @@ const ProfileModal = ({
                             <div className={`transition-all duration-300 w-full`}>
                                 {!isEditingName ? (
                                     <div className="flex items-center gap-4 justify-center">
-                                        <span className="font-semibold theme-text-primary text-3xl">{myProfile.name}</span>
+                                        <span className="font-semibold theme-text-primary text-3xl">{profileName}</span>
                                         <div
                                             className="w-7 h-7"
                                             onClick={() => {
@@ -365,7 +372,10 @@ const ProfileModal = ({
                                         onSubmit={e => {
                                             e.preventDefault();
                                             if (newProfileName.trim()) {
-                                                myProfile.name = newProfileName.trim();
+                                                // Solo letras y espacios, máximo 40 caracteres
+                                                const soloLetrasEspacios = newProfileName.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '').slice(0, 40);
+                                                setProfileName(soloLetrasEspacios);
+                                                myProfile.name = soloLetrasEspacios;
                                                 setIsEditingName(false);
                                             }
                                         }}
@@ -375,26 +385,34 @@ const ProfileModal = ({
                                             type="text"
                                             className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
                                             value={newProfileName}
-                                            onChange={e => setNewProfileName(e.target.value)}
+                                            onChange={e => {
+                                                const soloLetrasEspacios = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '');
+                                                setNewProfileName(soloLetrasEspacios.slice(0, 40));
+                                            }}
                                             onBlur={() => {
                                                 if (newProfileName.trim()) {
-                                                    myProfile.name = newProfileName.trim();
+                                                    const soloLetrasEspacios = newProfileName.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '').slice(0, 40);
+                                                    setProfileName(soloLetrasEspacios);
+                                                    myProfile.name = soloLetrasEspacios;
                                                 }
                                                 setIsEditingName(false);
                                             }}
                                             onKeyDown={e => {
                                                 if (e.key === 'Enter') {
                                                     if (newProfileName.trim()) {
-                                                        myProfile.name = newProfileName.trim();
+                                                        const soloLetrasEspacios = newProfileName.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '').slice(0, 40);
+                                                        setProfileName(soloLetrasEspacios);
+                                                        myProfile.name = soloLetrasEspacios;
                                                     }
                                                     setIsEditingName(false);
                                                 }
                                                 if (e.key === 'Escape') {
-                                                    setNewProfileName(myProfile.name);
+                                                    setNewProfileName(profileName);
                                                     setIsEditingName(false);
                                                 }
                                             }}
                                             autoFocus
+                                            maxLength={40}
                                         />
                                         <div className="flex gap-2 mt-1">
                                             <button
@@ -408,7 +426,7 @@ const ProfileModal = ({
                                                 type="button"
                                                 className="p-1 rounded-lg theme-bg-chat theme-text-primary theme-border border"
                                                 onClick={() => {
-                                                    setNewProfileName(myProfile.name);
+                                                    setNewProfileName(profileName);
                                                     setIsEditingName(false);
                                                 }}
                                                 title="Cancelar"
@@ -597,14 +615,32 @@ const ProfileModal = ({
                     <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
                         <div className="p-4 theme-border border-b flex items-center justify-between">
                             <h3 className="text-lg font-bold theme-text-primary">Cambiar contraseña</h3>
-                            <button onClick={() => setShowEditPasswordModal(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity">
-                                ✕
+                            <button
+                                onClick={() => setShowEditPasswordModal(false)}
+                                className={`
+                                    ml-4 p-2 rounded-full
+                                    transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
+                                    theme-bg-chat
+                                `}
+                                title="Cerrar modal"
+                                style={{ zIndex: 10 }}
+                            >
+                                <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                             </button>
                         </div>
                         <form
                             className="flex flex-col gap-3 p-4"
                             onSubmit={e => {
                                 e.preventDefault();
+                                if (
+                                    newPassword.length < 8 ||
+                                    newPassword.length > 32 ||
+                                    confirmPassword.length < 8 ||
+                                    confirmPassword.length > 32
+                                ) {
+                                    alert('La contraseña debe tener entre 8 y 32 caracteres');
+                                    return;
+                                }
                                 if (newPassword && newPassword === confirmPassword) {
                                     alert('Contraseña cambiada correctamente');
                                     setCurrentPassword('');
@@ -622,8 +658,13 @@ const ProfileModal = ({
                                     placeholder="Contraseña actual"
                                     className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
                                     value={currentPassword}
-                                    onChange={e => setCurrentPassword(e.target.value)}
+                                    onChange={e => {
+                                        // Solo se muestran los primeros 12 caracteres aunque se escriban más
+                                        setCurrentPassword(e.target.value.slice(0, 32));
+                                    }}
                                     required
+                                    minLength={8}
+                                    maxLength={32}
                                 />
                                 <button
                                     type="button"
@@ -641,8 +682,12 @@ const ProfileModal = ({
                                     placeholder="Nueva contraseña"
                                     className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
                                     value={newPassword}
-                                    onChange={e => setNewPassword(e.target.value)}
+                                    onChange={e => {
+                                        setNewPassword(e.target.value.slice(0, 32));
+                                    }}
                                     required
+                                    minLength={8}
+                                    maxLength={32}
                                 />
                                 <button
                                     type="button"
@@ -660,8 +705,12 @@ const ProfileModal = ({
                                     placeholder="Confirmar nueva contraseña"
                                     className="p-2 pr-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none w-full"
                                     value={confirmPassword}
-                                    onChange={e => setConfirmPassword(e.target.value)}
+                                    onChange={e => {
+                                        setConfirmPassword(e.target.value.slice(0, 32));
+                                    }}
                                     required
+                                    minLength={8}
+                                    maxLength={32}
                                 />
                                 <button
                                     type="button"
