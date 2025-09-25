@@ -35,6 +35,9 @@ import pin from './animations/Pin.json';
 import callSilent from './animations/Call_silent.json';
 import information from './animations/information.json';
 import animationMic from './animations/wired-outline-188-microphone-recording-morph-button.json';
+import wiredPlusCircle from './animations/wired-outline-49-plus-circle-hover-rotation.json';
+import individualIcon from './animations/Individual.json';
+import teamIcon from './animations/Team.json';
 
 // Funciones para manejar cookies
 const getCookie = (name) => {
@@ -51,6 +54,36 @@ const setCookie = (name, value, days = 365) => {
 };
 
 const AguacateChat = () => {
+    // Estado para animación del icono de Nuevo Grupo
+    const [isTeamStopped, setTeamStopped] = useState(true);
+    const teamOptions = {
+        loop: false,
+        autoplay: false,
+        animationData: teamIcon,
+        rendererSettings: {
+            preserveAspectRatio: 'xMidYMid slice'
+        }
+    };
+    // Estado para animación del icono de Nuevo Chat
+    const [isIndividualStopped, setIndividualStopped] = useState(true);
+    const individualOptions = {
+        loop: false,
+        autoplay: false,
+        animationData: individualIcon,
+        rendererSettings: {
+            preserveAspectRatio: 'xMidYMid slice'
+        }
+    };
+    // Estado para animación del botón +
+    const [isPlusStopped, setPlusStopped] = useState(true);
+    const plusOptions = {
+        loop: false,
+        autoplay: false,
+        animationData: wiredPlusCircle,
+        rendererSettings: {
+            preserveAspectRatio: 'xMidYMid slice'
+        }
+    };
     // Estado para modo de selección de mensajes a fijar
     const [pinMode, setPinMode] = useState(false);
     const [selectedMessagesToPin, setSelectedMessagesToPin] = useState([]);
@@ -1660,16 +1693,49 @@ const AguacateChat = () => {
                             <button
                                 id="newChatBtn"
                                 onClick={toggleNewChatMenu}
-                                className="w-14 h-14 rounded-full bg-gradient-to-r from-teal-primary to-teal-secondary text-white text-2xl font-bold hover:opacity-90 transition-all duration-300 shadow-2xl transform hover:scale-105"
+                                className={`w-14 h-14 rounded-full shadow-xl hover:shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-105 border-2 ${isDarkMode ? 'bg-[#1a2c3a] border-[#334155]' : 'bg-white border-[#e2e8f0]'} ${!isPlusStopped ? (isDarkMode ? 'bg-[#14b8a6]/80' : 'bg-[#a7f3d0]') : ''}`}
+                                onMouseEnter={() => setPlusStopped(false)}
+                                onMouseLeave={() => setPlusStopped(true)}
+                                aria-label="Nuevo chat"
+                                style={{ boxShadow: isDarkMode ? '0 6px 24px 0 rgba(20,184,166,0.25), 0 1.5px 6px 0 rgba(0,0,0,0.18)' : '0 6px 24px 0 rgba(20,184,166,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' }}
                             >
-                                +
+                                <Lottie
+                                    options={plusOptions}
+                                    isStopped={isPlusStopped}
+                                    height={44}
+                                    width={44}
+                                />
                             </button>
                             <div id="newChatMenu" className={`absolute right-0 bottom-16 w-48 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showNewChatMenu ? '' : 'hidden'}`}>
                                 <button onClick={createNewChat} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors">
-                                    💬 Nuevo Chat
+                                    <span
+                                        onMouseEnter={() => setIndividualStopped(false)}
+                                        onMouseLeave={() => setIndividualStopped(true)}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                                    >
+                                        <Lottie
+                                            options={individualOptions}
+                                            isStopped={isIndividualStopped}
+                                            height={28}
+                                            width={28}
+                                        />
+                                        <span>Nuevo Chat</span>
+                                    </span>
                                 </button>
                                 <button onClick={createNewGroup} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors">
-                                    👥 Nuevo Grupo
+                                    <span
+                                        onMouseEnter={() => setTeamStopped(false)}
+                                        onMouseLeave={() => setTeamStopped(true)}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                                    >
+                                        <Lottie
+                                            options={teamOptions}
+                                            isStopped={isTeamStopped}
+                                            height={28}
+                                            width={28}
+                                        />
+                                        <span>Nuevo Grupo</span>
+                                    </span>
                                 </button>
                             </div>
                         </div>
