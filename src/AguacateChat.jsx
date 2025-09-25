@@ -1,5 +1,8 @@
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import SidebarSkeleton from './components/SidebarSkeleton';
+import ChatAreaSkeleton from './components/ChatAreaSkeleton';
+import LeftToolbarSkeleton from './components/LeftToolbarSkeleton';
 import imageCompression from 'browser-image-compression';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
@@ -243,6 +246,13 @@ const AguacateChat = () => {
     // Lista real de conversaciones del usuario
     const [conversations, setConversations] = useState([]);
     const [loadingConversations, setLoadingConversations] = useState(true);
+    // Control de salida suave del skeleton (fade-out antes de desmontar)
+    const [showLoadingSkeleton, setShowLoadingSkeleton] = useState(true);
+    const [skeletonExiting, setSkeletonExiting] = useState(false);
+    // Skeleton específico del área de chat al cambiar de conversación
+    const [loadingChatArea, setLoadingChatArea] = useState(false);
+    const [showChatSkeleton, setShowChatSkeleton] = useState(false);
+    const [chatSkeletonExiting, setChatSkeletonExiting] = useState(false);
     // Cache de duraciones para previsualización de audios (por id de mensaje)
     const [audioPreviewDurations, setAudioPreviewDurations] = useState({});
 
@@ -930,6 +940,10 @@ const AguacateChat = () => {
     };
 
     const selectContact = async (contact) => {
+        // Mostrar skeleton de chat durante el cambio de conversación
+        setLoadingChatArea(true);
+        setShowChatSkeleton(true);
+        setChatSkeletonExiting(false);
         setSelectedContact(contact);
         // Reset paginación
         setChatMessages([]);
@@ -954,6 +968,7 @@ const AguacateChat = () => {
                 setChatMessages(mapped);
                 setHasMoreOlder(hasMore);
                 setOldestCursor(nextCursor);
+                setLoadingChatArea(false);
                 // Intentar marcar como visto lo que ya esté en pantalla
                 setTimeout(() => { tryMarkVisibleAsSeen(); }, 0);
             }
@@ -962,6 +977,7 @@ const AguacateChat = () => {
             setChatMessages([]);
             setHasMoreOlder(false);
             setOldestCursor(null);
+            setLoadingChatArea(false);
         }
         if (window.innerWidth < 768) {
             setIsSidebarOpen(false);
@@ -1576,6 +1592,42 @@ const AguacateChat = () => {
       };
     }, [messageMenuOpenId]);
 
+    // Sincronizar el estado del skeleton para permitir animación de salida
+    useEffect(() => {
+        if (!loadingConversations && showLoadingSkeleton && !skeletonExiting) {
+            // Empezar animación de salida y desmontar luego de ~360ms
+            setSkeletonExiting(true);
+            const t = setTimeout(() => {
+                setShowLoadingSkeleton(false);
+                setSkeletonExiting(false);
+            }, 380);
+            return () => clearTimeout(t);
+        }
+        // Mientras esté cargando, aseguramos que el skeleton esté visible
+        if (loadingConversations && !showLoadingSkeleton) {
+            setShowLoadingSkeleton(true);
+            setSkeletonExiting(false);
+        }
+    }, [loadingConversations]);
+
+    // Sincronizar salida del skeleton de área de chat
+    useEffect(() => {
+        if (!loadingChatArea && showChatSkeleton && !chatSkeletonExiting) {
+            setChatSkeletonExiting(true);
+            const t = setTimeout(() => {
+                setShowChatSkeleton(false);
+                setChatSkeletonExiting(false);
+            }, 240);
+            return () => clearTimeout(t);
+        }
+        if (loadingChatArea && !showChatSkeleton) {
+            setShowChatSkeleton(true);
+            setChatSkeletonExiting(false);
+        }
+    }, [loadingChatArea]);
+
+    // Nota: en vez de hacer early return, mostraremos un overlay mientras carga para permitir el fade-out sobre el contenido ya montado.
+
     return (
         <div className="flex h-screen overflow-hidden">
             {/* Componente para mostrar las notificaciones */}
@@ -1758,7 +1810,7 @@ const AguacateChat = () => {
             )}
 
             {/* Área principal del chat */}
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col relative">
                 {/* Header del área principal: solo cuando hay chat seleccionado */}
                 {selectedContact && (
                     <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
@@ -2363,6 +2415,12 @@ const AguacateChat = () => {
                     </div>
                 </div>
                 )}
+                {/* Overlay del skeleton del área de chat al cambiar de conversación */}
+                {showChatSkeleton && (
+                    <div className={`absolute inset-0 z-40 theme-bg-secondary ${chatSkeletonExiting ? 'anim-fade-out-fast' : ''}`}>
+                        <ChatAreaSkeleton />
+                    </div>
+                )}
             </div>
 
             {/* Modal de selección de contactos */}
@@ -2593,6 +2651,16 @@ const AguacateChat = () => {
                     >
                         Cerrar
                     </button>
+                </div>
+            )}
+            {/* Overlay de skeleton a pantalla completa mientras cargan conversaciones */}
+            {showLoadingSkeleton && (
+                <div className={`fixed inset-0 z-[60] theme-bg-primary theme-text-primary ${skeletonExiting ? 'anim-fade-out' : 'anim-fade-in'}`}>
+                    <div className="flex h-full overflow-hidden">
+                        <LeftToolbarSkeleton />
+                        <SidebarSkeleton />
+                        <ChatAreaSkeleton />
+                    </div>
                 </div>
             )}
         </div>

@@ -9,6 +9,10 @@ import { supabase } from '../../services/supabaseClient';
 const RegisterForm = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [showEmailError, setShowEmailError] = useState(false);
+  const [animateEmailError, setAnimateEmailError] = useState(false);
+  const emailErrorTimeoutRef = useRef(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -248,6 +252,22 @@ const RegisterForm = () => {
     }
   }, [passwordMatchError, confirmPassword.length]);
 
+  // Animación del mensaje de error de email
+  useEffect(() => {
+    if (showEmailError) {
+      if (emailErrorTimeoutRef.current) clearTimeout(emailErrorTimeoutRef.current);
+      setAnimateEmailError(true);
+    } else {
+      if (emailErrorTimeoutRef.current) clearTimeout(emailErrorTimeoutRef.current);
+      emailErrorTimeoutRef.current = setTimeout(() => {
+        setAnimateEmailError(false);
+      }, 300);
+    }
+    return () => {
+      if (emailErrorTimeoutRef.current) clearTimeout(emailErrorTimeoutRef.current);
+    };
+  }, [showEmailError]);
+
   return (
     <form className="auth-form register-form" onSubmit={handleSubmit}>
       <div className="register-lottie-icon">
@@ -255,21 +275,25 @@ const RegisterForm = () => {
           options={defaultRegisterOptions}
           height={70}
           width={70}
-          // ¡Eliminadas estas líneas! No son necesarias si loop y autoplay son true
-          // isStopped={false}
-          // isPaused={false}
         />
       </div>
 
       <h2>Registrarse</h2>
-      <label htmlFor="register-fullname">Nombre completo</label>
+      <label htmlFor="register-fullname">Nombre y Apellido completo</label>
       <input
         type="text"
         id="register-fullname"
-        placeholder="Tu nombre"
+        placeholder="Tu nombre y apellido"
         value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
+        onChange={(e) => {
+          const value = e.target.value;
+          // Solo letras y espacios, máximo 40
+          if (/^[A-Za-zÁÉÍÓÚáéíóúÑñ ]*$/.test(value) && value.length <= 40) {
+            setFullName(value);
+          }
+        }}
         required
+        maxLength={40}
       />
 
       <label htmlFor="register-email">Correo electrónico</label>
@@ -278,8 +302,23 @@ const RegisterForm = () => {
         id="register-email"
         placeholder="usuario@correo.com"
         value={email}
-        onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value;
+            // Solo letras, números, punto y arroba
+            if (/^[A-Za-z0-9.@]*$/.test(value) && value.length <= 50) {
+              setEmail(value);
+              // Validar que tenga al menos un punto
+              if (value && !value.includes('.')) {
+                setEmailError('El correo debe contener al menos un punto (.)');
+                setShowEmailError(true);
+              } else {
+                setEmailError('');
+                setShowEmailError(false);
+              }
+            }
+          }}
         required
+        maxLength={50}
       />
 
       <label htmlFor="register-password">Contraseña</label>
@@ -289,10 +328,14 @@ const RegisterForm = () => {
           id="register-password"
           placeholder="********"
           value={password}
-          onChange={handlePasswordChange}
+          onChange={(e) => {
+            if (e.target.value.length <= 32) handlePasswordChange(e);
+          }}
           onFocus={handlePasswordFocus}
           onBlur={handlePasswordBlur}
           required
+          minLength={8}
+          maxLength={32}
           className={`password-input ${currentStrengthInfo.level !== 'none' ? `password-strength-border-${currentStrengthInfo.level}` : ''}`}
         />
         <span className="password-toggle-icon" onClick={toggleShowPassword}>
@@ -318,8 +361,12 @@ const RegisterForm = () => {
           id="register-confirm-password"
           placeholder="********"
           value={confirmPassword}
-          onChange={handleConfirmPasswordChange}
+          onChange={(e) => {
+            if (e.target.value.length <= 32) handleConfirmPasswordChange(e);
+          }}
           required
+          minLength={8}
+          maxLength={32}
         />
         <span
           className={`password-toggle-icon ${showCheckmark ? 'hidden' : ''}`}
