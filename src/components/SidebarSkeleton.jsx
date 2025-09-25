@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function SidebarSkeleton() {
   return (
-    <aside className="w-80 theme-border border-r p-3 flex flex-col theme-bg-secondary h-full">
+    <aside className="w-80 theme-border border-r p-3 flex flex-col theme-bg-secondary h-full anim-slide-right">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="h-6 w-24 rounded animate-pulse theme-bg-chat" />

@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function ChatAreaSkeleton() {
   return (
-    <main className="flex-1 flex flex-col theme-bg-secondary h-full">
+    <main className="flex-1 flex flex-col theme-bg-secondary h-full anim-slide-up">
       {/* Top bar */}
       <div className="h-14 theme-border border-b px-4 flex items-center gap-3">
         <div className="h-9 w-9 rounded-full theme-bg-chat animate-pulse" />

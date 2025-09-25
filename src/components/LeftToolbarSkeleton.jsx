@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function LeftToolbarSkeleton() {
   return (
-    <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r flex flex-col items-center">
+    <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r flex flex-col items-center anim-slide-right">
       {/* Botón menú */}
       <div className="flex flex-col items-center pt-6">
         <div className="p-2 rounded-lg theme-bg-chat animate-pulse w-10 h-10" />
