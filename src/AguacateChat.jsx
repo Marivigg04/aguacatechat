@@ -1617,7 +1617,7 @@ const AguacateChat = () => {
             const t = setTimeout(() => {
                 setShowChatSkeleton(false);
                 setChatSkeletonExiting(false);
-            }, 380);
+            }, 240);
             return () => clearTimeout(t);
         }
         if (loadingChatArea && !showChatSkeleton) {
@@ -2416,8 +2416,8 @@ const AguacateChat = () => {
                 </div>
                 )}
                 {/* Overlay del skeleton del área de chat al cambiar de conversación */}
-                {selectedContact && showChatSkeleton && (
-                    <div className={`absolute inset-0 z-40 ${chatSkeletonExiting ? 'anim-fade-out' : 'anim-fade-in'}`}>
+                {showChatSkeleton && (
+                    <div className={`absolute inset-0 z-40 theme-bg-secondary ${chatSkeletonExiting ? 'anim-fade-out-fast' : ''}`}>
                         <ChatAreaSkeleton />
                     </div>
                 )}

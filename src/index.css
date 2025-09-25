@@ -51,6 +51,12 @@ html, body, #root {
   to { opacity: 0; transform: translateY(4px) }
 }
 .anim-fade-out { animation: fadeOut 360ms ease-out forwards; will-change: opacity, transform }
+/* Versión más rápida para overlays breves */
+@keyframes fadeOutFast {
+  from { opacity: 1; transform: translateY(0) }
+  to { opacity: 0; transform: translateY(2px) }
+}
+.anim-fade-out-fast { animation: fadeOutFast 220ms ease-out forwards; will-change: opacity, transform }
 
 /* Pequeños retrasos para escalonar elementos */
 .anim-delay-1 { animation-delay: 60ms }
