@@ -59,6 +59,9 @@ const setCookie = (name, value, days = 365) => {
 const AguacateChat = () => {
     // Estado para animación del icono de Nuevo Grupo
     const [isTeamStopped, setTeamStopped] = useState(true);
+    // --- Configuración de Video (Fase 1) ---
+    const MAX_VIDEO_MB = 50; // Límite de tamaño aceptado para videos
+    const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
     const teamOptions = {
         loop: false,
         autoplay: false,
@@ -127,6 +130,18 @@ const AguacateChat = () => {
     });
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
     const [currentView, setCurrentView] = useState('chats'); // 'chats' o 'stories'
+
+    // Cambiar vista y, si se pasa a historias, deseleccionar el chat y cerrar menús relacionados
+    const handleViewChange = (view) => {
+        setCurrentView(view);
+        if (view === 'stories') {
+            // Deseleccionar chat activo y limpiar menús contextuales
+            setSelectedContact(null);
+            setShowChatOptionsMenu(false);
+            setShowAttachMenu(false);
+            setShowNewChatMenu(false);
+        }
+    };
 
     // Grabación de audio (MediaRecorder)
     const [isRecording, setIsRecording] = useState(false);
@@ -677,12 +692,17 @@ const AguacateChat = () => {
                             if (!Array.isArray(prev) || prev.length === 0) return prev;
                             const updated = prev.map((c) => {
                                 if (c.conversationId === m.conversation_id) {
+                                    const t = m.type || 'text';
+                                    let label = m.content;
+                                    if (t === 'image') label = 'Foto';
+                                    else if (t === 'audio') label = 'Audio';
+                                    else if (t === 'video') label = 'Video';
                                     return {
                                         ...c,
-                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: m.type || 'text' },
+                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t },
                                         last_message_at: m.created_at,
-                                        lastMessage: (m.type || 'text') === 'image' ? 'Foto' : m.content,
-                                        lastMessageType: m.type || 'text',
+                                        lastMessage: label,
+                                        lastMessageType: t,
                                     };
                                 }
                                 return c;
@@ -957,14 +977,19 @@ const AguacateChat = () => {
         try {
             if (contact?.conversationId) {
                 const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE });
-                const mapped = messages.map(m => ({
-                    id: m.id,
-                    type: m.sender_id === user?.id ? 'sent' : 'received',
-                    ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
-                    created_at: m.created_at,
-                    messageType: m.type || 'text',
-                    seen: Array.isArray(m.seen) ? m.seen : [],
-                }));
+                const mapped = messages.map(m => {
+                    const base = {
+                        id: m.id,
+                        type: m.sender_id === user?.id ? 'sent' : 'received',
+                        created_at: m.created_at,
+                        messageType: m.type || 'text',
+                        seen: Array.isArray(m.seen) ? m.seen : [],
+                    };
+                    if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
+                    if (m.type === 'video') return { ...base, text: m.content }; // video usa text como src
+                    if (m.type === 'image') return { ...base, text: m.content };
+                    return { ...base, text: m.content };
+                });
                 setChatMessages(mapped);
                 setHasMoreOlder(hasMore);
                 setOldestCursor(nextCursor);
@@ -993,14 +1018,19 @@ const AguacateChat = () => {
         setLoadingOlder(true);
         try {
             const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, before: oldestCursor });
-            const mapped = messages.map(m => ({
-                id: m.id,
-                type: m.sender_id === user?.id ? 'sent' : 'received',
-                ...(m.type === 'audio' ? { audioUrl: m.content, text: '(Audio)' } : { text: m.content }),
-                created_at: m.created_at,
-                messageType: m.type || 'text',
-                seen: Array.isArray(m.seen) ? m.seen : [],
-            }));
+            const mapped = messages.map(m => {
+                const base = {
+                    id: m.id,
+                    type: m.sender_id === user?.id ? 'sent' : 'received',
+                    created_at: m.created_at,
+                    messageType: m.type || 'text',
+                    seen: Array.isArray(m.seen) ? m.seen : [],
+                };
+                if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
+                if (m.type === 'video') return { ...base, text: m.content };
+                if (m.type === 'image') return { ...base, text: m.content };
+                return { ...base, text: m.content };
+            });
             setChatMessages(prev => [...mapped, ...prev]);
             setHasMoreOlder(hasMore);
             setOldestCursor(nextCursor);
@@ -1176,6 +1206,49 @@ const AguacateChat = () => {
         await sendPhotoFile(selectedPhoto);
         // Si venía del modal de vista previa, ciérralo y limpia selección
         closePhotoPreviewModal();
+    };
+
+    // --- Envío de Video (Fase 1) ---
+    const sendVideoFile = async (file) => {
+        if (!file || !selectedContact?.conversationId) return;
+        if (!user?.id) {
+            toast.error('Debes iniciar sesión para enviar videos');
+            return;
+        }
+        // Validar tipo
+        if (!file.type.startsWith('video/')) {
+            toast.error('El archivo seleccionado no es un video válido');
+            return;
+        }
+        // Validar tamaño
+        if (file.size > MAX_VIDEO_BYTES) {
+            const mb = (file.size / (1024*1024)).toFixed(1);
+            toast.error(`Video demasiado grande (${mb} MB). Máximo ${MAX_VIDEO_MB} MB`);
+            return;
+        }
+        try {
+            const tempId = `tmp-vid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            const localUrl = URL.createObjectURL(file);
+            // Mensaje optimista
+            setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localUrl, created_at: new Date().toISOString(), messageType: 'video', uploading: true }]);
+
+            // Subir al bucket
+            const { uploadVideoToBucket } = await import('./services/db');
+            const { publicUrl } = await uploadVideoToBucket({ file, conversationId: selectedContact.conversationId, userId: user?.id });
+
+            await insertMessage({
+                conversationId: selectedContact.conversationId,
+                senderId: user?.id,
+                content: publicUrl,
+                type: 'video'
+            });
+            // Reemplazar optimista
+            setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, text: publicUrl, uploading: false } : m));
+            toast.success('Video enviado');
+        } catch (err) {
+            console.error('Error enviando video:', err);
+            toast.error('No se pudo enviar el video');
+        }
     };
 
     const closePhotoPreviewModal = () => {
@@ -1650,7 +1723,7 @@ const AguacateChat = () => {
                 isConfigStopped={isConfigStopped}
                 setConfigStopped={setConfigStopped}
                 currentView={currentView}
-                onViewChange={setCurrentView}
+                onViewChange={handleViewChange}
             />
             {/* Sidebar de contactos e Historias */}
             {currentView === 'chats' ? (
@@ -1728,6 +1801,13 @@ const AguacateChat = () => {
                                                                 return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
                                                             })()}
                                                         </span>
+                                                    </>
+                                                ) : contact.lastMessageType === 'video' ? (
+                                                    <>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4 opacity-70">
+                                                            <path d="M17 10.5V6a2 2 0 00-2-2H5C3.895 4 3 4.895 3 6v12c0 1.105.895 2 2 2h10a2 2 0 002-2v-4.5l4 4v-11l-4 4z" />
+                                                        </svg>
+                                                        <span>Video</span>
                                                     </>
                                                 ) : (
                                                     contact.lastMessage
@@ -1934,6 +2014,28 @@ const AguacateChat = () => {
                     id="chatArea"
                     ref={chatAreaRef}
                     className="flex-1 overflow-y-auto p-4 space-y-4 chat-container relative"
+                    // ...existing code...
+
+    style={
+        selectedContact
+            ? (
+                personalization.backgroundType === 'solid'
+                    ? { background: personalization.backgroundColor }
+                    : personalization.backgroundType === 'gradient'
+                        ? { background: 'linear-gradient(135deg, #10b981, #14b8a6)' }
+                        : personalization.backgroundType === 'image' && personalization.backgroundImage
+                            ? { backgroundImage: `url(${personalization.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                            : {}
+            )
+            : (
+                isDarkMode
+                    ? { background: '#0d1a26' } // color original del modo oscuro (theme-bg-primary)
+                    : { background: '#f8fafc' }
+            )
+    }
+    
+// ...existing code...
+                    
                     onScroll={(e) => {
                         const el = e.currentTarget;
                         // stick-to-bottom tracking
@@ -2005,6 +2107,20 @@ const AguacateChat = () => {
                                                         className="rounded-lg cursor-pointer w-64 h-64 object-cover"
                                                         onClick={() => { setIsImageModalEntering(true); setImagePreviewUrl(message.text); setTimeout(() => setIsImageModalEntering(false), 10); }}
                                                     />
+                                                ) : message.messageType === 'video' ? (
+                                                    <div className="w-64 max-h-64 relative">
+                                                        {message.uploading && (
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-white text-xs gap-2 rounded-lg">
+                                                                <span>Subiendo…</span>
+                                                            </div>
+                                                        )}
+                                                        <video
+                                                            src={message.text}
+                                                            controls={!message.uploading}
+                                                            className="rounded-lg w-full max-h-64 object-cover"
+                                                            preload="metadata"
+                                                        />
+                                                    </div>
                                                 ) : (message.messageType === 'audio' || message.audioUrl) ? (
                                                     <AudioPlayer src={message.audioUrl || message.text} className="w-full max-w-xs" variant="compact" />
                                                 ) : (
@@ -2234,9 +2350,27 @@ const AguacateChat = () => {
                                                             };
                                                             doSend();
                                                             setShowAttachMenu(false);
-                                                        } else {
-                                                            // Por ahora solo enviamos fotos automáticamente
-                                                            toast.success(`Video seleccionado: ${m.name}`);
+                                                        } else if (m.type === 'video') {
+                                                            const doSendVideo = async () => {
+                                                                try {
+                                                                    if (m.file instanceof File) {
+                                                                        await sendVideoFile(m.file);
+                                                                    } else if (m.url?.startsWith('blob:')) {
+                                                                        const resp = await fetch(m.url);
+                                                                        const blob = await resp.blob();
+                                                                        const fileName = m.name || `video-${Date.now()}.mp4`;
+                                                                        const mime = blob.type || 'video/mp4';
+                                                                        const file = new File([blob], fileName, { type: mime });
+                                                                        await sendVideoFile(file);
+                                                                    } else {
+                                                                        toast.error('No se pudo acceder al video reciente');
+                                                                    }
+                                                                } catch (err) {
+                                                                    console.error('Fallo enviando video reciente:', err);
+                                                                    toast.error('No se pudo enviar el video');
+                                                                }
+                                                            };
+                                                            doSendVideo();
                                                             setShowAttachMenu(false);
                                                         }
                                                     }}
