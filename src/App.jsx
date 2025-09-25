@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useRef } from 'react';
 import './Login/styles/AuthPage.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import AguacateChat from './AguacateChat';
-import AuthPage from './Login/pages/AuthPage.jsx';
-import PasswordReset from './Login/components/PasswordReset/PasswordReset.jsx';
+import { Suspense, lazy } from 'react';
+const AguacateChat = lazy(() => import('./AguacateChat'));
+const AuthPage = lazy(() => import('./Login/pages/AuthPage.jsx'));
+const PasswordReset = lazy(() => import('./Login/components/PasswordReset/PasswordReset.jsx'));
 import { useAuth } from './context/AuthContext.jsx';
 
 function App() {
@@ -47,6 +48,7 @@ function App() {
 
   return (
     <Router>
+      <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>Cargando…</div>}>
       <Routes>
         <Route path="/login" element={
           isAuthenticated ? (
@@ -61,7 +63,7 @@ function App() {
             </div>
           )
         } />
-        <Route path="/password-reset" element={<PasswordReset onNavigateToAuth={handleNavigateToLogin} />} />
+  <Route path="/password-reset" element={<PasswordReset onNavigateToAuth={handleNavigateToLogin} />} />
         <Route path="/chat" element={isAuthenticated ? (
           <div style={{ height: '100vh', width: '100vw', margin: 0, padding: 0 }}>
             <AguacateChat />
@@ -69,6 +71,7 @@ function App() {
         ) : <Navigate to="/login" />} />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/chat" : "/login"} />} />
       </Routes>
+      </Suspense>
     </Router>
   );
 }
