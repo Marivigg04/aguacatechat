@@ -63,3 +63,25 @@ html, body, #root {
 .anim-delay-2 { animation-delay: 120ms }
 .anim-delay-3 { animation-delay: 180ms }
 .anim-delay-4 { animation-delay: 240ms }
+
+/* Deshabilitar selección de texto globalmente (sin afectar inputs/editables) */
+#root, #root * {
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none; /* iOS: desactiva menú de selección */
+}
+
+/* Opt-in: permitir selección donde se necesita */
+#root input,
+#root textarea,
+#root [contenteditable],
+#root .allow-text-select,
+#root .select-text,
+#root pre,
+#root code {
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
