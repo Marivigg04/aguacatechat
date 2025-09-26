@@ -1163,6 +1163,8 @@ const AguacateChat = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isWindowFocused, chatMessages, selectedContact?.conversationId])
 
+    const messageInputRef = useRef(null);
+
     const sendMessage = async () => {
         const content = messageInput.trim();
         if (!content) return;
@@ -1174,6 +1176,11 @@ const AguacateChat = () => {
     const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text' };
         setChatMessages(prev => [...prev, optimistic]);
         setMessageInput('');
+        // Restablecer altura del textarea al tamaño base
+        if (messageInputRef.current) {
+            messageInputRef.current.style.height = '44px';
+            // Forzar reflow opcional si fuera necesario
+        }
         try {
             await insertMessage({ conversationId: selectedContact.conversationId, senderId: user?.id, content });
         } catch (e) {
@@ -1258,7 +1265,8 @@ const AguacateChat = () => {
         }
     };
 
-    const sendPhoto = async () => {
+    // Enviar la foto actualmente seleccionada desde el modal (antes duplicaba nombre de sendMessage)
+    const sendSelectedPhoto = async () => {
         if (!selectedPhoto) return;
         await sendPhotoFile(selectedPhoto);
         // Si venía del modal de vista previa, ciérralo y limpia selección
@@ -1272,6 +1280,7 @@ const AguacateChat = () => {
             toast.error('Debes iniciar sesión para enviar videos');
             return;
         }
+            messageInputRef.current.style.overflowY = 'hidden';
         // Validar tipo
         if (!file.type.startsWith('video/')) {
             toast.error('El archivo seleccionado no es un video válido');
@@ -2561,7 +2570,7 @@ const AguacateChat = () => {
                                 <Lottie options={lottieOptions.smile} isPaused={isSmilePaused} isStopped={isSmileStopped}/>
                             </div>
                         </button>
-                        <div className="flex-1 relative flex items-end">
+                        <div className="flex-1 relative">
                             {isRecording && (
                                 <div className="absolute -top-12 left-0 right-0 flex items-center justify-between gap-3 px-3 py-2 rounded-xl theme-bg-chat theme-border border">
                                     <div className="flex items-center gap-2">
@@ -2589,60 +2598,67 @@ const AguacateChat = () => {
                                     </div>
                                 </div>
                             )}
-                            <textarea
-                                id="messageInput"
-                                placeholder={selectedContact ? "Escribe un mensaje..." : "Selecciona una conversación para empezar"}
-                                className="w-full px-7 py-4 pr-20 rounded-full theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary resize-none"
-                                style={{
-                                    minHeight: '44px',
-                                    maxHeight: '160px',
-                                    lineHeight: '1.5',
-                                    marginBottom: '2px',
-                                    background: 'var(--bg-chat, #222)',
-                                    overflow: 'hidden'
-                                }}
-                                value={messageInput}
-                                onChange={e => setMessageInput(e.target.value)}
-                                onInput={e => {
-                                    e.target.style.height = '44px';
-                                    e.target.style.height = e.target.scrollHeight + 'px';
-                                }}
-                                onKeyPress={handleKeyPress}
-                                rows={1}
-                                disabled={!selectedContact}
-                            />
-                            {(isRecording || messageInput.trim().length === 0) ? (
-                                <button
-                                    onClick={toggleRecording}
-                                    className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 ${isRecording ? 'bg-red-500' : 'bg-gradient-to-r from-teal-primary to-teal-secondary'} text-white rounded-full hover:opacity-80 transition-opacity`}
-                                    disabled={!selectedContact}
-                                    // Ya no usamos hover para disparar animación; controlado por useEffect ligado a isRecording
-                                    title={isRecording ? (isRecordingPaused ? 'Reanudar grabación' : 'Pausar/Detener grabación') : 'Grabar audio'}
-                                >
-                                    <div className="w-7 h-7">
-                                        <Lottie options={isRecording ? lottieOptions.micRecording : lottieOptions.mic} isPaused={isRecording ? isRecordingPaused : isMicPaused} isStopped={isRecording ? false : isMicStopped}/>
-                                    </div>
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={sendMessage}
-                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity"
-                                    disabled={!selectedContact}
-                                    onMouseEnter={() => {
-                                        setSendStopped(true);
-                                        setTimeout(() => {
-                                            setSendStopped(false);
-                                            setSendPaused(false);
-                                        }, 10);
+                            <div className="flex w-full items-center gap-3">
+                                <textarea
+                                    ref={messageInputRef}
+                                    id="messageInput"
+                                    placeholder={selectedContact ? "Escribe un mensaje..." : "Selecciona una conversación para empezar"}
+                                    className="flex-1 px-7 py-3 rounded-xl theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary resize-none leading-relaxed"
+                                    style={{
+                                        minHeight: '44px',
+                                        maxHeight: '160px',
+                                        lineHeight: '1.5',
+                                        background: 'var(--bg-chat, #222)'
                                     }}
-                                    onMouseLeave={() => setSendPaused(true)}
-                                    title="Enviar mensaje"
-                                >
-                                    <div className="w-7 h-7">
-                                        <Lottie options={lottieOptions.send} isPaused={isSendPaused} isStopped={isSendStopped}/>
-                                    </div>
-                                </button>
-                            )}
+                                    value={messageInput}
+                                    onChange={e => setMessageInput(e.target.value)}
+                                    onInput={e => {
+                                        e.target.style.height = '44px';
+                                        const fullScrollHeight = e.target.scrollHeight;
+                                        const capped = Math.min(fullScrollHeight, 160);
+                                        e.target.style.height = capped + 'px';
+                                        if (fullScrollHeight > 160) {
+                                            e.target.style.overflowY = 'auto';
+                                        } else {
+                                            e.target.style.overflowY = 'hidden';
+                                        }
+                                    }}
+                                    onKeyPress={handleKeyPress}
+                                    rows={1}
+                                    disabled={!selectedContact}
+                                />
+                                {(isRecording || messageInput.trim().length === 0) ? (
+                                    <button
+                                        onClick={toggleRecording}
+                                        className={`p-3 ${isRecording ? 'bg-red-500' : 'bg-gradient-to-r from-teal-primary to-teal-secondary'} text-white rounded-full hover:opacity-80 transition-opacity shrink-0 flex items-center justify-center`}
+                                        disabled={!selectedContact}
+                                        title={isRecording ? (isRecordingPaused ? 'Reanudar grabación' : 'Pausar/Detener grabación') : 'Grabar audio'}
+                                    >
+                                        <div className="w-7 h-7">
+                                            <Lottie options={isRecording ? lottieOptions.micRecording : lottieOptions.mic} isPaused={isRecording ? isRecordingPaused : isMicPaused} isStopped={isRecording ? false : isMicStopped}/>
+                                        </div>
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={sendMessage}
+                                        className="p-3 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity shrink-0 flex items-center justify-center"
+                                        disabled={!selectedContact}
+                                        onMouseEnter={() => {
+                                            setSendStopped(true);
+                                            setTimeout(() => {
+                                                setSendStopped(false);
+                                                setSendPaused(false);
+                                            }, 10);
+                                        }}
+                                        onMouseLeave={() => setSendPaused(true)}
+                                        title="Enviar mensaje"
+                                    >
+                                        <div className="w-7 h-7">
+                                            <Lottie options={lottieOptions.send} isPaused={isSendPaused} isStopped={isSendStopped}/>
+                                        </div>
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2847,7 +2863,7 @@ const AguacateChat = () => {
                                 Cancelar
                             </button>
                             <button
-                                onClick={sendPhoto}
+                                onClick={sendSelectedPhoto}
                                 disabled={isUploadingPhoto}
                                 className={`px-4 py-2 rounded-lg transition-colors text-white ${isUploadingPhoto ? 'bg-blue-400 cursor-wait' : 'bg-blue-500 hover:bg-blue-600'}`}
                             >
