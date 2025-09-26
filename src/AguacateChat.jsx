@@ -7,6 +7,7 @@ import imageCompression from 'browser-image-compression';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
+import VideoThumbnail, { VideoModal } from './VideoPlayer.jsx';
 import AudioPlayer from './AudioPlayer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
 import StoriesView from './StoriesView';
@@ -112,6 +113,8 @@ const AguacateChat = () => {
     const [modalType, setModalType] = useState('chat');
     const [selectedGroupContacts, setSelectedGroupContacts] = useState([]);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
+    // Animación modal de adjuntos
+    const [isAttachClosing, setIsAttachClosing] = useState(false);
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showConfigModal, setShowConfigModal] = useState(false);
@@ -130,6 +133,9 @@ const AguacateChat = () => {
     });
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
     const [currentView, setCurrentView] = useState('chats'); // 'chats' o 'stories'
+    // Modal de video
+    const [videoModalOpen, setVideoModalOpen] = useState(false);
+    const [currentVideoSrc, setCurrentVideoSrc] = useState(null);
 
     // Cambiar vista y, si se pasa a historias, deseleccionar el chat y cerrar menús relacionados
     const handleViewChange = (view) => {
@@ -2030,9 +2036,7 @@ const AguacateChat = () => {
                     id="chatArea"
                     ref={chatAreaRef}
                     className="flex-1 overflow-y-auto p-4 space-y-4 chat-container relative"
-                    // ...existing code...
-
-    style={
+                    style={
         selectedContact
             ? (
                 personalization.backgroundType === 'solid'
@@ -2049,8 +2053,6 @@ const AguacateChat = () => {
                     : { background: '#f8fafc' }
             )
     }
-    
-// ...existing code...
                     
                     onScroll={(e) => {
                         const el = e.currentTarget;
@@ -2124,19 +2126,11 @@ const AguacateChat = () => {
                                                         onClick={() => { setIsImageModalEntering(true); setImagePreviewUrl(message.text); setTimeout(() => setIsImageModalEntering(false), 10); }}
                                                     />
                                                 ) : message.messageType === 'video' ? (
-                                                    <div className="w-64 max-h-64 relative">
-                                                        {message.uploading && (
-                                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 text-white text-xs gap-2 rounded-lg">
-                                                                <span>Subiendo…</span>
-                                                            </div>
-                                                        )}
-                                                        <video
-                                                            src={message.text}
-                                                            controls={!message.uploading}
-                                                            className="rounded-lg w-full max-h-64 object-cover"
-                                                            preload="metadata"
-                                                        />
-                                                    </div>
+                                                    <VideoThumbnail
+                                                        src={message.text}
+                                                        loading={!!message.uploading}
+                                                        onOpen={() => { setCurrentVideoSrc(message.text); setVideoModalOpen(true); }}
+                                                    />
                                                 ) : (message.messageType === 'audio' || message.audioUrl) ? (
                                                     <AudioPlayer src={message.audioUrl || message.text} className="w-full max-w-xs" variant="compact" />
                                                 ) : (
@@ -2284,7 +2278,19 @@ const AguacateChat = () => {
                     <div className="flex items-center gap-3">
                         {/* 4. REEMPLAZO DEL ICONO DE ADJUNTAR */}
                         <button 
-                            onClick={() => setShowAttachMenu(!showAttachMenu)} 
+                            onClick={() => {
+                                if (showAttachMenu) {
+                                    if (!isAttachClosing) {
+                                        setIsAttachClosing(true);
+                                        setTimeout(() => {
+                                            setShowAttachMenu(false);
+                                            setIsAttachClosing(false);
+                                        }, 400);
+                                    }
+                                } else {
+                                    setShowAttachMenu(true);
+                                }
+                            }} 
                             className="p-1 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" 
                             title="Adjuntar archivo"
                             onMouseEnter={() => {
@@ -2300,12 +2306,37 @@ const AguacateChat = () => {
                                 <Lottie options={lottieOptions.link} isPaused={isLinkPaused} isStopped={isLinkStopped}/>
                             </div>
                         </button>
-                        {showAttachMenu && (
-                            <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                                <div className="theme-bg-secondary rounded-2xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl">
+                        {(showAttachMenu || isAttachClosing) && (
+                            <div
+                                className={`fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 ${isAttachClosing ? 'pointer-events-none anim-overlay-fade-out' : 'anim-overlay-fade-in'}`}
+                                onClick={() => {
+                                    if (!isAttachClosing) {
+                                        setIsAttachClosing(true);
+                                        setTimeout(() => {
+                                            setShowAttachMenu(false);
+                                            setIsAttachClosing(false);
+                                        }, 400);
+                                    }
+                                }}
+                            >
+                                <div
+                                    className={`theme-bg-secondary rounded-2xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl modal-transition ${isAttachClosing ? 'anim-slide-out-right opacity-0 scale-90 translate-y-8' : 'anim-slide-in-left opacity-100 scale-100 translate-y-0'}`}
+                                    onClick={e => e.stopPropagation()}
+                                >
                                     <div className="p-5 theme-border border-b flex items-center justify-between">
                                         <h3 className="text-lg md:text-xl font-bold theme-text-primary">Selecciona multimedia</h3>
-                                        <button onClick={() => setShowAttachMenu(false)} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" aria-label="Cerrar modal">
+                                        <button
+                                            onClick={() => {
+                                                if (!isAttachClosing) {
+                                                    setIsAttachClosing(true);
+                                                    setTimeout(() => {
+                                                        setShowAttachMenu(false);
+                                                        setIsAttachClosing(false);
+                                                    }, 400);
+                                                }
+                                            }}
+                                            className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" aria-label="Cerrar modal"
+                                        >
                                             ✕
                                         </button>
                                     </div>
@@ -2365,7 +2396,13 @@ const AguacateChat = () => {
                                                                 }
                                                             };
                                                             doSend();
-                                                            setShowAttachMenu(false);
+                                                            if (!isAttachClosing) {
+                                                                setIsAttachClosing(true);
+                                                                setTimeout(() => {
+                                                                    setShowAttachMenu(false);
+                                                                    setIsAttachClosing(false);
+                                                                }, 400);
+                                                            }
                                                         } else if (m.type === 'video') {
                                                             const doSendVideo = async () => {
                                                                 try {
@@ -2387,7 +2424,13 @@ const AguacateChat = () => {
                                                                 }
                                                             };
                                                             doSendVideo();
-                                                            setShowAttachMenu(false);
+                                                            if (!isAttachClosing) {
+                                                                setIsAttachClosing(true);
+                                                                setTimeout(() => {
+                                                                    setShowAttachMenu(false);
+                                                                    setIsAttachClosing(false);
+                                                                }, 400);
+                                                            }
                                                         }
                                                     }}
                                                 >
@@ -2446,6 +2489,7 @@ const AguacateChat = () => {
                                             </div>
                                         )}
                                     </div>
+                                    {/* Animaciones movidas a index.css (anim-overlay-fade-in/out, anim-slide-in-left/out-right) */}
                                 </div>
                             </div>
                         )}
@@ -2791,6 +2835,12 @@ const AguacateChat = () => {
                     </button>
                 </div>
             )}
+            {/* Modal de reproducción de video */}
+            <VideoModal
+                open={videoModalOpen}
+                src={currentVideoSrc}
+                onClose={() => { setVideoModalOpen(false); setCurrentVideoSrc(null); }}
+            />
             {/* Overlay de skeleton a pantalla completa mientras cargan conversaciones */}
             {showLoadingSkeleton && (
                 <div className={`fixed inset-0 z-[60] theme-bg-primary theme-text-primary ${skeletonExiting ? 'anim-fade-out' : 'anim-fade-in'}`}>

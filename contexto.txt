@@ -73,6 +73,8 @@ Si agregas nuevos archivos o carpetas, actualiza este documento para mantener la
 - main.jsx: Renderiza la aplicación React en el DOM.
 - App.jsx: Controla la navegación entre login, registro, chat y password reset. Simula autenticación y gestiona transiciones animadas (fade) entre pantallas.
 - AguacateChat.jsx: Chat principal, muestra lista de contactos, mensajes, sidebar, adjuntos, modo claro/oscuro, animaciones Lottie en acciones.
+ - AguacateChat.jsx: Chat principal, muestra lista de contactos, mensajes, sidebar, adjuntos, modo claro/oscuro, animaciones Lottie en acciones.
+ - VideoPlayer.jsx: Contiene `VideoThumbnail` (miniatura con overlay play verde) y `VideoModal` (modal centrado para reproducir videos). Los mensajes de tipo video ahora muestran solo la miniatura y al hacer clic abren el modal para reproducir, optimizando el espacio en el listado de mensajes.
 - AuthPage.jsx: Página de login y registro, muestra los formularios y el overlay con animación de logo. Permite alternar entre login y registro.
 - LoginForm.jsx: Formulario de login, validación de email y contraseña, animación Lottie, botón para recuperar contraseña.
 - RegisterForm.jsx: Formulario de registro, validación de email y contraseña, animación Lottie, feedback de fortaleza de contraseña.
