@@ -11,6 +11,7 @@ import VideoThumbnail, { VideoModal } from './VideoPlayer.jsx';
 import AudioPlayer from './AudioPlayer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
 import StoriesView from './StoriesView';
+import StoriesSkeleton from './components/StoriesSkeleton.jsx';
 import Sidebar from './Sidebar';
 import ProfileModal from './ProfileModal';
 import ConfigModal from './ConfigModal';
@@ -133,6 +134,9 @@ const AguacateChat = () => {
     });
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
     const [currentView, setCurrentView] = useState('chats'); // 'chats' o 'stories'
+    const [loadingStories, setLoadingStories] = useState(false); // Skeleton al entrar a historias
+    const [loadingChatsSidebar, setLoadingChatsSidebar] = useState(false); // Skeleton de barra de chats al volver
+    const storiesLoadingTimerRef = useRef(null);
     // Modal de video
     const [videoModalOpen, setVideoModalOpen] = useState(false);
     const [currentVideoSrc, setCurrentVideoSrc] = useState(null);
@@ -140,14 +144,45 @@ const AguacateChat = () => {
     // Cambiar vista y, si se pasa a historias, deseleccionar el chat y cerrar menús relacionados
     const handleViewChange = (view) => {
         setCurrentView(view);
+        // Limpiar temporizador previo si existiera
+        if (storiesLoadingTimerRef.current) {
+            clearTimeout(storiesLoadingTimerRef.current);
+            storiesLoadingTimerRef.current = null;
+        }
         if (view === 'stories') {
             // Deseleccionar chat activo y limpiar menús contextuales
             setSelectedContact(null);
             setShowChatOptionsMenu(false);
             setShowAttachMenu(false);
             setShowNewChatMenu(false);
+            // Mostrar skeleton brevemente al entrar a Historias
+            setLoadingStories(true);
+            // Mostrar skeleton del área de chat también
+            setLoadingChatArea(true);
+            storiesLoadingTimerRef.current = setTimeout(() => {
+                setLoadingStories(false);
+                setLoadingChatArea(false);
+                storiesLoadingTimerRef.current = null;
+            }, 600); // Duración mínima del placeholder
+        } else {
+            // Volvemos a CHATS: mostrar skeleton en barra de chats y área principal
+            setLoadingStories(false);
+            setLoadingChatsSidebar(true);
+            setLoadingChatArea(true);
+            storiesLoadingTimerRef.current = setTimeout(() => {
+                setLoadingChatsSidebar(false);
+                setLoadingChatArea(false);
+                storiesLoadingTimerRef.current = null;
+            }, 600);
         }
     };
+
+    // Limpiar temporizador en desmontaje
+    useEffect(() => {
+        return () => {
+            if (storiesLoadingTimerRef.current) clearTimeout(storiesLoadingTimerRef.current);
+        };
+    }, []);
 
     // Grabación de audio (MediaRecorder)
     const [isRecording, setIsRecording] = useState(false);
@@ -1749,6 +1784,9 @@ const AguacateChat = () => {
             />
             {/* Sidebar de contactos e Historias */}
             {currentView === 'chats' ? (
+                loadingChatsSidebar ? (
+                    <SidebarSkeleton />
+                ) : (
                 <div id="sidebar" className={`sidebar w-80 theme-bg-secondary theme-border border-r flex flex-col md:relative absolute z-20 h-full ${isSidebarOpen ? 'open' : ''}`}>
                     <div className="p-4 theme-border border-b">
                         <div className="flex items-center justify-between mb-4">
@@ -1900,9 +1938,10 @@ const AguacateChat = () => {
                         </div>
                     </div>
                 </div>
+                )
             ) : (
                 <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
-                    <StoriesView />
+                    {loadingStories ? <StoriesSkeleton /> : <StoriesView />}
                 </div>
             )}
 

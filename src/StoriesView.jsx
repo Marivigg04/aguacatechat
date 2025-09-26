@@ -2,6 +2,9 @@ import React, { useState, useRef } from 'react';
 import StoryViewerModal from './StoryViewerModal'; 
 // Novedad: Se añade la importación del icono que faltaba
 import { ArrowUpTrayIcon } from '@heroicons/react/24/solid'; 
+import UploadChoiceModal from './UploadChoiceModal';
+import UploadTextStoryModal from './UploadTextStoryModal';
+import UploadMediaStoriesModal from './UploadMediaStoriesModal';
 
 // Novedad: Se añade el array de "stories" que faltaba
 const stories = [
@@ -30,41 +33,17 @@ const StoryItem = ({ name, time, image, onClick }) => (
 );
 
 // Novedad: Se han eliminado los comentarios "//" para definir correctamente el componente
-const UploadStoryCard = ({ onFileSelect }) => {
-    const fileInputRef = useRef(null);
-
-    const handleCardClick = () => {
-        fileInputRef.current.click();
-    };
-
-    const handleFileChange = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            onFileSelect(file);
-            console.log("Archivo seleccionado:", file);
-            alert(`Has seleccionado la imagen: ${file.name}`);
-        }
-    };
-
-    return (
-        <div 
-            className="flex flex-col gap-1 cursor-pointer group"
-            onClick={handleCardClick}
-        >
-            <div className="aspect-square w-full rounded-md overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 group-hover:bg-emerald-500/20 transition-colors">
-                <ArrowUpTrayIcon className="w-6 h-6" />
-                <span className="mt-1 text-xs font-semibold text-center px-1">Subir historia</span>
-            </div>
-             <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept="image/jpeg, image/png"
-                onChange={handleFileChange}
-            />
+const UploadStoryCard = ({ onOpenChoice }) => (
+    <div 
+        className="flex flex-col gap-1 cursor-pointer group"
+        onClick={onOpenChoice}
+    >
+        <div className="aspect-square w-full rounded-md overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 group-hover:bg-emerald-500/20 transition-colors">
+            <ArrowUpTrayIcon className="w-6 h-6" />
+            <span className="mt-1 text-xs font-semibold text-center px-1">Subir historia</span>
         </div>
-    );
-};
+    </div>
+);
 
 
 const StoriesView = () => {
@@ -72,6 +51,10 @@ const StoriesView = () => {
     const [viewerOpen, setViewerOpen] = useState(false);
     const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
     const [viewedStoryIds, setViewedStoryIds] = useState(new Set());
+    const [choiceOpen, setChoiceOpen] = useState(false);
+    const [textModalOpen, setTextModalOpen] = useState(false);
+    const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+    const mediaInputRef = useRef(null);
 
     const openViewerById = (id) => {
         const idx = stories.findIndex(s => s.id === id);
@@ -91,8 +74,47 @@ const StoriesView = () => {
         setViewerOpen(false);
     };
 
-    const handleFileSelect = (file) => {
-        // Aquí puedes manejar la lógica de subida del archivo
+    const handleOpenChoice = () => setChoiceOpen(true);
+    const handleCloseChoice = () => setChoiceOpen(false);
+    const handleChoiceSelect = (type) => {
+        setChoiceOpen(false);
+    if (type === 'text') {
+            setTextModalOpen(true);
+            return;
+        }
+        if (type === 'media') setMediaPickerOpen(true);
+    };
+
+    const handleMediaChange = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const isImage = file.type.startsWith('image/');
+            const isVideo = file.type.startsWith('video/');
+            // TODO: subir archivo
+            console.log(isImage ? 'Imagen seleccionada:' : isVideo ? 'Video seleccionado:' : 'Archivo:', file);
+        }
+        e.target.value = '';
+    };
+
+    const handleSubmitTextStory = (payload) => {
+        // TODO: subir historia de texto
+        console.log('Texto para historia:', payload);
+        setTextModalOpen(false);
+    };
+
+    // Soporte para recientes de historias (local a StoriesView)
+    const [storiesRecentMedia, setStoriesRecentMedia] = useState([]);
+    const addRecentMedia = (items) => {
+        setStoriesRecentMedia((prev) => {
+            const next = [...items, ...prev];
+            // Limitar a 8 elementos locales
+            return next.slice(0, 8);
+        });
+    };
+    const handleSelectRecentMedia = (m) => {
+        // TODO: subir al bucket de historias
+        console.log('Seleccionado para historia:', m);
+        setMediaPickerOpen(false);
     };
 
     // Derivar listas: no vistos y vistos
@@ -110,7 +132,7 @@ const StoriesView = () => {
             
             <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
                 {/* Cuadro para añadir mi estado */}
-                <UploadStoryCard onFileSelect={handleFileSelect} />
+                <UploadStoryCard onOpenChoice={handleOpenChoice} />
 
                 {/* Mapeo de historias no vistas */}
                 {unseenStories.map((story) => (
@@ -148,6 +170,38 @@ const StoriesView = () => {
                     onClose={closeViewer}
                 />
             )}
+
+            {/* Modal para elegir Media (Foto/Video) o Texto */}
+            <UploadChoiceModal
+                open={choiceOpen}
+                onClose={handleCloseChoice}
+                onSelect={handleChoiceSelect}
+            />
+
+            {/* Modal estilo chat para elegir multimedia para historias */}
+            <UploadMediaStoriesModal
+                open={mediaPickerOpen}
+                onClose={() => setMediaPickerOpen(false)}
+                recentMedia={storiesRecentMedia}
+                onAddRecentMedia={addRecentMedia}
+                onSelectMedia={handleSelectRecentMedia}
+            />
+
+            {/* Modal para escribir historia de texto */}
+            <UploadTextStoryModal
+                open={textModalOpen}
+                onClose={() => setTextModalOpen(false)}
+                onSubmit={handleSubmitTextStory}
+            />
+
+            {/* Input oculto para seleccionar imagen o video */}
+            <input
+                ref={mediaInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+                className="hidden"
+                onChange={handleMediaChange}
+            />
         </div>
     );
 };
