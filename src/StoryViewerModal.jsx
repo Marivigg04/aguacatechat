@@ -16,8 +16,10 @@ const StoryViewerModal = ({ stories, startIndex, onClose }) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onClose]);
 
-    const activeUser = stories[currentUserIndex];
-    const activeStoryUrl = activeUser.userStories[currentStoryInUser];
+    const activeUser = stories && stories.length > 0 ? stories[currentUserIndex] : null;
+    const activeStoryUrl = activeUser && activeUser.userStories && activeUser.userStories.length > 0
+        ? activeUser.userStories[currentStoryInUser]
+        : null;
 
     const goToNextUser = () => {
         setCurrentUserIndex((prevIndex) => (prevIndex + 1) % stories.length);
@@ -55,11 +57,24 @@ const StoryViewerModal = ({ stories, startIndex, onClose }) => {
             <div className="relative w-full h-full md:w-auto md:h-auto max-w-md max-h-screen flex items-center justify-center">
 
                 {/* Imagen de la historia */}
-                <img 
-                    src={activeStoryUrl} 
-                    alt={`Historia de ${activeUser.name}`} 
-                    className="max-h-[95vh] w-auto h-auto object-contain rounded-lg"
-                />
+                {activeStoryUrl ? (
+                    <div className="relative">
+                        <img 
+                            src={activeStoryUrl} 
+                            alt={`Historia de ${activeUser?.name || 'usuario'}`} 
+                            className="max-h-[95vh] w-auto h-auto object-contain rounded-lg"
+                        />
+
+                        {/* Foto de perfil superpuesta sobre la imagen (esquina superior izquierda) */}
+                        {activeUser?.image && (
+                            <div className="absolute left-3 top-3 w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
+                                <img src={activeUser.image} alt={activeUser.name} className="w-full h-full object-cover" />
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="p-6 text-center text-white">No hay historia disponible</div>
+                )}
 
                 {/* Encabezado con información y botón de cerrar */}
                 <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/70 to-transparent">

@@ -1,19 +1,22 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import StoryViewerModal from './StoryViewerModal'; 
 // Novedad: Se añade la importación del icono que faltaba
 import { ArrowUpTrayIcon } from '@heroicons/react/24/solid'; 
 import UploadChoiceModal from './UploadChoiceModal';
 import UploadTextStoryModal from './UploadTextStoryModal';
 import UploadMediaStoriesModal from './UploadMediaStoriesModal';
+import StoryImageEditorModal from './StoryImageEditorModal';
+import supabase from './services/supabaseClient';
+import { compressImage } from './utils/compressImage';
+import { useAuth } from './context/AuthContext.jsx';
+import { fetchUserConversations } from './services/db';
 
-// Novedad: Se añade el array de "stories" que faltaba
-const stories = [
-    { id: 1, name: 'Sorianny Jumi', time: 'Hoy a la(s) 9:58 p.m.', image: 'https://i.pravatar.cc/150?img=27', userStories: ['https://i.pravatar.cc/400?img=27', 'https://i.pravatar.cc/400?img=26'] },
-    { id: 2, name: 'José David', time: 'Hoy a la(s) 9:38 p.m.', image: 'https://i.pravatar.cc/150?img=28', userStories: ['https://i.pravatar.cc/400?img=28'] },
-    { id: 3, name: 'Francia Alejandro', time: 'Hoy a la(s) 9:57 p.m.', image: 'https://i.pravatar.cc/150?img=31', userStories: ['https://i.pravatar.cc/400?img=31'] },
-    { id: 4, name: 'Sorianny Jumi', time: 'Hoy a la(s) 9:58 p.m.', image: 'https://i.pravatar.cc/150?img=32', userStories: ['https://i.pravatar.cc/400?img=32'] },
-    { id: 5, name: 'Francia Alejandro', time: 'Hoy a la(s) 9:38 p.m.', image: 'https://i.pravatar.cc/150?img=33', userStories: ['https://i.pravatar.cc/400?img=33'] },
-    { id: 6, name: 'Francia Alejandro', time: 'Hoy a la(s) 9:58 p.m.', image: 'https://i.pravatar.cc/150?img=34', userStories: ['https://i.pravatar.cc/400?img=34'] },
+// Fallback de ejemplo si no hay datos reales
+const sampleStories = [
+    { id: 's-1', name: 'Sorianny Jumi', time: 'Hoy a la(s) 9:58 p.m.', image: 'https://i.pravatar.cc/150?img=27', userStories: ['https://i.pravatar.cc/400?img=27', 'https://i.pravatar.cc/400?img=26'] },
+    { id: 's-2', name: 'José David', time: 'Hoy a la(s) 9:38 p.m.', image: 'https://i.pravatar.cc/150?img=28', userStories: ['https://i.pravatar.cc/400?img=28'] },
+    { id: 's-3', name: 'Francia Alejandro', time: 'Hoy a la(s) 9:57 p.m.', image: 'https://i.pravatar.cc/150?img=31', userStories: ['https://i.pravatar.cc/400?img=31'] },
 ];
 
 // Novedad: Se han eliminado los comentarios "//" para definir correctamente el componente
@@ -50,11 +53,16 @@ const StoriesView = () => {
     // Novedad: Se ha descomentado la línea para declarar el estado `viewerOpen`
     const [viewerOpen, setViewerOpen] = useState(false);
     const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
+    const { user } = useAuth();
+    const [stories, setStories] = useState([]);
+    const [loadingStoriesList, setLoadingStoriesList] = useState(false);
     const [viewedStoryIds, setViewedStoryIds] = useState(new Set());
     const [choiceOpen, setChoiceOpen] = useState(false);
     const [textModalOpen, setTextModalOpen] = useState(false);
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
     const mediaInputRef = useRef(null);
+    const [editorFile, setEditorFile] = useState(null); // imagen a editar
+    const [uploading, setUploading] = useState(false);
 
     const openViewerById = (id) => {
         const idx = stories.findIndex(s => s.id === id);
@@ -69,6 +77,92 @@ const StoriesView = () => {
             });
         }
     };
+
+    // Cargar historias: la idea es mostrar "Tu historia" primero y luego contactos con historias
+    useEffect(() => {
+        let mounted = true;
+        const load = async () => {
+            setLoadingStoriesList(true);
+            try {
+                if (!user || !user.id) {
+                    // No autenticado: usar muestras
+                    if (mounted) setStories(sampleStories);
+                    return;
+                }
+
+                // 1) Obtener conversaciones del usuario para conocer contactos
+                const convs = await fetchUserConversations(user.id);
+                const otherProfiles = convs
+                    .map(c => c.otherProfile)
+                    .filter(Boolean);
+
+                // 2) Para cada perfil (incluyendo el propio usuario) consultar tabla 'histories' con user_id
+                // Hacemos una consulta batch: primero construir set de user ids
+                const userIds = new Set([user.id]);
+                for (const p of otherProfiles) userIds.add(p.id);
+                const idsArr = Array.from(userIds);
+
+                // 3) Traer historias de Supabase
+                const { data: rows, error } = await supabase
+                    .from('histories')
+                    .select('id, user_id, content_url, content_type, caption, created_at')
+                    .in('user_id', idsArr)
+                    .order('created_at', { ascending: false });
+                if (error) throw error;
+
+                // 4) Agrupar por usuario
+                const byUser = new Map();
+                for (const r of rows || []) {
+                    const arr = byUser.get(r.user_id) || [];
+                    arr.push(r);
+                    byUser.set(r.user_id, arr);
+                }
+
+                // 5) Construir lista final: primera entrada es 'Tu historia'
+                const final = [];
+
+                // Tu historia (si tiene historias) o cuadro de añadir (mostramos siempre cuadro para subir)
+                const myStories = byUser.get(user.id) || [];
+                final.push({
+                    id: `me-${user.id}`,
+                    name: user.username || user.fullName || 'Tú',
+                    time: myStories[0] ? new Date(myStories[0].created_at).toLocaleString() : 'No tienes historias',
+                    image: (user.raw && user.raw.user_metadata && user.raw.user_metadata.avatar_url) || user.avatar_url || '/public/Logo de aguacachat.png',
+                    userStories: myStories.map(h => h.content_url),
+                    isMe: true,
+                });
+
+                // Ahora los contactos en el mismo orden que convs
+                for (const c of convs) {
+                    const prof = c.otherProfile;
+                    if (!prof) continue;
+                    const userHist = byUser.get(prof.id) || [];
+                    if (userHist.length === 0) continue; // omitimos si no tiene historias
+                    final.push({
+                        id: `u-${prof.id}`,
+                        name: prof.username || prof.id,
+                        time: userHist[0] ? new Date(userHist[0].created_at).toLocaleString() : '',
+                        image: prof.avatar_url || `https://i.pravatar.cc/150?u=${prof.id}`,
+                        userStories: userHist.map(h => h.content_url),
+                    });
+                }
+
+                if (final.length === 0) {
+                    // Ninguna historia real: usar fallback samples
+                    if (mounted) setStories(sampleStories);
+                } else {
+                    if (mounted) setStories(final);
+                }
+            } catch (err) {
+                console.error('Error cargando historias:', err);
+                if (mounted) setStories(sampleStories);
+            } finally {
+                if (mounted) setLoadingStoriesList(false);
+            }
+        };
+        load();
+        return () => { mounted = false };
+    }, [user]);
 
     const closeViewer = () => {
         setViewerOpen(false);
@@ -90,8 +184,15 @@ const StoriesView = () => {
         if (file) {
             const isImage = file.type.startsWith('image/');
             const isVideo = file.type.startsWith('video/');
-            // TODO: subir archivo
-            console.log(isImage ? 'Imagen seleccionada:' : isVideo ? 'Video seleccionado:' : 'Archivo:', file);
+            if (isImage) {
+                setEditorFile(file); // abrir editor
+            } else if (isVideo) {
+                // De momento, sin modal
+                console.log('Video seleccionado (sin modal):', file);
+                alert(`Video seleccionado: ${file.name}`);
+            } else {
+                alert('Formato no soportado');
+            }
         }
         e.target.value = '';
     };
@@ -112,9 +213,27 @@ const StoriesView = () => {
         });
     };
     const handleSelectRecentMedia = (m) => {
-        // TODO: subir al bucket de historias
-        console.log('Seleccionado para historia:', m);
-        setMediaPickerOpen(false);
+        if (!m) return;
+        if (m.type === 'image') {
+            // abrir editor con el File original si existe
+            if (m.file instanceof File) {
+                setEditorFile(m.file);
+            } else if (m.url) {
+                // reconstruir un File desde el blob URL
+                fetch(m.url).then(r => r.blob()).then(blob => {
+                    const ext = blob.type.includes('png') ? 'png' : 'jpg';
+                    const name = m.name || `story-${Date.now()}.${ext}`;
+                    const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
+                    setEditorFile(file);
+                }).catch(() => alert('No se pudo abrir la imagen seleccionada'));
+            }
+            setMediaPickerOpen(false);
+        } else if (m.type === 'video') {
+            // De momento, sin modal. Aquí podrías iniciar subida o previa simple.
+            console.log('Video seleccionado (sin modal):', m);
+            alert(`Video seleccionado: ${m.name}`);
+            setMediaPickerOpen(false);
+        }
     };
 
     // Derivar listas: no vistos y vistos
@@ -198,10 +317,80 @@ const StoriesView = () => {
             <input
                 ref={mediaInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/webm,video/quicktime"
                 className="hidden"
                 onChange={handleMediaChange}
             />
+
+            {/* Modal de edición de imagen para historias */}
+            {editorFile && (
+                <StoryImageEditorModal
+                    file={editorFile}
+                    onClose={() => setEditorFile(null)}
+                    onSave={async (finalFile) => {
+                        if (uploading) return;
+                        const tId = toast.loading('Subiendo historia...');
+                        setUploading(true);
+                        try {
+                            // Validación de configuración básica
+                            if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+                                throw new Error('Supabase no está configurado (faltan VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY)');
+                            }
+                            const BUCKET = 'histories';
+
+                            // 0) Obtener usuario autenticado
+                            const { data: userData, error: userErr } = await supabase.auth.getUser();
+                            if (userErr) throw new Error(`No se pudo obtener el usuario: ${userErr.message}`);
+                            const user = userData?.user;
+                            if (!user) throw new Error('Debes iniciar sesión para publicar historias');
+
+                            // 1) Comprimir
+                            let compressed;
+                            try {
+                                compressed = await compressImage(finalFile, { maxSize: 1440, quality: 0.82 });
+                            } catch (e) {
+                                throw new Error(`Error al comprimir la imagen: ${e?.message || e}`);
+                            }
+
+                            // 2) Subir al bucket 'histories'
+                            const ext = (compressed.type.includes('png') ? 'png' : 'jpg');
+                            const fileName = `story-${Date.now()}.${ext}`;
+                            // Guardar bajo carpeta del usuario
+                            const filePath = `${user.id}/${fileName}`;
+                            const { data: up, error: upErr } = await supabase.storage
+                                .from(BUCKET)
+                                .upload(filePath, compressed, { upsert: false, contentType: compressed.type });
+                            if (upErr) throw new Error(`Error al subir a Storage: ${upErr.message || upErr}`);
+
+                            // 3) Obtener URL pública
+                            const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(up.path);
+                            const publicUrl = pub?.publicUrl;
+                            if (!publicUrl) throw new Error('No se pudo obtener URL pública del archivo subido');
+
+                            // 4) Insertar en tabla 'histories'
+                            const { error: insErr } = await supabase
+                                .from('histories')
+                                .insert({
+                                    content_url: publicUrl,
+                                    content_type: 'image',
+                                    caption: null,
+                                    user_id: user.id,
+                                });
+                            if (insErr) throw new Error(`Error al guardar en la base de datos: ${insErr.message || insErr}`);
+
+                            toast.success('Historia publicada ✅');
+                        } catch (err) {
+                            console.error('Error publicando historia', err);
+                            const reason = err?.message || String(err);
+                            toast.error(`No se pudo publicar la historia: ${reason}`);
+                        } finally {
+                            toast.dismiss(tId);
+                            setUploading(false);
+                            setEditorFile(null);
+                        }
+                    }}
+                />
+            )}
         </div>
     );
 };
