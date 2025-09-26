@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import StoryViewerModal from './StoryViewerModal'; 
 // Novedad: Se añade la importación del icono que faltaba
 import { ArrowUpTrayIcon } from '@heroicons/react/24/solid'; 
-import UploadChoiceModal from './UploadChoiceModal';
+import { PhotoIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import UploadTextStoryModal from './UploadTextStoryModal';
 import UploadMediaStoriesModal from './UploadMediaStoriesModal';
 import StoryImageEditorModal from './StoryImageEditorModal';
@@ -36,15 +36,42 @@ const StoryItem = ({ name, time, image, onClick }) => (
 );
 
 // Novedad: Se han eliminado los comentarios "//" para definir correctamente el componente
-const UploadStoryCard = ({ onOpenChoice }) => (
+const UploadStoryCard = ({ onOpenChoice, choiceOpen, onSelectChoice }) => (
     <div 
-        className="flex flex-col gap-1 cursor-pointer group"
+        className="flex flex-col gap-1 cursor-pointer group relative"
         onClick={onOpenChoice}
     >
-        <div className="aspect-square w-full rounded-md overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 group-hover:bg-emerald-500/20 transition-colors">
+        <div className="aspect-square w-full rounded-md overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 transition-all group-hover:bg-emerald-500/20 hover:ring-2 hover:ring-teal-400/50 hover:-translate-y-0.5 hover:shadow-lg">
             <ArrowUpTrayIcon className="w-6 h-6" />
             <span className="mt-1 text-xs font-semibold text-center px-1">Subir historia</span>
         </div>
+        {choiceOpen && (
+            <div 
+                className="absolute z-50 left-0 top-full mt-2 w-60 rounded-2xl shadow-2xl theme-border border backdrop-blur-sm p-2 theme-bg-secondary transition transform origin-top-left"
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Caret */}
+                <span className="absolute -top-1 left-6 w-3 h-3 theme-bg-secondary theme-border border-l border-t rotate-45"></span>
+                <button
+                    className="w-full flex items-center gap-3 p-2 rounded-xl transition group/item hover:ring-2 hover:ring-teal-400/40 hover:bg-gradient-to-r hover:from-teal-500/10 hover:to-emerald-500/10"
+                    onClick={() => onSelectChoice('media')}
+                >
+                    <span className="w-8 h-8 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center transition-colors group-hover/item:bg-teal-500/15 group-hover/item:text-teal-600">
+                        <PhotoIcon className="w-5 h-5" />
+                    </span>
+                    <span className="text-sm font-medium">Foto / Video</span>
+                </button>
+                <button
+                    className="w-full flex items-center gap-3 p-2 rounded-xl transition group/item hover:ring-2 hover:ring-teal-400/40 hover:bg-gradient-to-r hover:from-teal-500/10 hover:to-emerald-500/10"
+                    onClick={() => onSelectChoice('text')}
+                >
+                    <span className="w-8 h-8 rounded-md bg-teal-500/10 text-teal-500 flex items-center justify-center transition-colors group-hover/item:bg-teal-500/15 group-hover/item:text-teal-600">
+                        <DocumentTextIcon className="w-5 h-5" />
+                    </span>
+                    <span className="text-sm font-medium">Texto</span>
+                </button>
+            </div>
+        )}
     </div>
 );
 
@@ -179,6 +206,14 @@ const StoriesView = () => {
         if (type === 'media') setMediaPickerOpen(true);
     };
 
+    // Cerrar con Escape cuando el popover esté abierto
+    useEffect(() => {
+        if (!choiceOpen) return;
+        const onKey = (e) => { if (e.key === 'Escape') setChoiceOpen(false); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [choiceOpen]);
+
     const handleMediaChange = (e) => {
         const file = e.target.files?.[0];
         if (file) {
@@ -251,7 +286,7 @@ const StoriesView = () => {
             
             <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
                 {/* Cuadro para añadir mi estado */}
-                <UploadStoryCard onOpenChoice={handleOpenChoice} />
+                <UploadStoryCard onOpenChoice={handleOpenChoice} choiceOpen={choiceOpen} onSelectChoice={handleChoiceSelect} />
 
                 {/* Mapeo de historias no vistas */}
                 {unseenStories.map((story) => (
@@ -290,12 +325,10 @@ const StoriesView = () => {
                 />
             )}
 
-            {/* Modal para elegir Media (Foto/Video) o Texto */}
-            <UploadChoiceModal
-                open={choiceOpen}
-                onClose={handleCloseChoice}
-                onSelect={handleChoiceSelect}
-            />
+            {/* Cerrar popover al hacer clic fuera */}
+            {choiceOpen && (
+                <div className="fixed inset-0 z-40" onClick={handleCloseChoice} />
+            )}
 
             {/* Modal estilo chat para elegir multimedia para historias */}
             <UploadMediaStoriesModal

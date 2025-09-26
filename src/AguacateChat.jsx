@@ -1936,6 +1936,9 @@ const AguacateChat = () => {
                                 </div>
                             </div>
                         </div>
+                        {showNewChatMenu && (
+                            <div className="fixed inset-0 z-20" onClick={() => setShowNewChatMenu(false)} />
+                        )}
                     </div>
                 </div>
                 )
