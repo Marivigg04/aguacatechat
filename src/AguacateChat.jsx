@@ -205,6 +205,9 @@ const AguacateChat = () => {
     const [loadingStories, setLoadingStories] = useState(false); // Skeleton al entrar a historias
     const [loadingChatsSidebar, setLoadingChatsSidebar] = useState(false); // Skeleton de barra de chats al volver
     const storiesLoadingTimerRef = useRef(null);
+    // Ref para controlar acciones dentro de StoriesView (subir historia desde placeholder)
+    const storiesViewRef = useRef(null);
+    const [inlineStoryMenu, setInlineStoryMenu] = useState(false); // menú inline en placeholder historias
     // Modal de video
     const [videoModalOpen, setVideoModalOpen] = useState(false);
     const [currentVideoSrc, setCurrentVideoSrc] = useState(null);
@@ -2036,7 +2039,7 @@ const AguacateChat = () => {
                 )
             ) : (
                 <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
-                    {loadingStories ? <StoriesSkeleton /> : <StoriesView />}
+                    {loadingStories ? <StoriesSkeleton /> : <StoriesView ref={storiesViewRef} />}
                 </div>
             )}
 
@@ -2204,15 +2207,71 @@ const AguacateChat = () => {
                     }}
                 >
                     {!selectedContact ? (
-                        <div className="h-full w-full flex items-center justify-center">
-                            <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
-                                <h3 className="text-xl font-semibold theme-text-primary mb-2">¡Bienvenido a AguacaChat! 🥑</h3>
-                                <p className="theme-text-secondary">Selecciona una conversación de la lista o crea un nuevo chat para comenzar a chatear.</p>
-                                <div className="mt-6 flex gap-3 justify-center">
-                                    <button onClick={createNewChat} className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white hover:opacity-90 transition-opacity">Nuevo chat</button>
+                        currentView === 'stories' ? (
+                            <div className="h-full w-full flex items-center justify-center">
+                                <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
+                                    <h3 className="text-xl font-semibold theme-text-primary mb-2">Historias de tus contactos 📸</h3>
+                                    <p className="theme-text-secondary">
+                                        Aquí verás las historias recientes de tus contactos. Selecciona una en la barra lateral
+                                        o vuelve a Chats para continuar una conversación.
+                                    </p>
+                                    <div className="mt-6 flex flex-col gap-4 items-center">
+                                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                                            <button
+                                                onClick={() => setInlineStoryMenu(v => !v)}
+                                                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-medium shadow hover:shadow-md hover:opacity-95 active:scale-[0.98] transition-all"
+                                            >Publicar historia</button>
+                                            <button
+                                                onClick={() => handleViewChange('chats')}
+                                                className="px-5 py-2.5 rounded-lg theme-bg-secondary theme-border border font-medium theme-text-primary hover:bg-teal-500/10 transition-colors"
+                                            >Volver a Chats</button>
+                                        </div>
+                                        {inlineStoryMenu && (
+                                            <div className="w-full max-w-sm mx-auto p-3 rounded-xl theme-bg-secondary theme-border border text-left space-y-2 animate-inline-menu">
+                                                <p className="text-sm font-medium theme-text-secondary mb-1">Elige el tipo de historia:</p>
+                                                <div className="flex flex-col gap-2">
+                                                    <button
+                                                        className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-teal-500/10 transition-colors text-left"
+                                                        onClick={() => { storiesViewRef.current?.openMediaStory?.(); setInlineStoryMenu(false); }}
+                                                    >
+                                                        <span className="w-9 h-9 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M3 19h18M5 5l2 14m10-14l2 14M9 9h6m-6 4h6"/></svg>
+                                                        </span>
+                                                        <span className="text-sm font-medium">Foto / Video</span>
+                                                    </button>
+                                                    <button
+                                                        className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-teal-500/10 transition-colors text-left"
+                                                        onClick={() => { storiesViewRef.current?.openTextStory?.(); setInlineStoryMenu(false); }}
+                                                    >
+                                                        <span className="w-9 h-9 rounded-md bg-teal-500/10 text-teal-500 flex items-center justify-center">
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v2H4m4 4h8m-8 4h5m-5 4h8"/></svg>
+                                                        </span>
+                                                        <span className="text-sm font-medium">Texto</span>
+                                                    </button>
+                                                </div>
+                                                <div className="flex justify-end pt-1">
+                                                    <button onClick={() => setInlineStoryMenu(false)} className="text-xs theme-text-secondary hover:underline">Cerrar</button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="h-full w-full flex items-center justify-center">
+                                <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
+                                    <h3 className="text-xl font-semibold theme-text-primary mb-2">¡Bienvenido a AguacaChat! 🥑</h3>
+                                    <p className="theme-text-secondary">Selecciona una conversación de la lista o crea un nuevo chat para comenzar a chatear.</p>
+                                    <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                                        <button onClick={createNewChat} className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-medium shadow hover:shadow-md hover:opacity-95 active:scale-[0.98] transition-all">Nuevo chat</button>
+                                        <button
+                                            onClick={() => handleViewChange('stories')}
+                                            className="px-5 py-2.5 rounded-lg theme-bg-secondary theme-border border font-medium theme-text-primary hover:bg-teal-500/10 transition-colors"
+                                        >Ver historias</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )
                     ) : (
                         <>
                             {/* Loader de mensajes anteriores */}
@@ -3022,5 +3081,14 @@ const AguacateChat = () => {
         </div>
     );
 };
+
+// Estilos locales para la animación del menú inline de historias
+// (Si ya tienes un archivo de animaciones global podrías moverlo allí)
+const style = document.createElement('style');
+if (!document.getElementById('inline-story-menu-anim')) {
+    style.id = 'inline-story-menu-anim';
+    style.innerHTML = `@keyframes inlineMenuIn {0% {opacity:0; transform: translateY(6px) scale(.96);} 100% {opacity:1; transform: translateY(0) scale(1);} } .animate-inline-menu { animation: inlineMenuIn .22s cubic-bezier(.4,.15,.2,1) forwards; }`;
+    document.head.appendChild(style);
+}
 
 export default AguacateChat;

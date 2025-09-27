@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import StoryViewerModal from './StoryViewerModal'; 
@@ -138,7 +138,7 @@ const UploadStoryCard = ({ onOpenChoice, choiceOpen, onSelectChoice }) => {
 };
 
 
-const StoriesView = () => {
+const StoriesView = forwardRef((props, ref) => {
     // Novedad: Se ha descomentado la línea para declarar el estado `viewerOpen`
     const [viewerOpen, setViewerOpen] = useState(false);
     const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
@@ -498,12 +498,19 @@ const StoriesView = () => {
     const handleCloseChoice = () => setChoiceOpen(false);
     const handleChoiceSelect = (type) => {
         setChoiceOpen(false);
-    if (type === 'text') {
+        if (type === 'text') {
             setTextModalOpen(true);
             return;
         }
         if (type === 'media') setMediaPickerOpen(true);
     };
+
+    // API pública para el padre (AguacateChat)
+    useImperativeHandle(ref, () => ({
+        openUploadChoice: () => handleOpenChoice(),
+        openTextStory: () => { setTextModalOpen(true); },
+        openMediaStory: () => { setMediaPickerOpen(true); }
+    }), []);
 
     // Cerrar con Escape cuando el popover esté abierto
     useEffect(() => {
@@ -848,6 +855,6 @@ const StoriesView = () => {
             )}
         </div>
     );
-};
+});
 
 export default StoriesView;
