@@ -49,7 +49,7 @@ export const VideoThumbnail = ({ src, onOpen, loading = false }) => {
 //  - open: boolean
 //  - src: string
 //  - onClose: () => void
-export const VideoModal = ({ open, src, onClose }) => {
+export const VideoModal = ({ open, src, onClose, forceVertical = false }) => {
 	const videoRef = useRef(null);
 	const containerRef = useRef(null);
 	const progressRef = useRef(null);
@@ -207,15 +207,31 @@ export const VideoModal = ({ open, src, onClose }) => {
 						animation: isClosing ? 'slideOutRight 0.4s ease-in forwards' : 'slideInLeft 0.4s ease-out forwards'
 					}}
 				>
-				<video
-					ref={videoRef}
-					className="w-full h-full max-h-[80vh] object-contain bg-black select-none"
-					src={src}
-					autoPlay
-					playsInline
-							onClick={togglePlay}
-					// No native controls: los personalizamos abajo
-				/>
+					<div className={`${forceVertical ? 'mx-auto w-full flex items-center justify-center bg-black' : ''}`}> 
+						<div className={`${forceVertical ? 'relative w-full max-h-[80vh] flex items-center justify-center' : ''}`}> 
+							{forceVertical ? (
+								<div className="relative w-full max-w-[430px] aspect-[9/16] bg-black flex items-center justify-center px-2 py-2">
+									<video
+										ref={videoRef}
+										className="w-full h-full object-contain select-none"
+										src={src}
+										autoPlay
+										playsInline
+										onClick={togglePlay}
+									/>
+								</div>
+							) : (
+								<video
+									ref={videoRef}
+									className="w-full h-full max-h-[80vh] object-contain bg-black select-none"
+									src={src}
+									autoPlay
+									playsInline
+									onClick={togglePlay}
+								/>
+							)}
+						</div>
+					</div>
 
 				{/* Controles personalizados */}
 				<div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-4 space-y-2 text-white text-sm">

@@ -10,7 +10,7 @@ export default function LoadingScreen({ message = 'Preparando AguacaChat…' }) 
         <div className="relative">
           {/* Logo si existe, con un sutil efecto de pulso */}
           <img
-            src="/public/aguacachat_logo.png"
+            src="/aguacachat_logo.png"
             alt="AguacaChat"
             className="h-64 w-64 animate-pulse drop-shadow"
           />
