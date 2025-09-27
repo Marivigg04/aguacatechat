@@ -150,6 +150,38 @@ const ProfileModal = ({
         setProfileName(myProfile.name);
     }, [myProfile.name]);
 
+    // Agregar una referencia para evitar llamadas duplicadas al guardar
+    const isSavingRef = React.useRef(false);
+
+    // Función para actualizar el nombre de usuario en la base de datos
+    async function handleSaveProfileName() {
+        if (!user?.id || isSavingRef.current) return;
+        isSavingRef.current = true;
+        try {
+            const { updateTable } = await import('./services/db');
+            await updateTable('profiles', { id: user.id }, { username: newProfileName });
+            setProfileName(newProfileName);
+            setIsEditingName(false);
+            if (window.toast) window.toast.success('Nombre actualizado');
+            else { 
+                try { 
+                    const { default: toast } = await import('react-hot-toast'); 
+                    toast.success('Nombre actualizado'); 
+                } catch {}
+            }
+        } catch (err) {
+            if (window.toast) window.toast.error('Error al actualizar el nombre');
+            else { 
+                try { 
+                    const { default: toast } = await import('react-hot-toast'); 
+                    toast.error('Error al actualizar el nombre'); 
+                } catch {}
+            }
+        } finally {
+            isSavingRef.current = false;
+        }
+    }
+
     // Renderizar solo si el modal debe mostrarse o está cerrándose
     if (!showProfileModal && !isClosing) {
         return null;
@@ -372,11 +404,7 @@ const ProfileModal = ({
                                         onSubmit={e => {
                                             e.preventDefault();
                                             if (newProfileName.trim()) {
-                                                // Solo letras y espacios, máximo 40 caracteres
-                                                const soloLetrasEspacios = newProfileName.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '').slice(0, 40);
-                                                setProfileName(soloLetrasEspacios);
-                                                myProfile.name = soloLetrasEspacios;
-                                                setIsEditingName(false);
+                                                handleSaveProfileName();
                                             }
                                         }}
                                     >
@@ -391,20 +419,16 @@ const ProfileModal = ({
                                             }}
                                             onBlur={() => {
                                                 if (newProfileName.trim()) {
-                                                    const soloLetrasEspacios = newProfileName.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '').slice(0, 40);
-                                                    setProfileName(soloLetrasEspacios);
-                                                    myProfile.name = soloLetrasEspacios;
+                                                    handleSaveProfileName();
+                                                } else {
+                                                    setIsEditingName(false);
                                                 }
-                                                setIsEditingName(false);
                                             }}
                                             onKeyDown={e => {
                                                 if (e.key === 'Enter') {
                                                     if (newProfileName.trim()) {
-                                                        const soloLetrasEspacios = newProfileName.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '').slice(0, 40);
-                                                        setProfileName(soloLetrasEspacios);
-                                                        myProfile.name = soloLetrasEspacios;
+                                                        handleSaveProfileName();
                                                     }
-                                                    setIsEditingName(false);
                                                 }
                                                 if (e.key === 'Escape') {
                                                     setNewProfileName(profileName);
