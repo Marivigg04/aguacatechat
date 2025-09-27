@@ -2365,13 +2365,49 @@ const AguacateChat = () => {
                             )}
                             {chatMessages.map((message, index) => {
                                 const isOwn = message.type === 'sent';
+                                // Determinar si se debe mostrar un divisor de fecha antes de este mensaje
+                                const currentDate = message.created_at ? new Date(message.created_at) : null;
+                                const prevMsg = index > 0 ? chatMessages[index - 1] : null;
+                                const prevDate = prevMsg?.created_at ? new Date(prevMsg.created_at) : null;
+                                let showDateDivider = false;
+                                if (currentDate) {
+                                    if (!prevDate) {
+                                        showDateDivider = true; // primer mensaje con fecha
+                                    } else {
+                                        // Cambio de día (comparar yyyy-mm-dd)
+                                        const cd = currentDate.getFullYear()+ '-' + currentDate.getMonth() + '-' + currentDate.getDate();
+                                        const pd = prevDate.getFullYear()+ '-' + prevDate.getMonth() + '-' + prevDate.getDate();
+                                        if (cd !== pd) showDateDivider = true;
+                                    }
+                                }
+                                // Formatear etiqueta de fecha
+                                let dateLabel = '';
+                                if (currentDate) {
+                                    const today = new Date();
+                                    const yesterday = new Date();
+                                    yesterday.setDate(today.getDate() - 1);
+                                    const isToday = currentDate.toDateString() === today.toDateString();
+                                    const isYesterday = currentDate.toDateString() === yesterday.toDateString();
+                                    if (isToday) dateLabel = 'Hoy';
+                                    else if (isYesterday) dateLabel = 'Ayer';
+                                    else dateLabel = currentDate.toLocaleDateString(undefined, { weekday: 'long', day: '2-digit', month: 'short', year: today.getFullYear() === currentDate.getFullYear() ? undefined : 'numeric' });
+                                    // Capitalizar primera letra
+                                    dateLabel = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+                                }
                                 return (
-                                    <div
-                                        key={index}
-                                        className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}
-                                        data-message-id={message.id}
-                                        data-message-own={isOwn ? '1' : '0'}
-                                    >
+                                    <React.Fragment key={index}>
+                                        {showDateDivider && dateLabel && (
+                                            <div className="w-full flex justify-center py-2 select-none">
+                                                <div className="px-3 py-1 rounded-full text-xs font-medium theme-bg-chat theme-border theme-text-secondary shadow-sm">
+                                                    {dateLabel}
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div
+                                            className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}
+                                            data-message-id={message.id}
+                                            data-message-own={isOwn ? '1' : '0'}
+                                        >
                                         {/* Avatar para recibidos */}
                                         {!isOwn && (
                                             selectedContact?.avatar_url ? (
@@ -2488,8 +2524,9 @@ const AguacateChat = () => {
                                                     </button>
                                                 </div>
                                             )}
-                                        </div>
-                                    </div>
+                                 </div>
+                                </div>
+                             </React.Fragment>
                                 );
                             })}
                             {/* Indicador de escribiendo */}
