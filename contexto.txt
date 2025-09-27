@@ -121,5 +121,22 @@ Si agregas nuevos archivos o carpetas, actualiza este documento para mantener la
 - Los mensajes más antiguos se van cargando conforme el usuario hace scroll hacia arriba (infinite scroll), preservando la posición del scroll.
 - Servicio: `fetchMessagesPage(conversationId, { limit = 30, before })` en `src/services/db.js`, que usa un cursor `created_at`.
 
+## Bloqueo de Conversaciones
+
+- La tabla `conversations` incluye la columna booleana `blocked` (por defecto FALSE).
+- Cuando `blocked = TRUE`, ningún participante debe poder:
+  - Enviar nuevos mensajes (la UI debe deshabilitar input y botones de adjuntos).
+  - Recibir mensajes nuevos (idealmente se filtra en realtime o se evita el insert vía RLS).
+- Helpers añadidos en `src/services/db.js`:
+  - `toggleConversationBlocked(conversationId)`: Lee el estado actual y lo invierte. Devuelve `{ id, blocked }`.
+  - `isConversationBlocked(conversationId)`: Devuelve boolean indicando el estado actual.
+- Integración sugerida en UI:
+  - Antes de llamar a `insertMessage`, verificar `await isConversationBlocked(convId)` y abortar si `true`.
+  - Mostrar banner/alerta en el área de mensajes diciendo: "La conversación está bloqueada".
+  - Botón contextual (ej. en menú de la conversación) que ejecute `toggleConversationBlocked` y refresque el estado local.
+  - Suscribirse a cambios en `conversations` (canal realtime) para reflejar un bloqueo hecho por el otro usuario.
+
+Para refuerzo a nivel backend, establecer política RLS que impida `insert` en `messages` cuando la conversación asociada tenga `blocked = TRUE`.
+
 ---
 Este archivo resume toda la estructura, componentes y funcionalidades actuales del proyecto AguacateChat. Si agregas nuevos módulos, actualiza este contexto para mantener la documentación al día.
