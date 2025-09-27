@@ -1585,6 +1585,19 @@ const AguacateChat = () => {
         }
     };
 
+    // Wrapper para evitar recargar si se hace clic sobre el mismo contacto
+    const handleSelectContact = (contact) => {
+        if (selectedContact?.conversationId && contact?.conversationId && selectedContact.conversationId === contact.conversationId) {
+            // Mismo chat: ignorar
+            return;
+        }
+        // También comparar por profileId si aún no hay conversationId (chat recién iniciado)
+        if (!contact?.conversationId && selectedContact?.profileId && contact?.profileId && selectedContact.profileId === contact.profileId) {
+            return;
+        }
+        selectContact(contact);
+    };
+
     const createGroupWithSelected = () => {
         if (selectedGroupContacts.length > 0) {
             // Reemplazar alert()
@@ -1899,8 +1912,10 @@ const AguacateChat = () => {
                         {filteredContacts.map((contact, index) => (
                             <div
                                 key={index}
-                                className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact?.name === contact.name ? 'theme-bg-chat' : ''}`}
-                                onClick={() => selectContact(contact)}
+                                className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact?.conversationId === contact.conversationId || (selectedContact?.name === contact.name && !contact.conversationId) ? 'theme-bg-chat pointer-events-none' : ''}`}
+                                onClick={() => handleSelectContact(contact)}
+                                aria-current={selectedContact?.conversationId === contact.conversationId ? 'true' : undefined}
+                                role="button"
                             >
                                 <div className="flex items-center gap-3">
                                     {contact?.avatar_url ? (
@@ -2666,11 +2681,8 @@ const AguacateChat = () => {
                                     <div className="flex items-center gap-2">
                                         <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
                                         <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                                            Grabando {formatSeconds(Math.min(recordingElapsed, MAX_RECORD_SECS))}
+                                            Grabando {formatSeconds(Math.min(recordingElapsed, MAX_RECORD_SECS))}/02:00
                                         </span>
-                                        <div className="w-6 h-6 opacity-80">
-                                            <Lottie options={lottieOptions.micRecording} isPaused={isRecordingPaused} isStopped={false} />
-                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <button onClick={cancelRecording} className="px-2 py-1 rounded-md theme-bg-secondary theme-border border text-xs hover:opacity-80" title="Cancelar">
