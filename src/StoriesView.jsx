@@ -6,11 +6,12 @@ import { ArrowUpTrayIcon } from '@heroicons/react/24/solid';
 import { PhotoIcon, DocumentTextIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import UploadTextStoryModal from './UploadTextStoryModal';
 import UploadMediaStoriesModal from './UploadMediaStoriesModal';
+import StoryVideoPreviewModal from './StoryVideoPreviewModal';
 import StoryImageEditorModal from './StoryImageEditorModal';
 import supabase from './services/supabaseClient';
 import { compressImage } from './utils/compressImage';
 import { useAuth } from './context/AuthContext.jsx';
-import { fetchUserConversations, selectFrom } from './services/db';
+import { fetchUserConversations, selectFrom, uploadVideoToBucket } from './services/db';
 import StoriesSkeleton from './components/StoriesSkeleton.jsx';
 
 // Fallback de ejemplo si no hay datos reales
@@ -95,8 +96,10 @@ const StoriesView = () => {
     const [choiceOpen, setChoiceOpen] = useState(false);
     const [textModalOpen, setTextModalOpen] = useState(false);
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+    const [videoModalOpen, setVideoModalOpen] = useState(false);
     const mediaInputRef = useRef(null);
     const [editorFile, setEditorFile] = useState(null); // imagen a editar
+    const [videoFile, setVideoFile] = useState(null); // video a previsualizar
     const [uploading, setUploading] = useState(false);
 
     const openViewerById = (id) => {
@@ -272,7 +275,7 @@ const StoriesView = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [choiceOpen]);
 
-    const handleMediaChange = (e) => {
+    const handleMediaChange = async (e) => {
         const file = e.target.files?.[0];
         if (file) {
             const isImage = file.type.startsWith('image/');
@@ -280,9 +283,8 @@ const StoriesView = () => {
             if (isImage) {
                 setEditorFile(file); // abrir editor
             } else if (isVideo) {
-                // De momento, sin modal
-                console.log('Video seleccionado (sin modal):', file);
-                alert(`Video seleccionado: ${file.name}`);
+                setVideoFile(file);
+                setVideoModalOpen(true);
             } else {
                 alert('Formato no soportado');
             }
@@ -290,10 +292,65 @@ const StoriesView = () => {
         e.target.value = '';
     };
 
-    const handleSubmitTextStory = (payload) => {
-        // TODO: subir historia de texto
-        console.log('Texto para historia:', payload);
-        setTextModalOpen(false);
+    const handleSaveVideo = async (file) => {
+        const tId = toast.loading('Subiendo video...');
+        try {
+            const { publicUrl } = await uploadVideoToBucket({ file, userId: user?.id, bucket: 'histories' });
+            // Insertar en tabla 'histories'
+            const { error: insErr } = await supabase
+                .from('histories')
+                .insert({
+                    content_url: publicUrl,
+                    content_type: 'video',
+                    caption: null,
+                    user_id: user.id,
+                });
+            if (insErr) throw new Error(`Error al guardar en la base de datos: ${insErr.message || insErr}`);
+            toast.success('Video subido como historia ✅');
+        } catch (err) {
+            console.error('Error subiendo video', err);
+            const reason = err?.message || String(err);
+            toast.error(`No se pudo subir el video: ${reason}`);
+        } finally {
+            toast.dismiss(tId);
+        }
+    };
+
+    const handleSubmitTextStory = async (payload) => {
+        // payload: { type: 'text', text, bg, color }
+        if (!user || !user.id) {
+            toast.error('Debes iniciar sesión para publicar una historia');
+            return;
+        }
+        const { text, bg, color } = payload || {};
+        const caption = (text || '').trim();
+        if (!caption) {
+            toast.error('El texto está vacío');
+            return;
+        }
+        const tId = toast.loading('Publicando historia de texto...');
+        try {
+            // Guardar directamente en tabla histories.
+            // Campos esperados (según otros inserts): content_url, content_type, caption, user_id
+            // Nuevos campos solicitados: bg_color, font_color
+            const row = {
+                content_url: null, // no hay archivo
+                content_type: 'text',
+                caption, // el texto del usuario
+                user_id: user.id,
+                bg_color: bg, // puede ser un color plano o un string gradiente
+                font_color: color,
+            };
+            const { error: insErr } = await supabase.from('histories').insert(row);
+            if (insErr) throw new Error(insErr.message || 'Error al insertar la historia de texto');
+            toast.success('Historia de texto publicada ✅');
+            setTextModalOpen(false);
+        } catch (e) {
+            console.error('Error insertando historia de texto', e);
+            toast.error(e?.message || 'No se pudo publicar');
+        } finally {
+            toast.dismiss(tId);
+        }
     };
 
     // Soporte para recientes de historias (local a StoriesView)
@@ -308,11 +365,9 @@ const StoriesView = () => {
     const handleSelectRecentMedia = (m) => {
         if (!m) return;
         if (m.type === 'image') {
-            // abrir editor con el File original si existe
             if (m.file instanceof File) {
                 setEditorFile(m.file);
             } else if (m.url) {
-                // reconstruir un File desde el blob URL
                 fetch(m.url).then(r => r.blob()).then(blob => {
                     const ext = blob.type.includes('png') ? 'png' : 'jpg';
                     const name = m.name || `story-${Date.now()}.${ext}`;
@@ -322,9 +377,19 @@ const StoriesView = () => {
             }
             setMediaPickerOpen(false);
         } else if (m.type === 'video') {
-            // De momento, sin modal. Aquí podrías iniciar subida o previa simple.
-            console.log('Video seleccionado (sin modal):', m);
-            alert(`Video seleccionado: ${m.name}`);
+            // Abrir modal de vista previa de video
+            if (m.file instanceof File) {
+                setVideoFile(m.file);
+            } else if (m.url) {
+                // reconstruir un File desde el blob URL para mantener misma ruta de subida
+                fetch(m.url).then(r => r.blob()).then(blob => {
+                    const ext = (blob.type.split('/')[1]) || 'mp4';
+                    const name = m.name || `story-${Date.now()}.${ext}`;
+                    const file = new File([blob], name, { type: blob.type || 'video/mp4' });
+                    setVideoFile(file);
+                }).catch(() => alert('No se pudo abrir el video seleccionado'));
+            }
+            setVideoModalOpen(true);
             setMediaPickerOpen(false);
         }
     };
@@ -486,6 +551,18 @@ const StoriesView = () => {
                             setEditorFile(null);
                         }
                     }}
+                />
+            )}
+
+            {/* Modal de vista previa de video */}
+            {videoModalOpen && (
+                <StoryVideoPreviewModal
+                    file={videoFile}
+                    onClose={() => {
+                        setVideoModalOpen(false);
+                        setVideoFile(null);
+                    }}
+                    onSave={handleSaveVideo}
                 />
             )}
         </div>

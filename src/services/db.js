@@ -298,16 +298,16 @@ export async function uploadAudioToBucket({ blob, conversationId, userId, mimeTy
 
 // Upload a video file to 'chatvideos' bucket and return its public URL
 // Phase 1 (sin compresión ni thumbnail). Valida tamaño externo antes de llamar.
-export async function uploadVideoToBucket({ file, conversationId, userId }) {
+export async function uploadVideoToBucket({ file, conversationId, userId, bucket = 'chatvideos' }) {
   if (!file) throw new Error('No video file provided')
-  const bucket = 'chatvideos'
+  const bucketName = bucket
   const ts = new Date().toISOString().replace(/[:.]/g, '-')
   const rand = Math.random().toString(16).slice(2)
   const safeName = (file.name || 'video').replace(/[^a-zA-Z0-9_.-]/g, '_')
   const ext = safeName.includes('.') ? safeName.split('.').pop() : (file.type.split('/')[1] || 'mp4')
   const path = `${userId || 'unknown'}/${conversationId || 'misc'}/${ts}_${rand}.${ext}`
 
-  const { error: uploadErr } = await supabase.storage.from(bucket).upload(path, file, {
+  const { error: uploadErr } = await supabase.storage.from(bucketName).upload(path, file, {
     contentType: file.type || 'video/mp4',
     upsert: false,
   })
@@ -315,7 +315,7 @@ export async function uploadVideoToBucket({ file, conversationId, userId }) {
     console.error('Error subiendo video:', uploadErr)
     throw uploadErr
   }
-  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
+  const { data: pub } = supabase.storage.from(bucketName).getPublicUrl(path)
   const publicUrl = pub?.publicUrl
   if (!publicUrl) throw new Error('No se pudo obtener URL pública del video')
   return { publicUrl, path }
