@@ -6,6 +6,7 @@ import { VideoModal } from './VideoPlayer.jsx';
 export default function StoryVideoPreviewModal({ file, onClose, onSave }) {
   const [videoUrl, setVideoUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [storyText, setStoryText] = useState("");
 
   useEffect(() => {
     if (!file) return;
@@ -20,7 +21,7 @@ export default function StoryVideoPreviewModal({ file, onClose, onSave }) {
     if (uploading) return;
     try {
       setUploading(true);
-      await onSave?.(file);
+      await onSave?.(file, storyText);
       onClose?.();
     } finally {
       setUploading(false);
@@ -36,9 +37,30 @@ export default function StoryVideoPreviewModal({ file, onClose, onSave }) {
         onClose={uploading ? undefined : onClose}
         forceVertical={true}
       />
-      {/* Capa de acciones flotantes (se monta aparte para no alterar VideoModal) */}
-      <div className="pointer-events-none fixed inset-0 z-[60] flex items-end justify-end p-6">
-        <div className="pointer-events-auto flex gap-2">
+      {/* Input y botones en el mismo nivel, centrados horizontalmente */}
+      <div className="pointer-events-none fixed inset-0 z-[62] flex items-end justify-center p-6">
+        <div className="pointer-events-auto w-full max-w-2xl flex flex-row items-center gap-4">
+          <textarea
+            value={storyText}
+            onChange={e => {
+              setStoryText(e.target.value);
+              const textarea = e.target;
+              textarea.style.height = 'auto';
+              textarea.style.height = textarea.scrollHeight + 'px';
+            }}
+            maxLength={120}
+            placeholder="Escribe algo para tu historia..."
+            rows={1}
+            className="flex-1 px-4 py-2 rounded-lg border theme-border bg-black/30 text-white text-base outline-none focus:ring-2 focus:ring-teal-500 resize-none transition-all duration-300 ease-in-out hover:shadow-[0_0_16px_2px_#14b8a6]"
+            style={{
+              whiteSpace: 'pre-line',
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+              minHeight: '40px',
+              maxHeight: '180px',
+              overflowY: storyText.length > 80 ? 'auto' : 'hidden'
+            }}
+          />
           <button
             onClick={onClose}
             disabled={uploading}
