@@ -3,14 +3,15 @@ import toast from 'react-hot-toast';
 import StoryViewerModal from './StoryViewerModal'; 
 // Novedad: Se añade la importación del icono que faltaba
 import { ArrowUpTrayIcon } from '@heroicons/react/24/solid'; 
-import { PhotoIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
+import { PhotoIcon, DocumentTextIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import UploadTextStoryModal from './UploadTextStoryModal';
 import UploadMediaStoriesModal from './UploadMediaStoriesModal';
 import StoryImageEditorModal from './StoryImageEditorModal';
 import supabase from './services/supabaseClient';
 import { compressImage } from './utils/compressImage';
 import { useAuth } from './context/AuthContext.jsx';
-import { fetchUserConversations } from './services/db';
+import { fetchUserConversations, selectFrom } from './services/db';
+import StoriesSkeleton from './components/StoriesSkeleton.jsx';
 
 // Fallback de ejemplo si no hay datos reales
 const sampleStories = [
@@ -25,8 +26,14 @@ const StoryItem = ({ name, time, image, onClick }) => (
         className="flex flex-col gap-1 cursor-pointer group"
         onClick={onClick}
     >
-        <div className="aspect-square w-full rounded-md overflow-hidden transform group-hover:scale-105 transition-transform duration-300">
-            <img src={image} alt={name} className="w-full h-full object-cover" />
+        <div className="aspect-square w-full rounded-md overflow-hidden transform group-hover:scale-105 transition-transform duration-300 bg-gray-50">
+            {image ? (
+                <img src={image} alt={name} className="w-full h-full object-cover" />
+            ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-50">
+                    <UserCircleIcon className="w-12 h-12 text-gray-400" />
+                </div>
+            )}
         </div>
         <div>
             <h4 className="font-semibold theme-text-primary text-sm truncate">{name}</h4>
@@ -83,6 +90,7 @@ const StoriesView = () => {
     const { user } = useAuth();
     const [stories, setStories] = useState([]);
     const [loadingStoriesList, setLoadingStoriesList] = useState(false);
+    const [isFadingOut, setIsFadingOut] = useState(false);
     const [viewedStoryIds, setViewedStoryIds] = useState(new Set());
     const [choiceOpen, setChoiceOpen] = useState(false);
     const [textModalOpen, setTextModalOpen] = useState(false);
@@ -110,6 +118,7 @@ const StoriesView = () => {
         let mounted = true;
         const load = async () => {
             setLoadingStoriesList(true);
+            setIsFadingOut(false);
             try {
                 if (!user || !user.id) {
                     // No autenticado: usar muestras
@@ -129,11 +138,19 @@ const StoriesView = () => {
                 for (const p of otherProfiles) userIds.add(p.id);
                 const idsArr = Array.from(userIds);
 
-                // 3) Traer historias de Supabase
+                // 3) Preparar fetch del avatar del propio usuario en paralelo para reducir latencia
+                let avatarPromise = null;
+                if (user && user.id) {
+                    avatarPromise = selectFrom('profiles', { columns: 'avatar_url', match: { id: user.id }, single: true }).catch(() => null);
+                }
+
+                // Traer historias de Supabase (filtrar últimas 24 horas)
+                const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
                 const { data: rows, error } = await supabase
                     .from('histories')
                     .select('id, user_id, content_url, content_type, caption, created_at')
                     .in('user_id', idsArr)
+                    .gt('created_at', cutoff)
                     .order('created_at', { ascending: false });
                 if (error) throw error;
 
@@ -145,19 +162,54 @@ const StoriesView = () => {
                     byUser.set(r.user_id, arr);
                 }
 
+                // Helper para formatear la fecha según requerimiento
+                const formatStoryTime = (iso) => {
+                    if (!iso) return '';
+                    try {
+                        const d = new Date(iso);
+                        const now = new Date();
+                        const isSameDay = d.toDateString() === now.toDateString();
+                        const yesterday = new Date(now);
+                        yesterday.setDate(now.getDate() - 1);
+                        const isYesterday = d.toDateString() === yesterday.toDateString();
+
+                        const hours = d.getHours();
+                        const minutes = d.getMinutes().toString().padStart(2, '0');
+                        const ampm = hours >= 12 ? 'pm' : 'am';
+                        const hour12 = ((hours + 11) % 12) + 1; // 1-12
+                        const timePart = `${hour12}:${minutes} ${ampm}`;
+
+                        if (isSameDay) return `Hoy a las ${timePart}`;
+                        if (isYesterday) return `Ayer a las ${timePart}`;
+                        // Sino mostrar fecha local corta + hora
+                        return `${d.toLocaleDateString()} a las ${timePart}`;
+                    } catch (e) {
+                        return '';
+                    }
+                };
+
                 // 5) Construir lista final: primera entrada es 'Tu historia'
                 const final = [];
 
-                // Tu historia (si tiene historias) o cuadro de añadir (mostramos siempre cuadro para subir)
+                // Tu historia (si tiene historias) — añadimos solo si hay historias del propio usuario
                 const myStories = byUser.get(user.id) || [];
-                final.push({
-                    id: `me-${user.id}`,
-                    name: user.username || user.fullName || 'Tú',
-                    time: myStories[0] ? new Date(myStories[0].created_at).toLocaleString() : 'No tienes historias',
-                    image: (user.raw && user.raw.user_metadata && user.raw.user_metadata.avatar_url) || user.avatar_url || '/public/Logo de aguacachat.png',
-                    userStories: myStories.map(h => h.content_url),
-                    isMe: true,
-                });
+                if (myStories.length > 0) {
+                    // Usar resultado de la promesa del avatar que iniciamos en paralelo
+                    let avatarFromProfile = null;
+                    if (avatarPromise) {
+                        const row = await avatarPromise;
+                        avatarFromProfile = row?.avatar_url || null;
+                    }
+
+                    final.push({
+                        id: `me-${user.id}`,
+                        name: 'Mi Estado',
+                        time: myStories[0] ? formatStoryTime(myStories[0].created_at) : 'No tienes historias',
+                        image: avatarFromProfile || (user.raw && user.raw.user_metadata && user.raw.user_metadata.avatar_url) || user.avatar_url,
+                        userStories: myStories.map(h => h.content_url),
+                        isMe: true,
+                    });
+                }
 
                 // Ahora los contactos en el mismo orden que convs
                 for (const c of convs) {
@@ -168,7 +220,7 @@ const StoriesView = () => {
                     final.push({
                         id: `u-${prof.id}`,
                         name: prof.username || prof.id,
-                        time: userHist[0] ? new Date(userHist[0].created_at).toLocaleString() : '',
+                        time: userHist[0] ? formatStoryTime(userHist[0].created_at) : '',
                         image: prof.avatar_url || `https://i.pravatar.cc/150?u=${prof.id}`,
                         userStories: userHist.map(h => h.content_url),
                     });
@@ -184,7 +236,13 @@ const StoriesView = () => {
                 console.error('Error cargando historias:', err);
                 if (mounted) setStories(sampleStories);
             } finally {
-                if (mounted) setLoadingStoriesList(false);
+                if (mounted) {
+                    setIsFadingOut(true);
+                    setTimeout(() => {
+                        setLoadingStoriesList(false);
+                        setIsFadingOut(false);
+                    }, 300); // duración de la animación
+                }
             }
         };
         load();
@@ -284,19 +342,25 @@ const StoriesView = () => {
                 <h3 className="text-sm md:text-base font-semibold theme-text-secondary uppercase tracking-wider">RECIENTES</h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
-                {/* Cuadro para añadir mi estado */}
-                <UploadStoryCard onOpenChoice={handleOpenChoice} choiceOpen={choiceOpen} onSelectChoice={handleChoiceSelect} />
+            {loadingStoriesList ? (
+                <div className={`transition-opacity duration-300 ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}>
+                    <StoriesSkeleton />
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
+                    {/* Cuadro para añadir mi estado (siempre disponible) */}
+                    <UploadStoryCard onOpenChoice={handleOpenChoice} choiceOpen={choiceOpen} onSelectChoice={handleChoiceSelect} />
 
-                {/* Mapeo de historias no vistas */}
-                {unseenStories.map((story) => (
-                    <StoryItem
-                        key={story.id}
-                        {...story}
-                        onClick={() => openViewerById(story.id)}
-                    />
-                ))}
-            </div>
+                    {/* Si el usuario tiene su propia historia (isMe) la mostramos aquí; en caso contrario no mostramos el recuadro personal */}
+                    {unseenStories.map((story) => (
+                        <StoryItem
+                            key={story.id}
+                            {...story}
+                            onClick={() => openViewerById(story.id)}
+                        />
+                    ))}
+                </div>
+            )}
 
             {/* Sección de historias ya vistas */}
             {seenStories.length > 0 && (
