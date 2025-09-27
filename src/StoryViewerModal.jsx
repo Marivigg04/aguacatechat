@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import supabase from './services/supabaseClient';
 import { useAuth } from './context/AuthContext';
+import StoryViewsModal from './StoryViewsModal';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid';
 
 const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose, onViewedStory }) => {
@@ -21,6 +22,10 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     const [isMuted, setIsMuted] = useState(true);
     const [isClosing, setIsClosing] = useState(false);
     const [transitionDir, setTransitionDir] = useState(null); // 'next' | 'prev'
+    const [showViewsModal, setShowViewsModal] = useState(false);
+    const [viewsLoading, setViewsLoading] = useState(false);
+    const [viewsError, setViewsError] = useState(null);
+    const [viewersData, setViewersData] = useState([]);
     // Refs para control preciso de pausa en imágenes/texto
     const accumulatedRef = useRef(0); // ms acumulados confirmados
     const lastFrameRef = useRef(null); // timestamp del último frame activo (no en pausa)
@@ -67,7 +72,7 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
         // Array plano -> usuario virtual
         const virtual = [{
             name: stories[0]?.userName || stories[0]?.name || 'Historias',
-            image: stories[0]?.userImage || stories[0]?.avatar || undefined,
+            image: stories[0]?.userImage || undefined,
             userStories: stories
         }];
         
@@ -189,6 +194,9 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     const activeText = normalized?.type === 'text' ? (normalized.text || '') : null;
     const activeType = normalized?.type || 'image';
     const activeStoryId = rawStory && typeof rawStory === 'object' ? rawStory.id : null;
+    const isOwnStory = rawStory && typeof rawStory === 'object' && (rawStory.user_id === user?.id);
+    const viewsArray = rawStory && Array.isArray(rawStory.views) ? rawStory.views : [];
+    const totalExternalViews = viewsArray.filter(v => v && v !== user?.id).length;
 
     // Registro de vistas: evitar duplicados durante esta sesión en este componente
     const viewedIdsRef = useRef(new Set());
@@ -238,6 +246,44 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
         registerView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeStoryId, rawStory]);
+
+    // Cargar viewers (perfiles) cuando se abre el modal de vistas
+    useEffect(() => {
+        const loadViewers = async () => {
+            if (!showViewsModal) return;
+            if (!isOwnStory) return; // solo dueño puede ver
+            if (!activeStoryId) return;
+            setViewsLoading(true);
+            setViewsError(null);
+            try {
+                // Tomar el array de views actual del rawStory (excluyendo al dueño)
+                const toFetch = viewsArray.filter(v => v && v !== user.id);
+                if (toFetch.length === 0) {
+                    setViewersData([]);
+                    setViewsLoading(false);
+                    return;
+                }
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, username, avatar_url')
+                    .in('id', toFetch);
+                if (error) throw error;
+                const enhanced = (data || []).map(p => {
+                    const shortId = p.id ? p.id.slice(0, 6) : '??????';
+                    const displayName = p.username || `user_${shortId}`;
+                    return { ...p, displayName, shortId };
+                });
+                const sorted = enhanced.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||''));
+                setViewersData(sorted);
+            } catch (e) {
+                setViewsError(e?.message || 'Error al cargar vistas');
+            } finally {
+                setViewsLoading(false);
+            }
+        };
+        loadViewers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showViewsModal, activeStoryId]);
 
     useEffect(() => {}, [currentUserIndex, currentStoryInUser, rawStory, normalized, activeType, activeStoryUrl, activeText]);
 
@@ -428,8 +474,19 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     };
 
 
+    const handleKeyNav = useCallback((e) => {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); goToPrevStoryInUser(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); goToNextStoryInUser(); }
+    }, [goToPrevStoryInUser, goToNextStoryInUser]);
+
     return (
-    <div className={`fixed inset-0 bg-black z-50 flex items-center justify-center overflow-hidden modal-root ${isClosing ? 'modal-leave' : 'modal-enter'}`}>
+    <div
+        className={`fixed inset-0 bg-black z-50 flex items-center justify-center overflow-hidden modal-root ${isClosing ? 'modal-leave' : 'modal-enter'}`}
+        tabIndex={0}
+        onKeyDown={handleKeyNav}
+        role="dialog"
+        aria-modal="true"
+    >
             {/* Debug overlay removido */}
             {/* Fondo dinámico: si es texto usar color/gradient; si es imagen/video usar blur */}
             {activeType !== 'text' && activeStoryUrl && (
@@ -594,22 +651,60 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                     {/* Flecha Izquierda */}
                     <button
                         onClick={goToPrevStoryInUser}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+                        aria-label="Historia anterior"
+                        className="arrow-btn left"
+                        tabIndex={0}
                     >
-                        <ChevronLeftIcon className="w-6 h-6" />
+                        <ChevronLeftIcon className="w-6 h-6 pointer-events-none" />
                     </button>
 
                     {/* Flecha Derecha */}
                     <button
                         onClick={goToNextStoryInUser}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 hover:bg-black/60 text-white w-9 h-9 rounded-full flex items-center justify-center backdrop-blur-sm transition-colors"
+                        aria-label="Siguiente historia"
+                        className="arrow-btn right"
+                        tabIndex={0}
                     >
-                        <ChevronRightIcon className="w-6 h-6" />
+                        <ChevronRightIcon className="w-6 h-6 pointer-events-none" />
                     </button>
+
+                    {/* Botón Ver vistas abajo (siempre en historias propias, incluso 0) */}
+                    {isOwnStory && (
+                        <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none">
+                            <button
+                                onClick={() => setShowViewsModal(true)}
+                                className="group pointer-events-auto pl-3 pr-4 py-1.5 rounded-full bg-black/55 hover:bg-black/70 text-white/90 hover:text-white text-xs font-medium backdrop-blur border border-white/15 shadow-sm transition-colors flex items-center gap-1.5"
+                                title="Ver quiénes vieron esta historia"
+                            >
+                                {/* Icono ojo */}
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="w-4 h-4 opacity-80 group-hover:opacity-100 transition-opacity"
+                                >
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+                                    <circle cx="12" cy="12" r="3" />
+                                </svg>
+                                <span>Vistas: {totalExternalViews || 0}</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
             <style jsx>{`
+                .arrow-btn { position:absolute; top:50%; transform:translateY(-50%); width:46px; height:46px; display:flex; align-items:center; justify-content:center; border-radius:9999px; background:rgba(0,0,0,.42); color:#fff; backdrop-filter:blur(4px); transition:background .18s, transform .18s; z-index:30; outline:none; }
+                .arrow-btn:hover { background:rgba(0,0,0,.62); }
+                .arrow-btn:active { transform:translateY(-50%) scale(.94); }
+                .arrow-btn.left { left:6px; }
+                .arrow-btn.right { right:6px; }
+                .arrow-btn::before { content:""; position:absolute; inset:-8px; border-radius:inherit; }
+                .arrow-btn:focus-visible { box-shadow:0 0 0 2px #fff6; }
                 .modal-enter { animation: modalFadeIn 0.28s ease-out forwards; }
                 .modal-leave { animation: modalFadeOut 0.22s ease-in forwards; }
                 @keyframes modalFadeIn { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:scale(1); } }
@@ -644,6 +739,13 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                     .story-vertical-frame { width: 100vw; height: 100vh; border-radius: 0; }
                 }
             `}</style>
+            <StoryViewsModal
+                open={showViewsModal}
+                onClose={() => setShowViewsModal(false)}
+                loading={viewsLoading}
+                error={viewsError}
+                viewers={viewersData}
+            />
         </div>
     );
 };
