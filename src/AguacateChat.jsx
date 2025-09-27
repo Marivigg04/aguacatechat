@@ -105,6 +105,9 @@ const AguacateChat = () => {
     const [chatMessages, setChatMessages] = useState([]);
     // Bandera: usuario actual es creador de la conversación seleccionada
     const [isConversationCreator, setIsConversationCreator] = useState(false);
+    const [isConversationAccepted, setIsConversationAccepted] = useState(true); // default true para no bloquear chats antiguos
+    const [isAcceptingConv, setIsAcceptingConv] = useState(false);
+    const [isRejectingConv, setIsRejectingConv] = useState(false);
     // Estado: conversación bloqueada
     const [isConvBlocked, setIsConvBlocked] = useState(false);
     const [isTogglingBlocked, setIsTogglingBlocked] = useState(false);
@@ -398,6 +401,8 @@ const AguacateChat = () => {
 
     // Lista real de conversaciones del usuario
     const [conversations, setConversations] = useState([]);
+    // Estado para plegar/desplegar sección de solicitudes entrantes
+    const [showChatRequests, setShowChatRequests] = useState(false);
     const [loadingConversations, setLoadingConversations] = useState(true);
     // Control de salida suave del skeleton (fade-out antes de desmontar)
     const [showLoadingSkeleton, setShowLoadingSkeleton] = useState(true);
@@ -1121,11 +1126,12 @@ const AguacateChat = () => {
                 try {
                     const { data: convMeta, error: convMetaErr } = await supabase
                         .from('conversations')
-                        .select('id, created_by, blocked, blocked_by')
+                        .select('id, created_by, blocked, blocked_by, acepted')
                         .eq('id', contact.conversationId)
                         .single();
                     if (!convMetaErr && convMeta) {
                         setIsConversationCreator(convMeta.created_by === user?.id);
+                        setIsConversationAccepted(Boolean(convMeta.acepted));
                         const blocked = !!convMeta.blocked;
                         setIsConvBlocked(blocked);
                         setBlockedBy(blocked ? convMeta.blocked_by : null);
@@ -1223,6 +1229,58 @@ const AguacateChat = () => {
         }
     };
 
+    // Aceptar conversación (usuario que NO la creó da consentimiento para continuar)
+    const acceptConversation = async () => {
+        if (!selectedContact?.conversationId || isConversationCreator || isConversationAccepted) return;
+        setIsAcceptingConv(true);
+        try {
+            const { error } = await supabase
+                .from('conversations')
+                .update({ acepted: true })
+                .eq('id', selectedContact.conversationId);
+            if (error) throw error;
+            setIsConversationAccepted(true);
+            // Actualizar estado local para que la conversación salga de 'Solicitudes' sin recargar
+            setConversations(prev => prev.map(c =>
+                c.conversationId === selectedContact.conversationId
+                    ? { ...c, acepted: true }
+                    : c
+            ));
+            toast.success('Conversación aceptada');
+        } catch (e) {
+            console.error('Error aceptando conversación:', e);
+            toast.error('No se pudo aceptar');
+        } finally {
+            setIsAcceptingConv(false);
+        }
+    };
+
+    // Rechazar conversación: por simplicidad bloqueamos la conversación (puede ajustarse a eliminar o marcar estado)
+    const rejectConversation = async () => {
+        if (!selectedContact?.conversationId || isConversationCreator || isConversationAccepted) return;
+        setIsRejectingConv(true);
+        try {
+            // Bloqueamos para que el creador no pueda seguir (reutilizando toggle si no está ya bloqueada)
+            const { data: convMeta, error: convErr } = await supabase
+                .from('conversations')
+                .select('blocked')
+                .eq('id', selectedContact.conversationId)
+                .single();
+            if (convErr) throw convErr;
+            if (!convMeta?.blocked) {
+                await toggleConversationBlocked(selectedContact.conversationId, user?.id);
+            }
+            toast('Has rechazado la conversación');
+            setIsConvBlocked(true);
+            setBlockedBy(user?.id || null);
+        } catch (e) {
+            console.error('Error rechazando conversación:', e);
+            toast.error('No se pudo rechazar');
+        } finally {
+            setIsRejectingConv(false);
+        }
+    };
+
     // Helper to detect if an element is visible in the viewport of chat area
     const isMessageVisible = (el) => {
         const container = chatAreaRef.current
@@ -1290,11 +1348,28 @@ const AguacateChat = () => {
 
     const messageInputRef = useRef(null);
 
+    // --- Restricción: creador solo puede enviar 1 mensaje hasta que el otro responda ---
+    // isConversationCreator ya se setea al seleccionar la conversación (cuando created_by === user.id)
+    // Calculamos si el creador debe quedar bloqueado para seguir enviando.
+    const isCreatorSendingLocked = React.useMemo(() => {
+        if (!isConversationCreator) return false; // Solo aplica al creador
+        // Contar mensajes enviados por el usuario (sent) y recibidos del otro (received)
+        const sentCount = chatMessages.filter(m => m.type === 'sent').length;
+        const anyReceived = chatMessages.some(m => m.type === 'received');
+        // Regla: si ya envió al menos 1 y aún no hay respuesta (received) -> bloqueo
+        if (sentCount >= 1 && !anyReceived) return true;
+        return false;
+    }, [isConversationCreator, chatMessages]);
+
     const sendMessage = async () => {
         const content = messageInput.trim();
         if (!content) return;
         if (!selectedContact?.conversationId) {
             toast.error('No hay conversación activa');
+            return;
+        }
+        if (isCreatorSendingLocked) {
+            toast.info('Espera a que el otro usuario responda para continuar la conversación.');
             return;
         }
     const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -1320,6 +1395,10 @@ const AguacateChat = () => {
         if (!file || !selectedContact?.conversationId || isUploadingPhoto) return;
         if (!user?.id) {
             toast.error('Debes iniciar sesión para enviar fotos');
+            return;
+        }
+        if (isCreatorSendingLocked) {
+            toast.info('Espera a que el otro usuario responda antes de enviar más archivos.');
             return;
         }
         setIsUploadingPhoto(true);
@@ -1405,6 +1484,10 @@ const AguacateChat = () => {
             toast.error('Debes iniciar sesión para enviar videos');
             return;
         }
+        if (isCreatorSendingLocked) {
+            toast.info('Espera a que el otro usuario responda antes de enviar más videos.');
+            return;
+        }
             messageInputRef.current.style.overflowY = 'hidden';
         // Validar tipo
         if (!file.type.startsWith('video/')) {
@@ -1458,7 +1541,20 @@ const AguacateChat = () => {
         }
     };
 
-    const contacts = conversationsToContacts(conversations);
+    // Dividir conversaciones en:
+    // 1) Solicitudes entrantes: acepted == false (o null) y created_by != usuario actual
+    // 2) Conversaciones normales: resto
+    const chatRequestConversations = React.useMemo(() => {
+        if (!user?.id) return [];
+        return (conversations || []).filter(c => c.created_by !== user.id && !c.acepted);
+    }, [conversations, user?.id]);
+    const normalConversations = React.useMemo(() => {
+        if (!user?.id) return conversations || [];
+        return (conversations || []).filter(c => !(c.created_by !== user.id && !c.acepted));
+    }, [conversations, user?.id]);
+
+    const contacts = conversationsToContacts(normalConversations);
+    const chatRequestContacts = conversationsToContacts(chatRequestConversations);
 
     // Cálculo del ancla para "visto" al estilo Messenger
     // Regla: mostrar mini avatar del otro usuario en:
@@ -1496,6 +1592,17 @@ const AguacateChat = () => {
         (contact.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (contact.lastMessage || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
+    const filteredChatRequestContacts = chatRequestContacts.filter(contact =>
+        (contact.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (contact.lastMessage || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    // Auto-colapsar y ocultar la sección de solicitudes cuando se vacía
+    useEffect(() => {
+        if (showChatRequests && filteredChatRequestContacts.length === 0) {
+            setShowChatRequests(false);
+        }
+    }, [filteredChatRequestContacts.length, showChatRequests]);
 
     // Estado/refs para animar el icono de leído cuando "baja"
     const [animateReadReceipt, setAnimateReadReceipt] = useState(false);
@@ -2011,6 +2118,90 @@ const AguacateChat = () => {
                         </div>
                     </div>
                     <div className="flex-1 overflow-y-auto relative" style={{ backgroundColor: 'var(--bg-contacts)' }}>
+                        {/* Sección plegable de Solicitudes de chat */}
+                        {filteredChatRequestContacts.length > 0 && (
+                            <div className="theme-border border-b">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowChatRequests(v => !v)}
+                                    className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium theme-text-primary hover:theme-bg-chat transition-colors"
+                                    aria-expanded={showChatRequests}
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <span className="inline-block px-2 py-0.5 text-[11px] rounded bg-teal-600/20 text-teal-400 font-semibold tracking-wide">Solicitudes de chat</span>
+                                        <span className="text-xs theme-text-secondary">{filteredChatRequestContacts.length}</span>
+                                    </span>
+                                    <svg
+                                        className={`w-4 h-4 transition-transform duration-200 ${showChatRequests ? 'rotate-180' : ''}`}
+                                        fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                                <div className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${showChatRequests ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    {showChatRequests && filteredChatRequestContacts.map((contact, index) => (
+                                        <div
+                                            key={`req-${index}`}
+                                            className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-t theme-border ${selectedContact?.conversationId === contact.conversationId ? 'theme-bg-chat pointer-events-none' : ''}`}
+                                            onClick={() => handleSelectContact(contact)}
+                                            aria-current={selectedContact?.conversationId === contact.conversationId ? 'true' : undefined}
+                                            role="button"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                {contact?.avatar_url ? (
+                                                    <img src={contact.avatar_url} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
+                                                ) : (
+                                                    <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
+                                                        <svg className="w-12 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex justify-between items-center">
+                                                        <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
+                                                    </div>
+                                                    <div className="flex justify-between items-center mt-1">
+                                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
+                                                            {contact.lastMessageType === 'image' ? (
+                                                                <>
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                                        <path d="M4 5a2 2 0 012-2h2.172a2 2 0 001.414-.586l.828-.828A2 2 0 0111.828 1h.344a2 2 0 011.414.586l.828.828A2 2 0 0015.828 3H18a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v12h12V5H6zm6 3a4 4 0 110 8 4 4 0 010-8z" />
+                                                                    </svg>
+                                                                    <span>Foto</span>
+                                                                </>
+                                                            ) : contact.lastMessageType === 'audio' ? (
+                                                                <>
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                                        <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zM11 19.93V22h2v-2.07A8.001 8.001 0 0020 12h-2a6 6 0 11-12 0H4a8.001 8.001 0 007 7.93z" />
+                                                                    </svg>
+                                                                    <span>
+                                                                        {(() => {
+                                                                            const secs = audioPreviewDurations[contact.lastMessageId];
+                                                                            return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
+                                                                        })()}
+                                                                    </span>
+                                                                </>
+                                                            ) : contact.lastMessageType === 'video' ? (
+                                                                <>
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4 opacity-70">
+                                                                        <path d="M17 10.5V6a2 2 0 00-2-2H5C3.895 4 3 4.895 3 6v12c0 1.105.895 2 2 2h10a2 2 0 002-2v-4.5l4 4v-11l-4 4z" />
+                                                                    </svg>
+                                                                    <span>Video</span>
+                                                                </>
+                                                            ) : (
+                                                                contact.lastMessage
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         {contacts.length === 0 && !loadingConversations && (
                             <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-4">
                                 <p className="theme-text-secondary">No tienes conversaciones todavía.</p>
@@ -2339,7 +2530,7 @@ const AguacateChat = () => {
                             className="scale-fade-in"
                         />
                     )}
-                    {selectedContact && chatMessages.length === 0 && !loadingChatArea && !isConvBlocked && (
+                    {selectedContact && chatMessages.length === 0 && !loadingChatArea && !isConvBlocked && !isConversationAccepted && (
                         <>
                             {isConversationCreator ? (
                                 <CenterNoticeBox
@@ -2353,10 +2544,25 @@ const AguacateChat = () => {
                                     title="Aún no hay mensajes"
                                     message={"Este usuario quiere iniciar una conversación contigo, aunque aún no envía su solicitud. \n\n ¿Qué quieres hacer? \n (No recomendamos aceptar conversaciones de desconocidos)"}
                                     variant="neutral"
-                                    actions={[{label: 'Aceptar', onClick: () => toast.success('Conversación aceptada'), variant: 'primary',}, { label: 'Rechazar', onClick: () => { setSelectedContact(null); toast.success('Conversación rechazada'); }, variant: 'danger'}]}
+                                    actions={[
+                                        { label: isAcceptingConv ? 'Aceptando...' : 'Aceptar', onClick: acceptConversation, variant: 'primary', disabled: isAcceptingConv },
+                                        { label: isRejectingConv ? 'Procesando...' : 'Rechazar', onClick: rejectConversation, variant: 'danger', disabled: isRejectingConv }
+                                    ]}
                                     className="scale-fade-in"
                                 />
                             )}
+                        </>
+                    )}
+                    {selectedContact && chatMessages.length === 0 && !loadingChatArea && !isConvBlocked && isConversationAccepted && (
+                        <>
+                            <CenterNoticeBox
+                                    title="Aún no hay mensajes"
+                                    message={"Empieza la conversación enviando el primer mensaje."}
+                                    variant="neutral"
+                                    actions={[
+                                    ]}
+                                    className="scale-fade-in"
+                                />
                         </>
                     )}
                     {selectedContact && isConvBlocked && (
@@ -2611,6 +2817,44 @@ const AguacateChat = () => {
                                             {selectedContact?.initials?.slice(0,2) || '•'}
                                         </div>
                                     )}
+                                </div>
+                            )}
+                            {!isConversationCreator && !isConversationAccepted && !isConvBlocked && chatMessages.length > 0 && (
+                                <div className="mt-6 mb-2 w-full flex justify-center">
+                                    <div className="px-4 py-3 rounded-lg text-xs sm:text-sm font-medium flex flex-col sm:flex-row items-stretch sm:items-center gap-3 theme-border border bg-teal-500/10 text-teal-300 backdrop-blur-sm shadow-sm w-full max-w-xl">
+                                        <div className="flex items-center gap-2 flex-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+                                            </svg>
+                                            <span className="text-left">Este usuario quiere iniciar una conversación contigo. ¿Deseas aceptarla?</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 sm:justify-end">
+                                            <button
+                                                onClick={acceptConversation}
+                                                disabled={isAcceptingConv}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${isAcceptingConv ? 'opacity-60 cursor-not-allowed bg-teal-600/40' : 'bg-teal-600 hover:bg-teal-500 text-white'}`}
+                                            >
+                                                {isAcceptingConv ? 'Aceptando...' : 'Aceptar'}
+                                            </button>
+                                            <button
+                                                onClick={rejectConversation}
+                                                disabled={isRejectingConv}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${isRejectingConv ? 'opacity-60 cursor-not-allowed bg-rose-600/40' : 'bg-rose-600 hover:bg-rose-500 text-white'}`}
+                                            >
+                                                {isRejectingConv ? 'Procesando...' : 'Rechazar'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                            {isCreatorSendingLocked && !isConvBlocked && (
+                                <div className="mt-6 mb-2 w-full flex justify-center">
+                                    <div className="px-4 py-2 rounded-lg text-xs font-medium flex items-center gap-2 theme-border border bg-amber-400/15 text-amber-300 backdrop-blur-sm shadow-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M4.93 19h14.14c1.54 0 2.5-1.67 1.73-3L13.73 4.99c-.77-1.33-2.69-1.33-3.46 0L3.2 16c-.77 1.33.19 3 1.73 3z" />
+                                        </svg>
+                                        <span>Has enviado el primer mensaje. Espera la respuesta para continuar.</span>
+                                    </div>
                                 </div>
                             )}
                         </>
@@ -2906,7 +3150,6 @@ const AguacateChat = () => {
                                 <textarea
                                     ref={messageInputRef}
                                     id="messageInput"
-                                    placeholder={selectedContact ? "Escribe un mensaje..." : "Selecciona una conversación para empezar"}
                                     className="flex-1 px-7 py-3 rounded-xl theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary resize-none leading-relaxed"
                                     style={{
                                         minHeight: '44px',
@@ -2929,13 +3172,22 @@ const AguacateChat = () => {
                                     }}
                                     onKeyPress={handleKeyPress}
                                     rows={1}
-                                    disabled={!selectedContact}
+                                    disabled={!selectedContact || isCreatorSendingLocked || (!isConversationCreator && !isConversationAccepted)}
+                                    placeholder={
+                                        !selectedContact
+                                            ? 'Selecciona una conversación para empezar'
+                                            : isCreatorSendingLocked
+                                                ? 'Esperando respuesta del otro usuario...'
+                                                : (!isConversationCreator && !isConversationAccepted)
+                                                    ? 'Debes aceptar la conversación para responder'
+                                                    : 'Escribe un mensaje...'
+                                    }
                                 />
                                 {(isRecording || messageInput.trim().length === 0) ? (
                                     <button
                                         onClick={toggleRecording}
                                         className={`p-3 ${isRecording ? 'bg-red-500' : 'bg-gradient-to-r from-teal-primary to-teal-secondary'} text-white rounded-full hover:opacity-80 transition-opacity shrink-0 flex items-center justify-center`}
-                                        disabled={!selectedContact}
+                                        disabled={!selectedContact || isCreatorSendingLocked || (!isConversationCreator && !isConversationAccepted)}
                                         title={isRecording ? (isRecordingPaused ? 'Reanudar grabación' : 'Pausar/Detener grabación') : 'Grabar audio'}
                                     >
                                         <div className="w-7 h-7">
@@ -2946,7 +3198,7 @@ const AguacateChat = () => {
                                     <button
                                         onClick={sendMessage}
                                         className="p-3 bg-gradient-to-r from-teal-primary to-teal-secondary text-white rounded-full hover:opacity-80 transition-opacity shrink-0 flex items-center justify-center"
-                                        disabled={!selectedContact}
+                                        disabled={!selectedContact || isCreatorSendingLocked || (!isConversationCreator && !isConversationAccepted)}
                                         onMouseEnter={() => {
                                             setSendStopped(true);
                                             setTimeout(() => {
@@ -2955,7 +3207,7 @@ const AguacateChat = () => {
                                             }, 10);
                                         }}
                                         onMouseLeave={() => setSendPaused(true)}
-                                        title="Enviar mensaje"
+                                        title={isCreatorSendingLocked ? 'Esperando respuesta del otro usuario' : 'Enviar mensaje'}
                                     >
                                         <div className="w-7 h-7">
                                             <Lottie options={lottieOptions.send} isPaused={isSendPaused} isStopped={isSendStopped}/>

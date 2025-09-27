@@ -120,7 +120,8 @@ export async function fetchUserConversations(currentUserId) {
   // 1) Mis participaciones con datos de conversación
   const { data: myRows, error: myErr } = await supabase
     .from('participants')
-    .select('conversation_id, conversations(id, type, created_at)')
+    // Incluimos created_by y acepted para identificar solicitudes entrantes
+    .select('conversation_id, conversations(id, type, created_at, created_by, acepted)')
     .eq('user_id', currentUserId)
 
   if (myErr) throw myErr
@@ -192,6 +193,8 @@ export async function fetchUserConversations(currentUserId) {
       conversationId: convId,
       type: conv.type || 'direct',
       created_at: conv.created_at,
+      created_by: conv.created_by,
+      acepted: conv.acepted, // puede venir null/false
       otherUserId: otherId,
       otherProfile: prof,
       last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id, type: last.type || 'text' } : null,
