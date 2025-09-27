@@ -91,7 +91,7 @@ export async function createOrGetDirectConversation(currentUserId, otherUserId) 
       })
   const { error: convErr } = await supabase
     .from('conversations')
-    .insert({ id: convId, type: 'direct' })
+    .insert({ id: convId, type: 'direct', created_by: currentUserId })
 
   if (convErr) throw convErr
 
@@ -344,4 +344,42 @@ export async function appendUserToMessageSeen(messageId, userId) {
     .eq('id', messageId)
   if (updErr) throw updErr
   return { updated: true, seen: next }
+}
+
+// Toggle blocked state of a conversation. If conversation blocked is true -> set false (and clear blocked_by), else true (and set blocked_by=userId).
+// Returns { id, blocked, blocked_by }
+export async function toggleConversationBlocked(conversationId, userId) {
+  if (!conversationId) throw new Error('conversationId requerido')
+  // Read current blocked value (default false if null)
+  const { data: conv, error: selErr } = await supabase
+    .from('conversations')
+    .select('id, blocked, blocked_by')
+    .eq('id', conversationId)
+    .single()
+  if (selErr) throw selErr
+  const current = !!conv.blocked
+  const next = !current
+  const changes = next
+    ? { blocked: true, blocked_by: userId || null }
+    : { blocked: false, blocked_by: null }
+  const { data: updated, error: updErr } = await supabase
+    .from('conversations')
+    .update(changes)
+    .eq('id', conversationId)
+    .select('id, blocked, blocked_by')
+    .single()
+  if (updErr) throw updErr
+  return updated
+}
+
+// Quick helper to know if a conversation is blocked (returns boolean)
+export async function isConversationBlocked(conversationId) {
+  if (!conversationId) return false
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('blocked')
+    .eq('id', conversationId)
+    .single()
+  if (error) throw error
+  return !!data?.blocked
 }

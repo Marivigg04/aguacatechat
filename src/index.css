@@ -45,6 +45,14 @@ html, body, #root {
 .anim-slide-up { animation: slideUp 360ms ease-out both }
 .anim-slide-right { animation: slideRight 360ms ease-out both }
 
+/* Nuevo: scale-fade para notices reutilizables */
+@keyframes scaleFadeIn {
+  0% { opacity:0; transform: scale(.94) translateY(4px); }
+  70% { opacity:1; transform: scale(1.015) translateY(0); }
+  100% { opacity:1; transform: scale(1); }
+}
+.scale-fade-in { animation: scaleFadeIn 420ms cubic-bezier(.25,.95,.4,1.05) both; }
+
 /* Fade-out para desmontar suavemente */
 @keyframes fadeOut {
   from { opacity: 1; transform: translateY(0) }

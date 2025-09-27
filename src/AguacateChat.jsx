@@ -8,6 +8,7 @@ import imageCompression from 'browser-image-compression';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
+import CenterNoticeBox from './components/CenterNoticeBox.jsx';
 import VideoThumbnail, { VideoModal } from './VideoPlayer.jsx';
 import AudioPlayer from './AudioPlayer.jsx';
 import toast, { Toaster } from 'react-hot-toast';
@@ -19,7 +20,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen, toggleConversationBlocked } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -102,6 +103,12 @@ const AguacateChat = () => {
     // No seleccionar conversación por defecto al cargar
     const [selectedContact, setSelectedContact] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
+    // Bandera: usuario actual es creador de la conversación seleccionada
+    const [isConversationCreator, setIsConversationCreator] = useState(false);
+    // Estado: conversación bloqueada
+    const [isConvBlocked, setIsConvBlocked] = useState(false);
+    const [isTogglingBlocked, setIsTogglingBlocked] = useState(false);
+    const [blockedBy, setBlockedBy] = useState(null); // id del usuario que bloqueó
     // Paginación de mensajes
     const PAGE_SIZE = 20;
     const [hasMoreOlder, setHasMoreOlder] = useState(false);
@@ -1093,6 +1100,9 @@ const AguacateChat = () => {
         setShowChatSkeleton(true);
         setChatSkeletonExiting(false);
         setSelectedContact(contact);
+        // Reset bandera creador hasta confirmar
+        setIsConversationCreator(false);
+        setIsConvBlocked(false);
         // Reset paginación
         setChatMessages([]);
         setHasMoreOlder(false);
@@ -1104,26 +1114,55 @@ const AguacateChat = () => {
         // Cargar última página si hay conversationId
         try {
             if (contact?.conversationId) {
-                const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE });
-                const mapped = messages.map(m => {
-                    const base = {
-                        id: m.id,
-                        type: m.sender_id === user?.id ? 'sent' : 'received',
-                        created_at: m.created_at,
-                        messageType: m.type || 'text',
-                        seen: Array.isArray(m.seen) ? m.seen : [],
-                    };
-                    if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
-                    if (m.type === 'video') return { ...base, text: m.content }; // video usa text como src
-                    if (m.type === 'image') return { ...base, text: m.content };
-                    return { ...base, text: m.content };
-                });
-                setChatMessages(mapped);
-                setHasMoreOlder(hasMore);
-                setOldestCursor(nextCursor);
-                setLoadingChatArea(false);
-                // Intentar marcar como visto lo que ya esté en pantalla
-                setTimeout(() => { tryMarkVisibleAsSeen(); }, 0);
+                // Consultar metadata incluyendo estado bloqueado
+                try {
+                    const { data: convMeta, error: convMetaErr } = await supabase
+                        .from('conversations')
+                        .select('id, created_by, blocked, blocked_by')
+                        .eq('id', contact.conversationId)
+                        .single();
+                    if (!convMetaErr && convMeta) {
+                        setIsConversationCreator(convMeta.created_by === user?.id);
+                        const blocked = !!convMeta.blocked;
+                        setIsConvBlocked(blocked);
+                        setBlockedBy(blocked ? convMeta.blocked_by : null);
+                        if (blocked) {
+                            // Si está bloqueada, no cargamos mensajes
+                            setChatMessages([]);
+                            setHasMoreOlder(false);
+                            setOldestCursor(null);
+                            setLoadingChatArea(false);
+                            return; // salir temprano
+                        }
+                    }
+                } catch (metaErr) {
+                    console.warn('No se pudo obtener metadata de la conversación:', metaErr);
+                }
+                try {
+                    const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE });
+                    const mapped = messages.map(m => {
+                        const base = {
+                            id: m.id,
+                            type: m.sender_id === user?.id ? 'sent' : 'received',
+                            created_at: m.created_at,
+                            messageType: m.type || 'text',
+                            seen: Array.isArray(m.seen) ? m.seen : [],
+                        };
+                        if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
+                        if (m.type === 'video') return { ...base, text: m.content };
+                        if (m.type === 'image') return { ...base, text: m.content };
+                        return { ...base, text: m.content };
+                    });
+                    setChatMessages(mapped);
+                    setHasMoreOlder(hasMore);
+                    setOldestCursor(nextCursor);
+                    // Intentar marcar como visto lo que ya esté en pantalla
+                    setTimeout(() => { tryMarkVisibleAsSeen(); }, 0);
+                } catch (e2) {
+                    console.error('No se pudieron cargar mensajes:', e2);
+                } finally {
+                    setLoadingChatArea(false);
+                }
             }
         } catch (e) {
             console.error('No se pudieron cargar mensajes:', e);
@@ -1550,6 +1589,49 @@ const AguacateChat = () => {
 
     const toggleChatOptions = () => {
         setShowChatOptionsMenu(!showChatOptionsMenu);
+    };
+
+    // Handler reutilizable para bloquear/desbloquear
+    const handleToggleConversationBlocked = async () => {
+        if (!selectedContact?.conversationId) {
+            toast.error('No hay conversación activa');
+            return;
+        }
+        if (isTogglingBlocked) return;
+        setIsTogglingBlocked(true);
+        try {
+            const { blocked, blocked_by } = await toggleConversationBlocked(selectedContact.conversationId, user?.id);
+            setIsConvBlocked(!!blocked);
+            setBlockedBy(blocked ? blocked_by : null);
+            if (blocked) {
+                // Ya no vaciamos los mensajes; solo marcamos el estado de bloqueo para ocultar el input y deshabilitar envíos
+                // Mantener historial permite que el usuario vea el contexto aun estando bloqueado.
+                toast.success('Conversación bloqueada');
+            } else {
+                toast.success('Conversación desbloqueada');
+                try {
+                    const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE });
+                    const mapped = messages.map(m => {
+                        const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] };
+                        if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
+                        if (m.type === 'video') return { ...base, text: m.content };
+                        if (m.type === 'image') return { ...base, text: m.content };
+                        return { ...base, text: m.content };
+                    });
+                    setChatMessages(mapped);
+                    setHasMoreOlder(hasMore);
+                    setOldestCursor(nextCursor);
+                    setTimeout(() => { tryMarkVisibleAsSeen(); }, 0);
+                } catch (loadErr) {
+                    console.error('Error cargando mensajes tras desbloquear:', loadErr);
+                }
+            }
+        } catch (e) {
+            console.error('Error al cambiar bloqueo:', e);
+            toast.error('No se pudo cambiar el estado de bloqueo');
+        } finally {
+            setIsTogglingBlocked(false);
+        }
     };
 
     const createNewChat = () => {
@@ -2072,12 +2154,18 @@ const AguacateChat = () => {
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="relative">
-                                <button onClick={toggleChatOptions} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity flex flex-col gap-1 items-center justify-center w-10 h-10" title="Opciones del chat" disabled={!selectedContact}>
+                                <button
+                                    onClick={toggleChatOptions}
+                                    className={`p-2 rounded-lg theme-bg-chat transition-opacity flex flex-col gap-1 items-center justify-center w-10 h-10 ${(!selectedContact || isConvBlocked) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                                    title="Opciones del chat"
+                                    disabled={!selectedContact || isConvBlocked}
+                                    aria-disabled={!selectedContact || isConvBlocked}
+                                >
                                     <span className="w-1 h-1 bg-current rounded-full"></span>
                                     <span className="w-1 h-1 bg-current rounded-full"></span>
                                     <span className="w-1 h-1 bg-current rounded-full"></span>
                                 </button>
-                                <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showChatOptionsMenu && selectedContact ? '' : 'hidden'}`}>
+                                <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${(showChatOptionsMenu && selectedContact && !isConvBlocked) ? '' : 'hidden'}`}>
                                     <button 
                                         onClick={() => {
                                             setChatMessages([]);
@@ -2119,8 +2207,8 @@ const AguacateChat = () => {
                                         </div>
                                         <span>Silenciar notificaciones</span>
                                     </button>
-                                    <button 
-                                        onClick={() => { toast.success('Contacto bloqueado.'); toggleChatOptions(); }} 
+                                    <button
+                                        onClick={async () => { await handleToggleConversationBlocked(); toggleChatOptions(); }}
                                         className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colores flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setCallSilentStopped(true);
@@ -2139,7 +2227,7 @@ const AguacateChat = () => {
                                                 height={24} width={24} 
                                             />
                                         </div>
-                                        <span>Bloquear contacto</span>
+                                        <span>Bloquear</span>
                                     </button>
                                     <button 
                                         onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
@@ -2474,7 +2562,7 @@ const AguacateChat = () => {
                     )}
                 </div>
 
-                {selectedContact && (
+                {selectedContact && !isConvBlocked && (
                 <div className="theme-bg-secondary theme-border border-t p-4">
                     <div className="flex items-center gap-3">
                         {/* 4. REEMPLAZO DEL ICONO DE ADJUNTAR */}
