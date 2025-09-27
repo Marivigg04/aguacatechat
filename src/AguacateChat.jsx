@@ -20,7 +20,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen, toggleConversationBlocked } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen, toggleConversationBlocked, clearChatForUser, fetchLastClearChat } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -117,6 +117,7 @@ const AguacateChat = () => {
     const [messageInput, setMessageInput] = useState('');
     const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [showChatOptionsMenu, setShowChatOptionsMenu] = useState(false);
+    const [showConfirmClearChat, setShowConfirmClearChat] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showContactModal, setShowContactModal] = useState(false);
     const [modalType, setModalType] = useState('chat');
@@ -214,6 +215,8 @@ const AguacateChat = () => {
     const storiesLoadingTimerRef = useRef(null);
     // Ref para controlar acciones dentro de StoriesView (subir historia desde placeholder)
     const storiesViewRef = useRef(null);
+    // Corte de limpieza (message_id) para filtrar mensajes previos
+    const afterClearMessageIdRef = useRef(null);
     const [inlineStoryMenu, setInlineStoryMenu] = useState(false); // menú inline en placeholder historias
     // Modal de video
     const [videoModalOpen, setVideoModalOpen] = useState(false);
@@ -1139,7 +1142,18 @@ const AguacateChat = () => {
                     console.warn('No se pudo obtener metadata de la conversación:', metaErr);
                 }
                 try {
-                    const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE });
+                    // Obtener corte de limpieza (si existe) para este usuario
+                    let afterMessageId = null;
+                    let afterTimestamp = null;
+                    try {
+                        const clearRow = await fetchLastClearChat(contact.conversationId, user?.id);
+                        afterMessageId = clearRow?.message_id || null;
+                        afterTimestamp = clearRow?.pivot_created_at || null;
+                    } catch (clrErr) {
+                        console.warn('No se pudo obtener registro de limpieza:', clrErr);
+                    }
+                    afterClearMessageIdRef.current = afterMessageId; // cachear id (legacy)
+                    const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE, afterMessageId, afterTimestamp });
                     const mapped = messages.map(m => {
                         const base = {
                             id: m.id,
@@ -1184,7 +1198,8 @@ const AguacateChat = () => {
     prevScrollTopRef.current = el ? el.scrollTop : 0;
         setLoadingOlder(true);
         try {
-            const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, before: oldestCursor });
+            // No usamos afterTimestamp aquí porque ya estamos navegando a mensajes más antiguos que los cargados post-limpieza.
+            const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, before: oldestCursor, afterMessageId: afterClearMessageIdRef.current });
             const mapped = messages.map(m => {
                 const base = {
                     id: m.id,
@@ -1610,7 +1625,15 @@ const AguacateChat = () => {
             } else {
                 toast.success('Conversación desbloqueada');
                 try {
-                    const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE });
+                    let afterMessageId2 = null;
+                    let afterTimestamp2 = null;
+                    try {
+                        const clearRow2 = await fetchLastClearChat(selectedContact.conversationId, user?.id);
+                        afterMessageId2 = clearRow2?.message_id || null;
+                        afterTimestamp2 = clearRow2?.pivot_created_at || null;
+                    } catch (clrErr2) { /* ignore */ }
+                    afterClearMessageIdRef.current = afterMessageId2;
+                    const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, afterMessageId: afterMessageId2, afterTimestamp: afterTimestamp2 });
                     const mapped = messages.map(m => {
                         const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] };
                         if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
@@ -2168,9 +2191,11 @@ const AguacateChat = () => {
                                 <div id="chatOptionsMenu" className={`absolute right-0 top-12 w-56 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${(showChatOptionsMenu && selectedContact && !isConvBlocked) ? '' : 'hidden'}`}>
                                     <button 
                                         onClick={() => {
-                                            setChatMessages([]);
-                                            toast.success('Chat limpiado.');
-                                            toggleChatOptions();
+                                            if (!selectedContact?.conversationId || !user?.id) {
+                                                toast.error('No hay conversación o usuario válido');
+                                                return;
+                                            }
+                                            setShowConfirmClearChat(true);
                                         }} 
                                         className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary transition-colors flex items-center gap-2"
                                         onMouseEnter={() => {
@@ -3049,6 +3074,53 @@ const AguacateChat = () => {
             </div>
 
             {/* Modal de perfil */}
+            {showConfirmClearChat && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="w-full max-w-sm rounded-lg theme-bg-chat shadow-xl border theme-border p-5 animate-fade-in">
+                        <h3 className="text-lg font-semibold mb-2 theme-text-primary">Confirmar limpieza</h3>
+                        <p className="text-sm theme-text-secondary mb-4">Esto ocultará el historial anterior solo para ti. ¿Deseas continuar?</p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowConfirmClearChat(false)}
+                                className="px-4 py-2 rounded-md theme-bg-secondary theme-text-primary hover:opacity-80 text-sm"
+                            >Cancelar</button>
+                            <button
+                                onClick={async () => {
+                                    if (!selectedContact?.conversationId || !user?.id) {
+                                        toast.error('No hay conversación o usuario válido');
+                                        setShowConfirmClearChat(false);
+                                        return;
+                                    }
+                                    try {
+                                        let lastMessageId = null;
+                                        if (Array.isArray(chatMessages) && chatMessages.length > 0) {
+                                            for (let i = chatMessages.length - 1; i >= 0; i--) {
+                                                if (chatMessages[i].id) { lastMessageId = chatMessages[i].id; break; }
+                                            }
+                                        }
+                                        if (!lastMessageId) {
+                                            toast('No hay mensajes que limpiar.', { icon: 'ℹ️' });
+                                            setShowConfirmClearChat(false);
+                                            return;
+                                        }
+                                        await clearChatForUser({ conversationId: selectedContact.conversationId, userId: user.id, messageId: lastMessageId });
+                                        setChatMessages([]);
+                                        toast.success('Chat limpiado.');
+                                    } catch (e) {
+                                        console.error('Error registrando limpieza de chat:', e);
+                                        const msg = e?.message || e?.error_description || e?.error || 'No se pudo registrar la limpieza';
+                                        toast.error(`No se pudo registrar la limpieza: ${msg}`);
+                                    } finally {
+                                        setShowConfirmClearChat(false);
+                                        setShowChatOptionsMenu(false);
+                                    }
+                                }}
+                                className="px-4 py-2 rounded-md bg-gradient-to-r from-teal-primary to-teal-secondary text-white text-sm hover:opacity-90"
+                            >Limpiar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             <ProfileModal
                 showProfileModal={showProfileModal}
                 setShowProfileModal={setShowProfileModal}

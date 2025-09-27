@@ -247,7 +247,7 @@ export async function fetchMessagesByConversation(conversationId, { limit } = {}
 // - Returns the latest "limit" messages when before is null
 // - When before is provided (ISO date), returns messages older than that timestamp
 // Always returns messages sorted ASC (oldest -> newest) for rendering
-export async function fetchMessagesPage(conversationId, { limit = 30, before = null } = {}) {
+export async function fetchMessagesPage(conversationId, { limit = 30, before = null, afterMessageId = null, afterTimestamp = null } = {}) {
   if (!conversationId) return { messages: [], hasMore: false, nextCursor: null }
   let query = supabase
     .from('messages')
@@ -259,13 +259,20 @@ export async function fetchMessagesPage(conversationId, { limit = 30, before = n
   if (before) {
     query = query.lt('created_at', before)
   }
+  if (afterTimestamp) {
+    query = query.gt('created_at', afterTimestamp)
+  }
 
   const { data, error } = await query
   if (error) throw error
 
   const rows = data || []
   const hasMore = rows.length > limit
-  const trimmed = hasMore ? rows.slice(0, limit) : rows
+  let trimmed = hasMore ? rows.slice(0, limit) : rows
+
+  if (afterMessageId && !afterTimestamp) {
+    trimmed = trimmed.filter(m => m.id !== afterMessageId)
+  }
   const messages = trimmed.slice().reverse() // ASC for UI
   const nextCursor = messages.length > 0 ? messages[0].created_at : before
 
@@ -382,4 +389,120 @@ export async function isConversationBlocked(conversationId) {
     .single()
   if (error) throw error
   return !!data?.blocked
+}
+
+// Registra que un usuario limpió el chat en cierto punto temporal.
+// messageId es opcional: si deseas marcar hasta un mensaje específico; si no se pasa, se puede interpretar como "hasta el momento actual".
+// Devuelve la fila insertada.
+export async function clearChatForUser({ conversationId, userId, messageId = null }) {
+  if (!conversationId || !userId) {
+    throw new Error('conversationId y userId requeridos para limpiar chat')
+  }
+  const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/
+  if (!uuidRegex.test(conversationId)) {
+    console.error('[clearChatForUser] conversationId no es UUID válido:', conversationId)
+    throw new Error('conversationId inválido (se esperaba UUID)')
+  }
+  if (!uuidRegex.test(userId)) {
+    console.error('[clearChatForUser] userId no es UUID válido:', userId)
+    throw new Error('userId inválido (se esperaba UUID)')
+  }
+  if (messageId && !uuidRegex.test(messageId)) {
+    console.warn('[clearChatForUser] messageId proporcionado no parece UUID, se ignorará y se buscará el último mensaje:', messageId)
+    messageId = null
+  }
+  let finalMessageId = messageId
+  if (!finalMessageId) {
+    // Buscar último mensaje de la conversación para usarlo como referencia de corte
+    const { data: lastMsg, error: lastErr } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (lastErr) throw lastErr
+    if (!lastMsg?.id) {
+      throw new Error('No hay mensajes en la conversación para registrar limpieza')
+    }
+    finalMessageId = lastMsg.id
+  }
+  if (!uuidRegex.test(finalMessageId)) {
+    console.error('[clearChatForUser] finalMessageId obtenido no es UUID válido:', finalMessageId)
+    throw new Error('finalMessageId inválido')
+  }
+  const payload = {
+    conversation_id: conversationId,
+    user_id: userId,
+    message_id: finalMessageId,
+    cleared_at: new Date().toISOString(),
+  }
+  console.log('[clearChatForUser] Prepared payload:', payload)
+  // Verificar existencia previa
+  const { data: existing, error: existErr } = await supabase
+    .from('clear_chat')
+    .select('message_id, cleared_at')
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+    .order('cleared_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (existErr && existErr.code !== 'PGRST116') throw existErr
+  if (existing) {
+    // Solo actualizar si el nuevo corte está por delante (más nuevo) del ya registrado
+    let shouldUpdate = true
+    if (existing.message_id === finalMessageId) {
+      shouldUpdate = false
+    }
+    if (shouldUpdate) {
+      const { data: upd, error: updErr } = await supabase
+        .from('clear_chat')
+        .update({ message_id: finalMessageId, cleared_at: payload.cleared_at })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', userId)
+        .select()
+        .single()
+      if (updErr) throw updErr
+      console.log('[clearChatForUser] Updated existing clear_chat record')
+      return upd
+    } else {
+      console.log('[clearChatForUser] Existing clear record already at same message_id; no update performed')
+      return { ...existing, message_id: existing.message_id }
+    }
+  } else {
+    const { data, error } = await supabase
+      .from('clear_chat')
+      .insert(payload)
+      .select()
+      .single()
+    if (error) throw error
+    console.log('[clearChatForUser] Inserted new clear_chat record')
+    return data
+  }
+}
+
+// Obtiene el último registro de limpieza para un usuario en una conversación
+export async function fetchLastClearChat(conversationId, userId) {
+  if (!conversationId || !userId) return null
+  const { data, error } = await supabase
+    .from('clear_chat')
+    .select('message_id, cleared_at')
+    .eq('conversation_id', conversationId)
+    .eq('user_id', userId)
+    .order('cleared_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error && error.code !== 'PGRST116') throw error
+  if (!data) return null
+  let pivotCreatedAt = null
+  if (data.message_id) {
+    const { data: msgRow, error: msgErr } = await supabase
+      .from('messages')
+      .select('created_at')
+      .eq('id', data.message_id)
+      .maybeSingle()
+    if (msgErr && msgErr.code !== 'PGRST116') throw msgErr
+    pivotCreatedAt = msgRow?.created_at || null
+  }
+  return { ...data, pivot_created_at: pivotCreatedAt }
 }
