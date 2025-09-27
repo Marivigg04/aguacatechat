@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 
 // Modal simple de vista previa de imagen para historias
 // Props: file (File), onClose(), onSave(file: File)
+
 export default function StoryImageEditorModal({ file, onClose, onSave }) {
   const [imgUrl, setImgUrl] = useState('');
+  const [storyText, setStoryText] = useState('');
 
   useEffect(() => {
     if (!file) return;
@@ -13,8 +15,8 @@ export default function StoryImageEditorModal({ file, onClose, onSave }) {
   }, [file]);
 
   const handleUse = () => {
-    // Devuelve el mismo archivo sin modificaciones
-    onSave?.(file);
+    // Devuelve el archivo y el texto
+    onSave?.(file, storyText);
   };
 
   return (
@@ -32,17 +34,44 @@ export default function StoryImageEditorModal({ file, onClose, onSave }) {
           </button>
         </div>
 
-        {/* Contenido: vista previa responsive con object-contain */}
+        {/* Contenido: vista previa responsive con object-contain y overlay de texto */}
         <div className="p-6 pt-16 pb-16">
-          <div className="w-full flex items-center justify-center">
+          <div className="w-full flex items-center justify-center relative">
             {imgUrl && (
-              <img
-                src={imgUrl}
-                alt="Vista previa"
-                className="max-w-[70vw] max-h-[55vh] object-contain rounded-xl"
-                draggable={false}
-              />
+              <div className="relative max-w-[70vw] max-h-[55vh]">
+                <img
+                  src={imgUrl}
+                  alt="Vista previa"
+                  className="max-w-[70vw] max-h-[55vh] object-contain rounded-xl"
+                  draggable={false}
+                />
+                {/* Overlay de texto eliminado, solo imagen */}
+              </div>
             )}
+          </div>
+          {/* Barra de texto para escribir sobre la historia */}
+          <div className="mt-6 flex items-center justify-center">
+            <textarea
+              value={storyText}
+              onChange={e => {
+                setStoryText(e.target.value);
+                const textarea = e.target;
+                textarea.style.height = 'auto';
+                textarea.style.height = textarea.scrollHeight + 'px';
+              }}
+              maxLength={120}
+              placeholder="Escribe algo para tu historia..."
+              rows={1}
+              className="w-full max-w-lg px-4 py-2 rounded-lg border theme-border bg-black/30 text-white text-base outline-none focus:ring-2 focus:ring-teal-500 resize-none transition-all duration-300 ease-in-out hover:shadow-[0_0_16px_2px_#14b8a6]"
+              style={{
+                whiteSpace: 'pre-line',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                minHeight: '40px',
+                maxHeight: '180px',
+                overflowY: storyText.length > 80 ? 'auto' : 'hidden'
+              }}
+            />
           </div>
         </div>
 
