@@ -36,6 +36,8 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
   };
 
   const handleApply = () => {
+    // Guarda la personalización en localStorage
+    localStorage.setItem('personalization', JSON.stringify(personalization));
     onApply(personalization);
     onClose();
   };

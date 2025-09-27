@@ -2157,7 +2157,15 @@ const AguacateChat = () => {
                                             )
                                         )}
                                         {/* Mensaje burbuja */}
-                                        <div className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col relative`}>
+                                        <div className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col relative`}
+                                                style={{
+                                                    background: isOwn
+                                                        ? personalization.bubbleColors.sent
+                                                        : personalization.bubbleColors.received,
+                                                    fontSize: personalization.fontSize, // <-- AÑADE ESTA LÍNEA
+                                                    color: '#111' // <-- Color negro por defecto para el texto
+                                                }}
+                                        >
                                             <div>
                                                 {message.messageType === 'image' ? (
                                                     <img
