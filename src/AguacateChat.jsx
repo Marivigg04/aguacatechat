@@ -2294,73 +2294,66 @@ const AguacateChat = () => {
                         recalcReadReceiptPosition();
                     }}
                 >
-                    {!selectedContact ? (
-                        currentView === 'stories' ? (
-                            <div className="h-full w-full flex items-center justify-center">
-                                <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
-                                    <h3 className="text-xl font-semibold theme-text-primary mb-2">Historias de tus contactos 📸</h3>
-                                    <p className="theme-text-secondary">
-                                        Aquí verás las historias recientes de tus contactos. Selecciona una en la barra lateral
-                                        o vuelve a Chats para continuar una conversación.
-                                    </p>
-                                    <div className="mt-6 flex flex-col gap-4 items-center">
-                                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                                            <button
-                                                onClick={() => setInlineStoryMenu(v => !v)}
-                                                className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-medium shadow hover:shadow-md hover:opacity-95 active:scale-[0.98] transition-all"
-                                            >Publicar historia</button>
-                                            <button
-                                                onClick={() => handleViewChange('chats')}
-                                                className="px-5 py-2.5 rounded-lg theme-bg-secondary theme-border border font-medium theme-text-primary hover:bg-teal-500/10 transition-colors"
-                                            >Volver a Chats</button>
-                                        </div>
-                                        {inlineStoryMenu && (
-                                            <div className="w-full max-w-sm mx-auto p-3 rounded-xl theme-bg-secondary theme-border border text-left space-y-2 animate-inline-menu">
-                                                <p className="text-sm font-medium theme-text-secondary mb-1">Elige el tipo de historia:</p>
-                                                <div className="flex flex-col gap-2">
-                                                    <button
-                                                        className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-teal-500/10 transition-colors text-left"
-                                                        onClick={() => { storiesViewRef.current?.openMediaStory?.(); setInlineStoryMenu(false); }}
-                                                    >
-                                                        <span className="w-9 h-9 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M3 19h18M5 5l2 14m10-14l2 14M9 9h6m-6 4h6"/></svg>
-                                                        </span>
-                                                        <span className="text-sm font-medium">Foto / Video</span>
-                                                    </button>
-                                                    <button
-                                                        className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-teal-500/10 transition-colors text-left"
-                                                        onClick={() => { storiesViewRef.current?.openTextStory?.(); setInlineStoryMenu(false); }}
-                                                    >
-                                                        <span className="w-9 h-9 rounded-md bg-teal-500/10 text-teal-500 flex items-center justify-center">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v2H4m4 4h8m-8 4h5m-5 4h8"/></svg>
-                                                        </span>
-                                                        <span className="text-sm font-medium">Texto</span>
-                                                    </button>
-                                                </div>
-                                                <div className="flex justify-end pt-1">
-                                                    <button onClick={() => setInlineStoryMenu(false)} className="text-xs theme-text-secondary hover:underline">Cerrar</button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
+                    {/* Vista vacía para historias cuando no hay chat seleccionado y la vista activa es stories */}
+                    {currentView === 'stories' && !selectedContact && !loadingChatArea && (
+                        <CenterNoticeBox
+                            title="Historias"
+                            message={"Aquí podrás ver y crear historias efímeras que desaparecen en 24 horas. Sube una foto, video o texto creativo para compartir con tus contactos."}
+                            variant="info"
+                            actions={[{ label: 'Subir historia', onClick: () => storiesViewRef.current?.openUploadChoice?.(), variant: 'primary' }]}
+                            className="scale-fade-in"
+                        />
+                    )}
+                    {/* Vista de bienvenida de chats (solo cuando estamos en chats) */}
+                    {currentView === 'chats' && !selectedContact && !loadingChatArea && (
+                        <CenterNoticeBox
+                            title="¡Bienvenido a AguacaChat 🥑"
+                            message={"Selecciona una conversación en la izquierda o empieza un nuevo chat para enviar tu primer mensaje."}
+                            variant="info"
+                            actions={[{ label: 'Nuevo chat', onClick: createNewChat, variant: 'primary' }]}
+                            className="scale-fade-in"
+                        />
+                    )}
+                    {selectedContact && chatMessages.length === 0 && !loadingChatArea && !isConvBlocked && (
+                        <>
+                            {isConversationCreator ? (
+                                <CenterNoticeBox
+                                    title="Aún no hay mensajes"
+                                    message={"Escribe tu primer mensaje. Se claro e incluye toda la información necesaria ya que no podrás seguir aguacachateando hasta que te acepten"}
+                                    variant="neutral"
+                                    className="scale-fade-in"
+                                />
+                            ) : (
+                                <CenterNoticeBox
+                                    title="Aún no hay mensajes"
+                                    message={"Este usuario quiere iniciar una conversación contigo, aunque aún no envía su solicitud. \n\n ¿Qué quieres hacer? \n (No recomendamos aceptar conversaciones de desconocidos)"}
+                                    variant="neutral"
+                                    actions={[{label: 'Aceptar', onClick: () => toast.success('Conversación aceptada'), variant: 'primary',}, { label: 'Rechazar', onClick: () => { setSelectedContact(null); toast.success('Conversación rechazada'); }, variant: 'danger'}]}
+                                    className="scale-fade-in"
+                                />
+                            )}
+                        </>
+                    )}
+                    {selectedContact && isConvBlocked && (
+                        user?.id === blockedBy ? (
+                            <CenterNoticeBox
+                                title="Conversación bloqueada"
+                                message="No puedes enviar ni recibir mensajes en esta conversación."
+                                variant="warning"
+                                actions={[{ label: isTogglingBlocked ? 'Procesando...' : 'Desbloquear', onClick: handleToggleConversationBlocked, variant: 'primary', disabled: isTogglingBlocked }]}
+                                className="scale-fade-in"
+                            />
                         ) : (
-                            <div className="h-full w-full flex items-center justify-center">
-                                <div className="text-center max-w-md px-6 py-10 rounded-2xl theme-bg-chat border theme-border">
-                                    <h3 className="text-xl font-semibold theme-text-primary mb-2">¡Bienvenido a AguacaChat! 🥑</h3>
-                                    <p className="theme-text-secondary">Selecciona una conversación de la lista o crea un nuevo chat para comenzar a chatear.</p>
-                                    <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-                                        <button onClick={createNewChat} className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-medium shadow hover:shadow-md hover:opacity-95 active:scale-[0.98] transition-all">Nuevo chat</button>
-                                        <button
-                                            onClick={() => handleViewChange('stories')}
-                                            className="px-5 py-2.5 rounded-lg theme-bg-secondary theme-border border font-medium theme-text-primary hover:bg-teal-500/10 transition-colors"
-                                        >Ver historias</button>
-                                    </div>
-                                </div>
-                            </div>
+                            <CenterNoticeBox
+                                title="No puedes enviar mensajes a este chat"
+                                message="Por alguna razón no tienes permitido enviar mensajes a esta conversación"
+                                variant="warning"
+                                actions={[{ label: 'Borrar chat', variant: 'danger'}]}
+                                className="scale-fade-in"
+                            />
                         )
-                    ) : (
+                    )}
+                    {selectedContact && !isConvBlocked && (
                         <>
                             {/* Loader de mensajes anteriores */}
                             {hasMoreOlder && (

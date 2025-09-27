@@ -190,3 +190,123 @@ body {
   animation: read-receipt-drop 300ms ease-out both;
 }
 
+/* ===================== */
+/* Nuevos estilos modernos reutilizables */
+/* ===================== */
+
+.glass-panel {
+  position: relative;
+  background: linear-gradient(135deg, rgba(20,184,166,0.08), rgba(16,185,129,0.05));
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 4px 20px -5px rgba(0,0,0,0.55), 0 2px 10px -3px rgba(0,0,0,0.4);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 600ms cubic-bezier(.4,0,.2,1) both; }
+
+@keyframes scale-fade {
+  0% { opacity: 0; transform: scale(.92) translateY(6px); }
+  60% { opacity: 1; }
+  100% { transform: scale(1) translateY(0); }
+}
+.animate-scale-fade { animation: scale-fade 420ms cubic-bezier(.4,0,.2,1) both; }
+
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.animate-bounce-slow { animation: bounce-slow 2.4s ease-in-out infinite; }
+
+/* Scroll suave para contenedores que lo requieran */
+.smooth-scroll { scroll-behavior: smooth; }
+
+/* Sombra suave utilitaria */
+.shadow-soft { box-shadow: 0 8px 40px -10px rgba(0,0,0,0.45); }
+
+/* Mejor enfoque accesible */
+.focus-ring-custom:focus { outline: 2px solid rgba(45,212,191,0.5); outline-offset: 2px; }
+
+/* ===================== */
+/* Minimalismo Moderno */
+/* ===================== */
+.panel-clean {
+  background: var(--bg-chat);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  padding: 2.25rem 2rem;
+  box-shadow: 0 2px 12px -4px rgba(0,0,0,0.25);
+}
+.dark-mode .panel-clean { box-shadow: 0 4px 18px -6px rgba(0,0,0,0.55); }
+
+.title-accent {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #0fb6a6, #10b981);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.btn-base {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  font-weight: 500;
+  border-radius: 10px;
+  padding: .75rem 1.25rem;
+  font-size: .875rem;
+  line-height: 1.2;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+}
+.btn-base:focus { outline: 2px solid rgba(45,212,191,0.4); outline-offset: 2px; }
+
+.btn-primary {
+  background: #14b8a6;
+  color: #fff;
+  border: 1px solid #14b8a6;
+}
+.btn-primary:hover { background:#0fa89a; border-color:#0fa89a; }
+.btn-primary:active { transform: scale(.97); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-primary);
+  border:1px solid var(--border-color);
+}
+.btn-outline:hover { background: rgba(20,184,166,0.08); border-color: #14b8a6; }
+.btn-outline:active { transform: scale(.97); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border:1px solid transparent;
+}
+.btn-ghost:hover { color:#14b8a6; }
+
+.inline-menu-minimal {
+  border:1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius:14px;
+  padding: .85rem .85rem .6rem;
+  box-shadow: 0 6px 24px -8px rgba(0,0,0,0.35);
+}
+
+.option-item {
+  display:flex; align-items:center; gap:.65rem; padding:.55rem .6rem; border-radius:10px; font-size:.75rem; font-weight:500;
+  transition: background-color .16s ease;
+}
+.option-item:hover { background: rgba(20,184,166,0.09); }
+
+.icon-badge {
+  width: 32px; height: 32px; display:flex; align-items:center; justify-content:center; border-radius:8px; font-size:0;
+  background: rgba(16,185,129,0.08); color:#10b981;
+}
+.icon-badge.alt { background: rgba(20,184,166,0.09); color:#14b8a6; }
+
+
+
