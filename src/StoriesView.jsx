@@ -230,14 +230,14 @@ const StoriesView = () => {
                     .select('id, user_id, content_url, content_type, caption, created_at, bg_color, font_color, views')
                     .in('user_id', idsArr)
                     .gt('created_at', cutoff)
-                    .order('created_at', { ascending: false });
+                    .order('created_at', { ascending: true }); // más vieja -> más nueva
                 if (error) throw error;
 
                 // 4) Agrupar por usuario
                 const byUser = new Map();
                 for (const r of rows || []) {
                     const arr = byUser.get(r.user_id) || [];
-                    arr.push(r);
+                    arr.push(r); // ya vienen en orden ascendente
                     byUser.set(r.user_id, arr);
                 }
 
@@ -265,7 +265,8 @@ const StoriesView = () => {
                     final.push({
                         id: `me-${user.id}`,
                         name: 'Mi Estado',
-                        time: myStories[0] ? formatStoryTime(myStories[0].created_at) : 'No tienes historias',
+                        // time mostrará la más reciente (último elemento) manteniendo orden interno ascendente
+                        time: myStories[myStories.length - 1] ? formatStoryTime(myStories[myStories.length - 1].created_at) : 'No tienes historias',
                         image: avatarFromProfile || (user.raw && user.raw.user_metadata && user.raw.user_metadata.avatar_url) || user.avatar_url,
                         // Enviar objetos completos para poder detectar content_type='text'
                         userStories: myStories.map(h => ({ ...h })),
@@ -284,9 +285,10 @@ const StoriesView = () => {
                     final.push({
                         id: `u-${prof.id}`,
                         name: prof.username || prof.id,
-                        time: userHist[0] ? formatStoryTime(userHist[0].created_at) : '',
+                        // mostrar hora de la más reciente (última)
+                        time: userHist[userHist.length - 1] ? formatStoryTime(userHist[userHist.length - 1].created_at) : '',
                         image: prof.avatar_url || `https://i.pravatar.cc/150?u=${prof.id}`,
-                        userStories: userHist.map(h => ({ ...h })),
+                        userStories: userHist.map(h => ({ ...h })), // ya en orden ascendente
                     });
                 }
 
@@ -404,11 +406,12 @@ const StoriesView = () => {
                     let updatedGroups = [...prev];
                     if (groupIndex >= 0) {
                         const grp = updatedGroups[groupIndex];
-                        const newUserStories = [histObj, ...(grp.userStories || [])];
-                        const updatedGroup = { ...grp, userStories: newUserStories, time: formatStoryTime(histObj.created_at) };
+                        // Insertar manteniendo orden ascendente: push al final y luego ordenar por created_at
+                        const newUserStories = [...(grp.userStories || []), histObj].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+                        const latest = newUserStories[newUserStories.length - 1];
+                        const updatedGroup = { ...grp, userStories: newUserStories, time: formatStoryTime(latest.created_at) };
                         updatedGroups[groupIndex] = updatedGroup;
-                        // Mover grupo al frente de "recientes" (antes de reordenar quizá necesitamos separar vistos/no vistos; aquí simplificamos ubicándolo al inicio)
-                        updatedGroups = [updatedGroup, ...updatedGroups.filter((_, i) => i !== groupIndex)];
+                        // Mantener posición actual (ya no movemos al frente para respetar orden de contactos)
                     } else {
                         // Crear nuevo grupo (contacto nuevo o mi primer historia)
                         const isMe = newRow.user_id === user.id;
@@ -712,6 +715,23 @@ const StoriesView = () => {
                     initialInnerIndex={initialInnerIndex}
                     onClose={closeViewer}
                     onViewedStory={handleStoryViewed}
+                    onDeleteStory={async ({ storyId, userId, currentUserIndex, currentStoryInUser }) => {
+                        if (!storyId || !userId) return;
+                        // Optimista: eliminar localmente primero
+                        softRemoveHistoryById(storyId);
+                        try {
+                            const { error } = await supabase
+                                .from('histories')
+                                .delete()
+                                .eq('id', storyId)
+                                .eq('user_id', userId);
+                            if (error) {
+                                console.error('Error eliminando historia', error);
+                            }
+                        } catch (e) {
+                            console.error('Excepción eliminando historia', e);
+                        }
+                    }}
                 />
             )}
 
