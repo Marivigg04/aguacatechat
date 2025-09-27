@@ -19,7 +19,7 @@ body {
     --bg-secondary: #1a2c3a; /* Fondo de paneles ligeramente más claro */
     --bg-chat: #2a4157; /* Fondo de inputs y elementos interactivos */
     --bg-contacts: #1a2c3a;
-    --text-primary: #d2eceb; /* Texto principal (blanco suave) */
+  --text-primary: #ffffff; /* Texto principal (requerimiento: blanco en modo oscuro) */
     --text-secondary: #14b8a6; /* Verde Teal vibrante para acentos */
     --border-color: #334155; /* Borde sutil */
     --accent-gradient: linear-gradient(135deg, #10b981, #14b8a6); /* Gradiente de esmeralda a teal */
@@ -30,7 +30,7 @@ body {
     --bg-secondary: #ffffff; /* Paneles blancos puros */
     --bg-chat: #f1f5f9; /* Fondo de inputs y elementos interactivos */
     --bg-contacts: #ffffff;
-    --text-primary: #0f172a; /* Texto principal (casi negro) */
+  --text-primary: #000000; /* Texto principal (requerimiento: negro en modo claro) */
   --text-secondary: #0ea5a3; /* Teal medio en light mode para acentos */
     --border-color: #e2e8f0; /* Borde muy sutil */
     --accent-gradient: linear-gradient(135deg, #10b981, #14b8a6);
@@ -50,16 +50,25 @@ body {
 .message-sent {
     background-color: #e2e8f0; /* Gris claro */
     color: #1e293b;
+    box-shadow: 0 2px 6px -2px rgba(0,0,0,0.55), 0 2px 6px -1px rgba(0,0,0,0.4);
 }
 
 .dark-mode .message-sent {
     background-color: #334155; /* Azul-gris oscuro */
     color: #f1f5f9;
+    box-shadow: 0 2px 6px -2px rgba(0,0,0,0.55), 0 2px 6px -1px rgba(0,0,0,0.4);
 }
 
 .message-received {
-    background: var(--accent-gradient);
-    color: #ffffff;
+  background: var(--accent-gradient);
+  /* Permitir que la clase theme-text-primary gobierne el color: */
+  color: var(--text-primary);
+  box-shadow: 0 2px 6px -2px rgba(0,0,0,0.55), 0 2px 6px -1px rgba(0,0,0,0.4);
+}
+
+/* Ajuste ligeramente más suave en modo oscuro para evitar exceso de densidad */
+.dark-mode .message-received {
+  box-shadow: 0 2px 6px -2px rgba(0,0,0,0.55), 0 2px 6px -1px rgba(0,0,0,0.4);
 }
 
 /* ... (el resto del CSS puede permanecer igual) ... */

@@ -1,5 +1,5 @@
 import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'; // (Se mantiene, añadimos lógica extra abajo)
 import SidebarSkeleton from './components/SidebarSkeleton';
 import ChatAreaSkeleton from './components/ChatAreaSkeleton';
 import LeftToolbarSkeleton from './components/LeftToolbarSkeleton';
@@ -124,14 +124,82 @@ const AguacateChat = () => {
     // Estructura: { id, type: 'image'|'video', name, size, lastModified, url, addedAt }
     const [recentMedia, setRecentMedia] = useState([]);
     const filePickerRef = useRef(null);
-    const [personalization, setPersonalization] = useState({
-        backgroundType: 'solid',
-        backgroundColor: '#f8fafc',
-        backgroundImage: '',
-        bubbleColors: { sent: '#e2e8f0', received: '#10b981' },
-        accentColor: '#14B8A6',
-        fontSize: 16
-    });
+    // Personalización: función central de defaults
+    const getDefaultPersonalization = (isDark) => {
+        if (isDark) {
+            return {
+                backgroundType: 'solid',
+                backgroundColor: '#121212',
+                backgroundImage: '',
+                bubbleColors: { sent: '#264152', received: '#2C2C2E' },
+                accentColor: '#14B8A6',
+                fontSize: 16
+            };
+        }
+        return {
+            backgroundType: 'solid',
+            backgroundColor: '#F2F2F7',
+            backgroundImage: '',
+            bubbleColors: { sent: '#34C759', received: '#E5E5EA' },
+            accentColor: '#14B8A6',
+            fontSize: 16
+        };
+    };
+
+    // Carga inicial: ahora se basa en cookies (no localStorage) para recordar personalización
+    // Claves usadas:
+    //  personal_bgType, personal_bgColor, personal_bubbleSent, personal_bubbleReceived, personal_fontSize
+    // Nota: NO almacenamos backgroundImage en cookies (tamaño/base64). Si el usuario elige imagen no persistirá tras recargar.
+    const loadInitialPersonalization = () => {
+        const dark = typeof document !== 'undefined' && document.body.classList.contains('dark-mode');
+        const defaults = getDefaultPersonalization(dark);
+        try {
+            const bgType = getCookie('personal_bgType');
+            if (bgType) defaults.backgroundType = bgType;
+            const bgColor = getCookie('personal_bgColor');
+            if (bgColor) defaults.backgroundColor = decodeURIComponent(bgColor);
+            const sent = getCookie('personal_bubbleSent');
+            if (sent) defaults.bubbleColors.sent = decodeURIComponent(sent);
+            const received = getCookie('personal_bubbleReceived');
+            if (received) defaults.bubbleColors.received = decodeURIComponent(received);
+            const fs = getCookie('personal_fontSize');
+            if (fs && !Number.isNaN(parseInt(fs, 10))) defaults.fontSize = parseInt(fs, 10);
+        } catch { /* ignore cookie parsing issues */ }
+        return defaults;
+    };
+
+    const [personalization, setPersonalization] = useState(loadInitialPersonalization);
+
+    // Persistir personalización en cookies cada vez que cambie (solo campos solicitados)
+    useEffect(() => {
+        try {
+            setCookie('personal_bgType', personalization.backgroundType);
+            setCookie('personal_bgColor', encodeURIComponent(personalization.backgroundColor));
+            setCookie('personal_bubbleSent', encodeURIComponent(personalization.bubbleColors.sent));
+            setCookie('personal_bubbleReceived', encodeURIComponent(personalization.bubbleColors.received));
+            setCookie('personal_fontSize', String(personalization.fontSize));
+            // Imagen omitida por tamaño potencial
+        } catch (e) {
+            console.warn('No se pudo escribir cookies de personalización', e);
+        }
+    }, [personalization]);
+
+    // Observer para cambios posteriores de modo (clase dark-mode en body)
+    useEffect(() => {
+        if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return;
+        const body = document.body;
+        let prevIsDark = body.classList.contains('dark-mode');
+        const observer = new MutationObserver(() => {
+            const isDark = body.classList.contains('dark-mode');
+            if (isDark !== prevIsDark) {
+                prevIsDark = isDark;
+                const defaults = getDefaultPersonalization(isDark); // reset a defaults al cambiar modo (comportamiento previo)
+                setPersonalization(defaults); // cookies se actualizarán vía useEffect de personalización
+            }
+        });
+        observer.observe(body, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
     const [currentView, setCurrentView] = useState('chats'); // 'chats' o 'stories'
     const [loadingStories, setLoadingStories] = useState(false); // Skeleton al entrar a historias
@@ -2166,14 +2234,14 @@ const AguacateChat = () => {
                                             )
                                         )}
                                         {/* Mensaje burbuja */}
-                                        <div className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col relative`}
-                                                style={{
-                                                    background: isOwn
-                                                        ? personalization.bubbleColors.sent
-                                                        : personalization.bubbleColors.received,
-                                                    fontSize: personalization.fontSize, // <-- AÑADE ESTA LÍNEA
-                                                    color: '#111' // <-- Color negro por defecto para el texto
-                                                }}
+                                        <div
+                                            className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col relative theme-text-primary`}
+                                            style={{
+                                                background: isOwn
+                                                    ? personalization.bubbleColors.sent
+                                                    : personalization.bubbleColors.received,
+                                                fontSize: personalization.fontSize
+                                            }}
                                         >
                                             <div>
                                                 {message.messageType === 'image' ? (
@@ -2196,7 +2264,7 @@ const AguacateChat = () => {
                                                     <MessageRenderer text={message.text} chunkSize={450} />
                                                 )}
                                             </div>
-                                            <div className="text-[10px] self-end" style={{ color: 'var(--text-secondary)'}}>
+                                            <div className="text-[10px] self-end">
                                                 {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                             </div>
                                             {/* Eliminado: el icono de leído ahora va en un overlay fijo a la derecha */}
