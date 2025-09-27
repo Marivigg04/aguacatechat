@@ -88,11 +88,13 @@ const StoriesView = () => {
     // Novedad: Se ha descomentado la línea para declarar el estado `viewerOpen`
     const [viewerOpen, setViewerOpen] = useState(false);
     const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
+    const [initialInnerIndex, setInitialInnerIndex] = useState(0);
     const { user } = useAuth();
     const [stories, setStories] = useState([]);
     const [loadingStoriesList, setLoadingStoriesList] = useState(false);
     const [isFadingOut, setIsFadingOut] = useState(false);
-    const [viewedStoryIds, setViewedStoryIds] = useState(new Set());
+    // Mapa local para forzar actualización inmediata sin refetch (storyId -> true)
+    const [locallyViewed, setLocallyViewed] = useState(() => new Set());
     const [choiceOpen, setChoiceOpen] = useState(false);
     const [textModalOpen, setTextModalOpen] = useState(false);
     const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
@@ -106,13 +108,26 @@ const StoriesView = () => {
         const idx = stories.findIndex(s => s.id === id);
         if (idx >= 0) {
             setSelectedStoryIndex(idx);
+            // Calcular primer no visto interno
+            const group = stories[idx];
+            const userStories = Array.isArray(group.userStories) ? group.userStories : [];
+            let firstUnseen = 0;
+            if (user && user.id) {
+                let allSeen = true;
+                for (let i = 0; i < userStories.length; i++) {
+                    const h = userStories[i];
+                    const arr = Array.isArray(h.views) ? h.views : [];
+                    const locally = locallyViewed.has(h.id);
+                    if (!locally && !arr.includes(user.id)) {
+                        firstUnseen = i;
+                        allSeen = false;
+                        break;
+                    }
+                }
+                if (allSeen) firstUnseen = 0; // todas vistas -> abrir primera
+            }
+            setInitialInnerIndex(firstUnseen);
             setViewerOpen(true);
-            // Marcar como visto
-            setViewedStoryIds(prev => {
-                const next = new Set(prev);
-                next.add(id);
-                return next;
-            });
         }
     };
 
@@ -151,7 +166,7 @@ const StoriesView = () => {
                 const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
                 const { data: rows, error } = await supabase
                     .from('histories')
-                    .select('id, user_id, content_url, content_type, caption, created_at')
+                    .select('id, user_id, content_url, content_type, caption, created_at, bg_color, font_color, views')
                     .in('user_id', idsArr)
                     .gt('created_at', cutoff)
                     .order('created_at', { ascending: false });
@@ -209,7 +224,8 @@ const StoriesView = () => {
                         name: 'Mi Estado',
                         time: myStories[0] ? formatStoryTime(myStories[0].created_at) : 'No tienes historias',
                         image: avatarFromProfile || (user.raw && user.raw.user_metadata && user.raw.user_metadata.avatar_url) || user.avatar_url,
-                        userStories: myStories.map(h => h.content_url),
+                        // Enviar objetos completos para poder detectar content_type='text'
+                        userStories: myStories.map(h => ({ ...h })),
                         isMe: true,
                     });
                 }
@@ -225,7 +241,7 @@ const StoriesView = () => {
                         name: prof.username || prof.id,
                         time: userHist[0] ? formatStoryTime(userHist[0].created_at) : '',
                         image: prof.avatar_url || `https://i.pravatar.cc/150?u=${prof.id}`,
-                        userStories: userHist.map(h => h.content_url),
+                        userStories: userHist.map(h => ({ ...h })),
                     });
                 }
 
@@ -395,8 +411,27 @@ const StoriesView = () => {
     };
 
     // Derivar listas: no vistos y vistos
-    const unseenStories = stories.filter(s => !viewedStoryIds.has(s.id));
-    const seenStories = stories.filter(s => viewedStoryIds.has(s.id));
+    // Determinar si un grupo de historias (un usuario) fue visto: si TODAS las historias incluyen al user.id en views
+    const computeSeen = (storyGroup) => {
+        if (!user || !user.id) return false;
+        if (!Array.isArray(storyGroup.userStories)) return false;
+        return storyGroup.userStories.every(h => {
+            if (locallyViewed.has(h.id)) return true; // forzado local
+            const arr = Array.isArray(h.views) ? h.views : [];
+            return arr.includes(user.id);
+        });
+    };
+    const unseenStories = stories.filter(s => !computeSeen(s));
+    const seenStories = stories.filter(s => computeSeen(s));
+
+    const handleStoryViewed = (storyId) => {
+        setLocallyViewed(prev => {
+            if (prev.has(storyId)) return prev;
+            const next = new Set(prev);
+            next.add(storyId);
+            return next;
+        });
+    };
 
     return (
         <div className="flex-1 overflow-y-auto p-2">
@@ -450,7 +485,9 @@ const StoriesView = () => {
                 <StoryViewerModal
                     stories={stories}
                     startIndex={selectedStoryIndex}
+                    initialInnerIndex={initialInnerIndex}
                     onClose={closeViewer}
+                    onViewedStory={handleStoryViewed}
                 />
             )}
 
