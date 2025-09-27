@@ -1,10 +1,37 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import supabase from './services/supabaseClient';
 import { useAuth } from './context/AuthContext';
 import StoryViewsModal from './StoryViewsModal';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid';
 
-const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose, onViewedStory }) => {
+// Helper local para formatear la hora de publicación de cada historia individual
+// (duplicado ligero de StoriesView; si se repite más veces convendría extraer a utils)
+const formatStoryTime = (iso) => {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        const now = new Date();
+        const isSameDay = d.toDateString() === now.toDateString();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const isYesterday = d.toDateString() === yesterday.toDateString();
+
+        const hours = d.getHours();
+        const minutes = d.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'pm' : 'am';
+        const hour12 = ((hours + 11) % 12) + 1; // 1-12
+        const timePart = `${hour12}:${minutes} ${ampm}`;
+
+        if (isSameDay) return `Hoy a las ${timePart}`;
+        if (isYesterday) return `Ayer a las ${timePart}`;
+        return `${d.toLocaleDateString()} a las ${timePart}`;
+    } catch {
+        return '';
+    }
+};
+
+const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose, onViewedStory, onDeleteStory }) => {
     const { user } = useAuth();
     const [currentUserIndex, setCurrentUserIndex] = useState(startIndex || 0);
     const [currentStoryInUser, setCurrentStoryInUser] = useState(0); // índice dentro del usuario actual
@@ -109,6 +136,13 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     const rawStory = activeUser && activeUser.userStories && activeUser.userStories.length > 0
         ? activeUser.userStories[currentStoryInUser]
         : null;
+    // Tiempo formateado de la historia activa (si tiene created_at individual)
+    const activeStoryTime = useMemo(() => {
+        if (rawStory && typeof rawStory === 'object' && rawStory.created_at) {
+            return formatStoryTime(rawStory.created_at);
+        }
+        return '';
+    }, [rawStory]);
     const inferTypeFromUrl = (url) => {
         if (!url || typeof url !== 'string') return 'image';
         const qless = url.split('?')[0].toLowerCase();
@@ -479,6 +513,66 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
         else if (e.key === 'ArrowRight') { e.preventDefault(); goToNextStoryInUser(); }
     }, [goToPrevStoryInUser, goToNextStoryInUser]);
 
+    const pendingDeleteToastRef = useRef(null);
+    const handleDelete = () => {
+        if (!isOwnStory || !activeStoryId || !onDeleteStory) return;
+        // Pausar historia actual (imagen/texto) y video si aplica
+        if (activeType === 'video' && videoRef.current) {
+            try { videoRef.current.pause(); } catch {}
+        }
+        setIsPaused(true); isPausedRef.current = true;
+        // Evitar múltiples toasts de confirmación
+        if (pendingDeleteToastRef.current) {
+            toast.dismiss(pendingDeleteToastRef.current);
+            pendingDeleteToastRef.current = null;
+        }
+        const id = toast.custom((t) => (
+            <div className={`max-w-sm w-full bg-[#0f172a] text-white rounded-xl shadow-lg border border-white/10 p-4 flex flex-col gap-3 ${t.visible ? 'animate-enter' : 'animate-leave'}`}
+                 style={{ fontSize: '13px' }}>
+                <div className="font-semibold text-sm">Eliminar historia</div>
+                <p className="text-[12px] text-white/70 leading-snug">Esta acción es permanente. ¿Deseas continuar?</p>
+                <div className="flex gap-2 justify-end">
+                    <button
+                        onClick={() => { 
+                            toast.dismiss(id); 
+                            pendingDeleteToastRef.current = null; 
+                            // Reanudar si era video y no estaba en pausa manual
+                            if (activeType === 'video' && videoRef.current) {
+                                try { videoRef.current.play().catch(()=>{}); } catch {}
+                            }
+                            setIsPaused(false); isPausedRef.current = false;
+                        }}
+                        className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white/80 hover:text-white text-xs font-medium transition-colors"
+                    >Cancelar</button>
+                    <button
+                        onClick={async () => {
+                            // feedback inmediato
+                            const loadingId = toast.loading('Eliminando historia...');
+                            try {
+                                await onDeleteStory({ storyId: activeStoryId, userId: user?.id, currentUserIndex, currentStoryInUser });
+                                toast.success('Historia eliminada');
+                            } catch (e) {
+                                toast.error('No se pudo eliminar');
+                            } finally {
+                                toast.dismiss(loadingId);
+                                toast.dismiss(id);
+                                pendingDeleteToastRef.current = null;
+                            }
+                        }}
+                        className="px-3 py-1.5 rounded-md bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold shadow-sm transition-colors"
+                    >Eliminar</button>
+                </div>
+                <style jsx>{`
+                  .animate-enter { animation: toastIn .28s cubic-bezier(.4,0,.2,1); }
+                  .animate-leave { animation: toastOut .18s ease forwards; }
+                  @keyframes toastIn { from { opacity:0; transform: translateY(6px) scale(.96); } to { opacity:1; transform: translateY(0) scale(1); } }
+                  @keyframes toastOut { from { opacity:1; transform: translateY(0) scale(1); } to { opacity:0; transform: translateY(-2px) scale(.96); } }
+                `}</style>
+            </div>
+        ), { duration: 60000, id: `confirm-delete-${activeStoryId}` });
+        pendingDeleteToastRef.current = id;
+    };
+
     return (
     <div
         className={`fixed inset-0 bg-black z-50 flex items-center justify-center overflow-hidden modal-root ${isClosing ? 'modal-leave' : 'modal-enter'}`}
@@ -612,7 +706,7 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                                 )}
                                 <div className="truncate">
                                     <h4 className="font-bold text-white text-sm leading-tight truncate">{activeUser?.name}</h4>
-                                    <p className="text-[10px] text-gray-300 leading-tight">{activeUser?.time}</p>
+                                    <p className="text-[10px] text-gray-300 leading-tight">{activeStoryTime || activeUser?.time || ''}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -634,6 +728,23 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                                         className="w-9 h-9 flex items-center justify-center bg-white/20 hover:bg-white/30 text-white rounded-full transition-colors"
                                     >
                                         {isMuted ? <SpeakerXMarkIcon className="w-5 h-5" /> : <SpeakerWaveIcon className="w-5 h-5" />}
+                                    </button>
+                                )}
+                                {/* Botón eliminar (solo historias propias) */}
+                                {isOwnStory && (
+                                    <button
+                                        onClick={handleDelete}
+                                        aria-label="Eliminar historia"
+                                        title="Eliminar"
+                                        className="relative group w-9 h-9 flex items-center justify-center rounded-full bg-red-500/25 hover:bg-red-500/40 text-red-200 hover:text-red-50 transition-colors"
+                                    >
+                                        {/* Icono trash simple (SVG inline) */}
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                            <line x1="10" y1="11" x2="10" y2="17" />
+                                            <line x1="14" y1="11" x2="14" y2="17" />
+                                        </svg>
                                     </button>
                                 )}
                                 <button
