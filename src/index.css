@@ -80,6 +80,29 @@ html, body, #root {
 .anim-delay-3 { animation-delay: 180ms }
 .anim-delay-4 { animation-delay: 240ms }
 
+/* Emoji Picker specific animations */
+@keyframes emojiPickerPopIn {
+  0% { opacity: 0; transform: translateY(6px) scale(.96); }
+  60% { opacity: 1; transform: translateY(0) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes emojiPickerPopOut {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(4px) scale(.95); }
+}
+@keyframes emojiSheetSlideUp {
+  0% { transform: translateY(100%); }
+  100% { transform: translateY(0); }
+}
+@keyframes emojiSheetSlideDown {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(100%); }
+}
+.emoji-picker-enter-desktop { animation: emojiPickerPopIn 260ms cubic-bezier(.3,.9,.3,1) forwards; }
+.emoji-picker-exit-desktop { animation: emojiPickerPopOut 180ms ease-in forwards; }
+.emoji-picker-enter-mobile { animation: emojiSheetSlideUp 300ms cubic-bezier(.25,.95,.4,1) forwards; }
+.emoji-picker-exit-mobile { animation: emojiSheetSlideDown 240ms cubic-bezier(.55,0,.55,.2) forwards; }
+
 /* Deshabilitar selección de texto globalmente (sin afectar inputs/editables) */
 #root, #root * {
   -webkit-user-select: none;

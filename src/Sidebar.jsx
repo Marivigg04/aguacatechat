@@ -154,6 +154,15 @@ const Sidebar = ({
         }, 300);
     };
 
+    // Evita re-disparar un cambio si la vista ya está seleccionada
+    const handleViewChange = (view, options = { closeMenuIfOpen: false }) => {
+        if (view === currentView) return; // No hacer nada si es la misma vista
+        onViewChange(view);
+        if (options.closeMenuIfOpen && showSideMenu) {
+            handleCloseMenu();
+        }
+    };
+
     return (
         <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r">
             {/* Icono animado de las tres rayas SIEMPRE visible arriba */}
@@ -191,9 +200,11 @@ const Sidebar = ({
                 <button
                     className={`p-2 rounded-lg transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg ${currentView === 'chats' ? 'theme-bg-accent' : 'theme-bg-chat'}`}
                     title="Chats"
-                    onClick={() => onViewChange('chats')}
+                    onClick={() => handleViewChange('chats')}
                     onMouseEnter={chatsAnimation.onMouseEnter}
                     onMouseLeave={chatsAnimation.onMouseLeave}
+                    aria-current={currentView === 'chats' ? 'page' : undefined}
+                    disabled={currentView === 'chats'}
                 >
                     <div className="w-8 h-8 flex items-center justify-center">
                         <Lottie
@@ -218,9 +229,11 @@ const Sidebar = ({
                 <button
                     className={`p-2 rounded-lg transition-all duration-300 ease-out transform hover:scale-105 flex flex-col items-center shadow-md hover:shadow-lg ${currentView === 'stories' ? 'theme-bg-accent' : 'theme-bg-chat'}`}
                     title="Historias"
-                    onClick={() => onViewChange('stories')}
+                    onClick={() => handleViewChange('stories')}
                     onMouseEnter={storiesAnimation.onMouseEnter}
                     onMouseLeave={storiesAnimation.onMouseLeave}
+                    aria-current={currentView === 'stories' ? 'page' : undefined}
+                    disabled={currentView === 'stories'}
                 >
                     <div className="w-8 h-8 flex items-center justify-center">
                         <Lottie
@@ -358,9 +371,11 @@ const Sidebar = ({
                                 <div className="flex flex-col gap-2">
                                     <button
                                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat ${currentView === 'chats' ? 'theme-bg-accent' : ''}`}
-                                        onClick={() => { onViewChange('chats'); handleCloseMenu(); }}
+                                        onClick={() => handleViewChange('chats', { closeMenuIfOpen: true })}
                                         onMouseEnter={chatsAnimation.onMouseEnter}
                                         onMouseLeave={chatsAnimation.onMouseLeave}
+                                        aria-current={currentView === 'chats' ? 'page' : undefined}
+                                        disabled={currentView === 'chats'}
                                     >
                                         <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                                             <Lottie
@@ -382,9 +397,11 @@ const Sidebar = ({
 
                                     <button
                                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat ${currentView === 'stories' ? 'theme-bg-accent' : ''}`}
-                                        onClick={() => { onViewChange('stories'); handleCloseMenu(); }}
+                                        onClick={() => handleViewChange('stories', { closeMenuIfOpen: true })}
                                         onMouseEnter={storiesAnimation.onMouseEnter}
                                         onMouseLeave={storiesAnimation.onMouseLeave}
+                                        aria-current={currentView === 'stories' ? 'page' : undefined}
+                                        disabled={currentView === 'stories'}
                                     >
                                         <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                                             <Lottie

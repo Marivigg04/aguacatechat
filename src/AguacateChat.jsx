@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'; // 
 import SidebarSkeleton from './components/SidebarSkeleton';
 import ChatAreaSkeleton from './components/ChatAreaSkeleton';
 import LeftToolbarSkeleton from './components/LeftToolbarSkeleton';
+import EmojiPicker from './EmojiPicker.jsx';
 import imageCompression from 'browser-image-compression';
 import Lottie from 'react-lottie';
 import './AguacateChat.css';
@@ -120,6 +121,9 @@ const AguacateChat = () => {
     const [showProfileModal, setShowProfileModal] = useState(false);
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [showPersonalizationModal, setShowPersonalizationModal] = useState(false);
+    // Emoji picker
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const emojiButtonRef = useRef(null);
     // Multimedia picker (recientes en sesión)
     // Estructura: { id, type: 'image'|'video', name, size, lastModified, url, addedAt }
     const [recentMedia, setRecentMedia] = useState([]);
@@ -145,11 +149,7 @@ const AguacateChat = () => {
             fontSize: 16
         };
     };
-
-    // Carga inicial: ahora se basa en cookies (no localStorage) para recordar personalización
-    // Claves usadas:
-    //  personal_bgType, personal_bgColor, personal_bubbleSent, personal_bubbleReceived, personal_fontSize
-    // Nota: NO almacenamos backgroundImage en cookies (tamaño/base64). Si el usuario elige imagen no persistirá tras recargar.
+    
     const loadInitialPersonalization = () => {
         const dark = typeof document !== 'undefined' && document.body.classList.contains('dark-mode');
         const defaults = getDefaultPersonalization(dark);
@@ -1585,6 +1585,19 @@ const AguacateChat = () => {
         }
     };
 
+    // Wrapper para evitar recargar si se hace clic sobre el mismo contacto
+    const handleSelectContact = (contact) => {
+        if (selectedContact?.conversationId && contact?.conversationId && selectedContact.conversationId === contact.conversationId) {
+            // Mismo chat: ignorar
+            return;
+        }
+        // También comparar por profileId si aún no hay conversationId (chat recién iniciado)
+        if (!contact?.conversationId && selectedContact?.profileId && contact?.profileId && selectedContact.profileId === contact.profileId) {
+            return;
+        }
+        selectContact(contact);
+    };
+
     const createGroupWithSelected = () => {
         if (selectedGroupContacts.length > 0) {
             // Reemplazar alert()
@@ -1899,8 +1912,10 @@ const AguacateChat = () => {
                         {filteredContacts.map((contact, index) => (
                             <div
                                 key={index}
-                                className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact?.name === contact.name ? 'theme-bg-chat' : ''}`}
-                                onClick={() => selectContact(contact)}
+                                className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact?.conversationId === contact.conversationId || (selectedContact?.name === contact.name && !contact.conversationId) ? 'theme-bg-chat pointer-events-none' : ''}`}
+                                onClick={() => handleSelectContact(contact)}
+                                aria-current={selectedContact?.conversationId === contact.conversationId ? 'true' : undefined}
+                                role="button"
                             >
                                 <div className="flex items-center gap-3">
                                     {contact?.avatar_url ? (
@@ -2620,35 +2635,54 @@ const AguacateChat = () => {
                                 </div>
                             </div>
                         )}
-                        {/* 4. REEMPLAZO DEL ICONO DE EMOJI */}
-                        <button 
-                            onClick={() => alert('Mostrar emojis')} 
-                            className="p-1 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" 
-                            title="Emojis"
-                            onMouseEnter={() => {
-                                setSmileStopped(true);
-                                setTimeout(() => {
-                                    setSmileStopped(false);
-                                    setSmilePaused(false);
-                                }, 10);
-                            }}
-                            onMouseLeave={() => setSmilePaused(true)}
-                        >
-                            <div className="w-8 h-8">
-                                <Lottie options={lottieOptions.smile} isPaused={isSmilePaused} isStopped={isSmileStopped}/>
-                            </div>
-                        </button>
+                        {/* Emoji Picker Button */}
+                        <div className="relative" ref={emojiButtonRef}>
+                            <button 
+                                onClick={() => setShowEmojiPicker(v => !v)} 
+                                className={`p-1 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity ${showEmojiPicker ? 'ring-2 ring-teal-primary' : ''}`} 
+                                title="Emojis"
+                                onMouseEnter={() => {
+                                    setSmileStopped(true);
+                                    setTimeout(() => {
+                                        setSmileStopped(false);
+                                        setSmilePaused(false);
+                                    }, 10);
+                                }}
+                                onMouseLeave={() => setSmilePaused(true)}
+                            >
+                                <div className="w-8 h-8">
+                                    <Lottie options={lottieOptions.smile} isPaused={isSmilePaused} isStopped={isSmileStopped}/>
+                                </div>
+                            </button>
+                            {showEmojiPicker && (
+                                <EmojiPicker
+                                    anchorRef={emojiButtonRef}
+                                    dark={isDarkMode}
+                                    onSelect={(emoji) => {
+                                        if (!messageInputRef.current) return;
+                                        const el = messageInputRef.current;
+                                        const start = el.selectionStart || messageInput.length;
+                                        const end = el.selectionEnd || messageInput.length;
+                                        const newValue = messageInput.slice(0, start) + emoji + messageInput.slice(end);
+                                        setMessageInput(newValue);
+                                        requestAnimationFrame(() => {
+                                            el.focus();
+                                            const cursorPos = start + emoji.length;
+                                            el.selectionStart = el.selectionEnd = cursorPos;
+                                        });
+                                    }}
+                                    onClose={() => setShowEmojiPicker(false)}
+                                />
+                            )}
+                        </div>
                         <div className="flex-1 relative">
                             {isRecording && (
                                 <div className="absolute -top-12 left-0 right-0 flex items-center justify-between gap-3 px-3 py-2 rounded-xl theme-bg-chat theme-border border">
                                     <div className="flex items-center gap-2">
                                         <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
                                         <span className="text-sm" style={{ color: 'var(--text-primary)' }}>
-                                            Grabando {formatSeconds(Math.min(recordingElapsed, MAX_RECORD_SECS))}
+                                            Grabando {formatSeconds(Math.min(recordingElapsed, MAX_RECORD_SECS))}/02:00
                                         </span>
-                                        <div className="w-6 h-6 opacity-80">
-                                            <Lottie options={lottieOptions.micRecording} isPaused={isRecordingPaused} isStopped={false} />
-                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <button onClick={cancelRecording} className="px-2 py-1 rounded-md theme-bg-secondary theme-border border text-xs hover:opacity-80" title="Cancelar">
