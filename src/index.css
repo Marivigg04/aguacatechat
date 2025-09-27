@@ -103,6 +103,40 @@ html, body, #root {
 .emoji-picker-enter-mobile { animation: emojiSheetSlideUp 300ms cubic-bezier(.25,.95,.4,1) forwards; }
 .emoji-picker-exit-mobile { animation: emojiSheetSlideDown 240ms cubic-bezier(.55,0,.55,.2) forwards; }
 
+/* ===================== Historias (Stories) ===================== */
+@keyframes storyPopIn {
+  0% { opacity: 0; transform: translateY(14px) scale(.88); }
+  55% { opacity: 1; transform: translateY(0) scale(1.03); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Variante más sutil (para historias ya vistas si se quisiera reutilizar) */
+@keyframes storyPopInSoft {
+  0% { opacity: 0; transform: translateY(10px) scale(.94); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.story-animate { 
+  opacity: 0; 
+  animation: storyPopIn 520ms cubic-bezier(.25,.9,.3,1) both; 
+  will-change: opacity, transform; 
+}
+.story-animate-soft { 
+  opacity: 0; 
+  animation: storyPopInSoft 420ms ease-out both; 
+  will-change: opacity, transform; 
+}
+
+/* Animación de salida de historias */
+@keyframes storyExit {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  40% { opacity: .6; transform: translateY(4px) scale(.98); }
+  100% { opacity: 0; transform: translateY(8px) scale(.9); }
+}
+.story-exit {
+  animation: storyExit 340ms cubic-bezier(.55,0,.55,.2) forwards;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+
 /* Deshabilitar selección de texto globalmente (sin afectar inputs/editables) */
 #root, #root * {
   -webkit-user-select: none;

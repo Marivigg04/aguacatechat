@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import StoryViewerModal from './StoryViewerModal'; 
 // Novedad: Se añade la importación del icono que faltaba
@@ -14,6 +15,31 @@ import { useAuth } from './context/AuthContext.jsx';
 import { fetchUserConversations, selectFrom, uploadVideoToBucket } from './services/db';
 import StoriesSkeleton from './components/StoriesSkeleton.jsx';
 
+// Utilidad para formatear la hora de una historia
+const formatStoryTime = (iso) => {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        const now = new Date();
+        const isSameDay = d.toDateString() === now.toDateString();
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const isYesterday = d.toDateString() === yesterday.toDateString();
+
+        const hours = d.getHours();
+        const minutes = d.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'pm' : 'am';
+        const hour12 = ((hours + 11) % 12) + 1; // 1-12
+        const timePart = `${hour12}:${minutes} ${ampm}`;
+
+        if (isSameDay) return `Hoy a las ${timePart}`;
+        if (isYesterday) return `Ayer a las ${timePart}`;
+        return `${d.toLocaleDateString()} a las ${timePart}`;
+    } catch {
+        return '';
+    }
+};
+
 // Fallback de ejemplo si no hay datos reales
 const sampleStories = [
     { id: 's-1', name: 'Sorianny Jumi', time: 'Hoy a la(s) 9:58 p.m.', image: 'https://i.pravatar.cc/150?img=27', userStories: ['https://i.pravatar.cc/400?img=27', 'https://i.pravatar.cc/400?img=26'] },
@@ -22,9 +48,10 @@ const sampleStories = [
 ];
 
 // Novedad: Se han eliminado los comentarios "//" para definir correctamente el componente
-const StoryItem = ({ name, time, image, onClick }) => (
+const StoryItem = ({ name, time, image, onClick, index = 0, seen = false, exiting = false }) => (
     <div 
-        className="flex flex-col gap-1 cursor-pointer group"
+        className={`flex flex-col gap-1 cursor-pointer group ${exiting ? 'story-exit' : (seen ? 'story-animate-soft' : 'story-animate')}`}
+        style={!exiting ? { animationDelay: `${Math.min(index, 8) * 60}ms` } : undefined}
         onClick={onClick}
     >
         <div className="aspect-square w-full rounded-md overflow-hidden transform group-hover:scale-105 transition-transform duration-300 bg-gray-50">
@@ -44,44 +71,71 @@ const StoryItem = ({ name, time, image, onClick }) => (
 );
 
 // Novedad: Se han eliminado los comentarios "//" para definir correctamente el componente
-const UploadStoryCard = ({ onOpenChoice, choiceOpen, onSelectChoice }) => (
-    <div 
-        className="flex flex-col gap-1 cursor-pointer group relative"
-        onClick={onOpenChoice}
-    >
-        <div className="aspect-square w-full rounded-md overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 transition-all group-hover:bg-emerald-500/20 hover:ring-2 hover:ring-teal-400/50 hover:-translate-y-0.5 hover:shadow-lg">
-            <ArrowUpTrayIcon className="w-6 h-6" />
-            <span className="mt-1 text-xs font-semibold text-center px-1">Subir historia</span>
-        </div>
-        {choiceOpen && (
-            <div 
-                className="absolute z-50 left-0 top-full mt-2 w-60 rounded-2xl shadow-2xl theme-border border backdrop-blur-sm p-2 theme-bg-secondary transition transform origin-top-left"
-                onClick={(e) => e.stopPropagation()}
+const UploadStoryCard = ({ onOpenChoice, choiceOpen, onSelectChoice }) => {
+    const anchorRef = useRef(null);
+    const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0, width: 0 });
+
+    // Recalcular posición cuando se abre o al hacer resize/scroll
+    useEffect(() => {
+        if (!choiceOpen) return;
+        const calc = () => {
+            if (!anchorRef.current) return;
+            const rect = anchorRef.current.getBoundingClientRect();
+            setPopoverPos({ top: rect.bottom + window.scrollY + 8, left: rect.left + window.scrollX, width: rect.width });
+        };
+        calc();
+        window.addEventListener('resize', calc);
+        window.addEventListener('scroll', calc, true);
+        return () => {
+            window.removeEventListener('resize', calc);
+            window.removeEventListener('scroll', calc, true);
+        };
+    }, [choiceOpen]);
+
+    return (
+        <>
+            <div
+                ref={anchorRef}
+                className="flex flex-col gap-1 cursor-pointer group relative story-animate"
+                style={{ animationDelay: '0ms' }}
+                onClick={onOpenChoice}
             >
-                {/* Caret */}
-                <span className="absolute -top-1 left-6 w-3 h-3 theme-bg-secondary theme-border border-l border-t rotate-45"></span>
-                <button
-                    className="w-full flex items-center gap-3 p-2 rounded-xl transition group/item hover:ring-2 hover:ring-teal-400/40 hover:bg-gradient-to-r hover:from-teal-500/10 hover:to-emerald-500/10"
-                    onClick={() => onSelectChoice('media')}
-                >
-                    <span className="w-8 h-8 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center transition-colors group-hover/item:bg-teal-500/15 group-hover/item:text-teal-600">
-                        <PhotoIcon className="w-5 h-5" />
-                    </span>
-                    <span className="text-sm font-medium">Foto / Video</span>
-                </button>
-                <button
-                    className="w-full flex items-center gap-3 p-2 rounded-xl transition group/item hover:ring-2 hover:ring-teal-400/40 hover:bg-gradient-to-r hover:from-teal-500/10 hover:to-emerald-500/10"
-                    onClick={() => onSelectChoice('text')}
-                >
-                    <span className="w-8 h-8 rounded-md bg-teal-500/10 text-teal-500 flex items-center justify-center transition-colors group-hover/item:bg-teal-500/15 group-hover/item:text-teal-600">
-                        <DocumentTextIcon className="w-5 h-5" />
-                    </span>
-                    <span className="text-sm font-medium">Texto</span>
-                </button>
+                <div className="aspect-square w-full rounded-md overflow-hidden bg-emerald-500/10 border-2 border-dashed border-emerald-500/50 flex flex-col items-center justify-center text-emerald-500 transition-all group-hover:bg-emerald-500/20 hover:ring-2 hover:ring-teal-400/50 hover:-translate-y-0.5 hover:shadow-lg">
+                    <ArrowUpTrayIcon className="w-6 h-6" />
+                    <span className="mt-1 text-xs font-semibold text-center px-1">Subir historia</span>
+                </div>
             </div>
-        )}
-    </div>
-);
+            {choiceOpen && createPortal(
+                <div
+                    className="fixed z-[2147483647] w-60 max-w-[260px] rounded-2xl shadow-2xl theme-border border backdrop-blur-sm p-2 theme-bg-secondary transition transform origin-top-left story-animate"
+                    style={{ top: popoverPos.top, left: popoverPos.left }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <span className="absolute -top-1 left-6 w-3 h-3 theme-bg-secondary theme-border border-l border-t rotate-45"></span>
+                    <button
+                        className="w-full flex items-center gap-3 p-2 rounded-xl transition group/item hover:ring-2 hover:ring-teal-400/40 hover:bg-gradient-to-r hover:from-teal-500/10 hover:to-emerald-500/10"
+                        onClick={() => onSelectChoice('media')}
+                    >
+                        <span className="w-8 h-8 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center transition-colors group-hover/item:bg-teal-500/15 group-hover/item:text-teal-600">
+                            <PhotoIcon className="w-5 h-5" />
+                        </span>
+                        <span className="text-sm font-medium">Foto / Video</span>
+                    </button>
+                    <button
+                        className="w-full flex items-center gap-3 p-2 rounded-xl transition group/item hover:ring-2 hover:ring-teal-400/40 hover:bg-gradient-to-r hover:from-teal-500/10 hover:to-emerald-500/10"
+                        onClick={() => onSelectChoice('text')}
+                    >
+                        <span className="w-8 h-8 rounded-md bg-teal-500/10 text-teal-500 flex items-center justify-center transition-colors group-hover/item:bg-teal-500/15 group-hover/item:text-teal-600">
+                            <DocumentTextIcon className="w-5 h-5" />
+                        </span>
+                        <span className="text-sm font-medium">Texto</span>
+                    </button>
+                </div>,
+                document.body
+            )}
+        </>
+    );
+};
 
 
 const StoriesView = () => {
@@ -91,6 +145,10 @@ const StoriesView = () => {
     const [initialInnerIndex, setInitialInnerIndex] = useState(0);
     const { user } = useAuth();
     const [stories, setStories] = useState([]);
+    // Guardar timeouts de expiración por id de historia
+    const expirationTimeoutsRef = useRef(new Map());
+    // Cache local de perfiles (user_id -> { username, avatar_url }) para evitar fetch repetido en realtime
+    const profilesCacheRef = useRef(new Map());
     const [loadingStoriesList, setLoadingStoriesList] = useState(false);
     const [isFadingOut, setIsFadingOut] = useState(false);
     // Mapa local para forzar actualización inmediata sin refetch (storyId -> true)
@@ -156,10 +214,13 @@ const StoriesView = () => {
                 for (const p of otherProfiles) userIds.add(p.id);
                 const idsArr = Array.from(userIds);
 
+                // Limpiar cache y precargar perfiles conocidos
+                profilesCacheRef.current.clear();
+
                 // 3) Preparar fetch del avatar del propio usuario en paralelo para reducir latencia
                 let avatarPromise = null;
                 if (user && user.id) {
-                    avatarPromise = selectFrom('profiles', { columns: 'avatar_url', match: { id: user.id }, single: true }).catch(() => null);
+                    avatarPromise = selectFrom('profiles', { columns: 'username, avatar_url', match: { id: user.id }, single: true }).catch(() => null);
                 }
 
                 // Traer historias de Supabase (filtrar últimas 24 horas)
@@ -180,32 +241,6 @@ const StoriesView = () => {
                     byUser.set(r.user_id, arr);
                 }
 
-                // Helper para formatear la fecha según requerimiento
-                const formatStoryTime = (iso) => {
-                    if (!iso) return '';
-                    try {
-                        const d = new Date(iso);
-                        const now = new Date();
-                        const isSameDay = d.toDateString() === now.toDateString();
-                        const yesterday = new Date(now);
-                        yesterday.setDate(now.getDate() - 1);
-                        const isYesterday = d.toDateString() === yesterday.toDateString();
-
-                        const hours = d.getHours();
-                        const minutes = d.getMinutes().toString().padStart(2, '0');
-                        const ampm = hours >= 12 ? 'pm' : 'am';
-                        const hour12 = ((hours + 11) % 12) + 1; // 1-12
-                        const timePart = `${hour12}:${minutes} ${ampm}`;
-
-                        if (isSameDay) return `Hoy a las ${timePart}`;
-                        if (isYesterday) return `Ayer a las ${timePart}`;
-                        // Sino mostrar fecha local corta + hora
-                        return `${d.toLocaleDateString()} a las ${timePart}`;
-                    } catch (e) {
-                        return '';
-                    }
-                };
-
                 // 5) Construir lista final: primera entrada es 'Tu historia'
                 const final = [];
 
@@ -214,10 +249,18 @@ const StoriesView = () => {
                 if (myStories.length > 0) {
                     // Usar resultado de la promesa del avatar que iniciamos en paralelo
                     let avatarFromProfile = null;
+                    let usernameFromProfile = null;
                     if (avatarPromise) {
                         const row = await avatarPromise;
                         avatarFromProfile = row?.avatar_url || null;
+                        usernameFromProfile = row?.username || null;
                     }
+
+                    // Guardar en cache
+                    profilesCacheRef.current.set(user.id, {
+                        username: usernameFromProfile || 'Mi Estado',
+                        avatar_url: avatarFromProfile || (user.raw && user.raw.user_metadata && user.raw.user_metadata.avatar_url) || user.avatar_url || null
+                    });
 
                     final.push({
                         id: `me-${user.id}`,
@@ -236,6 +279,8 @@ const StoriesView = () => {
                     if (!prof) continue;
                     const userHist = byUser.get(prof.id) || [];
                     if (userHist.length === 0) continue; // omitimos si no tiene historias
+                    // Guardar perfil en cache
+                    profilesCacheRef.current.set(prof.id, { username: prof.username || prof.id, avatar_url: prof.avatar_url || `https://i.pravatar.cc/150?u=${prof.id}` });
                     final.push({
                         id: `u-${prof.id}`,
                         name: prof.username || prof.id,
@@ -251,6 +296,11 @@ const StoriesView = () => {
                 } else {
                     if (mounted) setStories(final);
                 }
+                // Programar expiración para cada historia cargada
+                setTimeout(() => {
+                    if (!mounted) return;
+                    scheduleExpirations(final);
+                }, 0);
             } catch (err) {
                 console.error('Error cargando historias:', err);
                 if (mounted) setStories(sampleStories);
@@ -267,6 +317,175 @@ const StoriesView = () => {
         load();
         return () => { mounted = false };
     }, [user]);
+
+    // Función para programar expiración de historias (24h desde created_at)
+    const scheduleExpirations = useCallback((storyGroups) => {
+        if (!Array.isArray(storyGroups)) return;
+        storyGroups.forEach(group => {
+            if (!Array.isArray(group.userStories)) return;
+            group.userStories.forEach(h => {
+                if (!h || !h.id || !h.created_at) return;
+                const created = new Date(h.created_at).getTime();
+                const expiresAt = created + 24 * 60 * 60 * 1000;
+                const remaining = expiresAt - Date.now();
+                if (remaining <= 0) {
+                    // Ya expiró -> eliminar inmediatamente
+                    softRemoveHistoryById(h.id);
+                    return;
+                }
+                if (!expirationTimeoutsRef.current.has(h.id)) {
+                    const to = setTimeout(() => {
+                        expirationTimeoutsRef.current.delete(h.id);
+                        softRemoveHistoryById(h.id);
+                    }, remaining);
+                    expirationTimeoutsRef.current.set(h.id, to);
+                }
+            });
+        });
+    }, []);
+
+    // Estado para grupos en salida (animación)
+    const exitingGroupsRef = useRef(new Set());
+    const [, forceRerender] = useState(0);
+
+    const softRemoveHistoryById = useCallback((historyId) => {
+        setStories(current => {
+            // Detectar qué grupo se verá afectado y si se queda vacío
+            let targetGroupId = null;
+            let willBeEmpty = false;
+            const updated = current.map(g => {
+                if (!Array.isArray(g.userStories)) return g;
+                if (g.userStories.some(h => h.id === historyId)) {
+                    const filtered = g.userStories.filter(h => h.id !== historyId);
+                    if (filtered.length === 0) {
+                        targetGroupId = g.id;
+                        willBeEmpty = true;
+                        return g; // devolvemos intacto por ahora para animar
+                    }
+                    return { ...g, userStories: filtered };
+                }
+                return g;
+            });
+            if (willBeEmpty && targetGroupId) {
+                exitingGroupsRef.current.add(targetGroupId);
+                // Forzar re-render para aplicar clase .story-exit
+                forceRerender(v => v + 1);
+                // Después de la duración de la animación (340ms) eliminar definitivamente
+                setTimeout(() => {
+                    setStories(curr2 => curr2.filter(gr => gr.id !== targetGroupId));
+                    exitingGroupsRef.current.delete(targetGroupId);
+                }, 360);
+            }
+            return updated;
+        });
+    }, []);
+
+    // Realtime: suscripción a inserts y deletes en histories
+    useEffect(() => {
+        if (!user || !user.id) return; // Solo si autenticado
+
+        const channel = supabase.channel('histories-realtime')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'histories'
+            }, (payload) => {
+                const newRow = payload.new;
+                if (!newRow) return;
+                // Ignorar si ya expiró
+                const created = new Date(newRow.created_at).getTime();
+                if (Date.now() - created > 24 * 60 * 60 * 1000) return;
+
+                setStories(prev => {
+                    // Construir objeto historia
+                    const histObj = { ...newRow };
+                    // Encontrar grupo
+                    const groupIndex = prev.findIndex(g => g.isMe ? newRow.user_id === user.id && g.id.includes(user.id) : g.id.endsWith(newRow.user_id));
+                    let updatedGroups = [...prev];
+                    if (groupIndex >= 0) {
+                        const grp = updatedGroups[groupIndex];
+                        const newUserStories = [histObj, ...(grp.userStories || [])];
+                        const updatedGroup = { ...grp, userStories: newUserStories, time: formatStoryTime(histObj.created_at) };
+                        updatedGroups[groupIndex] = updatedGroup;
+                        // Mover grupo al frente de "recientes" (antes de reordenar quizá necesitamos separar vistos/no vistos; aquí simplificamos ubicándolo al inicio)
+                        updatedGroups = [updatedGroup, ...updatedGroups.filter((_, i) => i !== groupIndex)];
+                    } else {
+                        // Crear nuevo grupo (contacto nuevo o mi primer historia)
+                        const isMe = newRow.user_id === user.id;
+                        const cached = profilesCacheRef.current.get(newRow.user_id);
+                        const baseGroup = {
+                            id: isMe ? `me-${user.id}` : `u-${newRow.user_id}`,
+                            name: isMe ? 'Mi Estado' : (cached?.username || newRow.user_id),
+                            time: formatStoryTime(newRow.created_at),
+                            image: isMe ? (cached?.avatar_url || user?.avatar_url) : (cached?.avatar_url),
+                            userStories: [histObj],
+                            isMe
+                        };
+                        updatedGroups = [baseGroup, ...updatedGroups];
+                        // Si no hay cache, disparar fetch de perfil asincrónico
+                        if (!cached) {
+                            (async () => {
+                                try {
+                                    const { data: prof, error: profErr } = await supabase
+                                        .from('profiles')
+                                        .select('username, avatar_url')
+                                        .eq('id', newRow.user_id)
+                                        .single();
+                                    if (profErr) return;
+                                    profilesCacheRef.current.set(newRow.user_id, { username: prof.username || newRow.user_id, avatar_url: prof.avatar_url });
+                                    setStories(curr => curr.map(g => {
+                                        if (g.id === baseGroup.id) {
+                                            return {
+                                                ...g,
+                                                name: isMe ? 'Mi Estado' : (prof.username || newRow.user_id),
+                                                image: isMe ? (prof.avatar_url || g.image) : (prof.avatar_url || g.image)
+                                            };
+                                        }
+                                        return g;
+                                    }));
+                                } catch {}
+                            })();
+                        }
+                    }
+                    // Programar expiración para esta nueva historia
+                    scheduleExpirations([{ userStories: [histObj] }]);
+                    return updatedGroups;
+                });
+            })
+            .on('postgres_changes', {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'histories'
+            }, (payload) => {
+                const oldRow = payload.old;
+                if (!oldRow || !oldRow.id) return;
+                // Limpiar timeout si estaba programado
+                const to = expirationTimeoutsRef.current.get(oldRow.id);
+                if (to) {
+                    clearTimeout(to);
+                    expirationTimeoutsRef.current.delete(oldRow.id);
+                }
+                softRemoveHistoryById(oldRow.id);
+            });
+
+        channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                // console.log('Suscrito a inserts de histories');
+            }
+        });
+
+        return () => {
+            try { supabase.removeChannel(channel); } catch {}
+        };
+    }, [user, scheduleExpirations]);
+
+    // Cleanup de timeouts al desmontar
+    useEffect(() => {
+        return () => {
+            expirationTimeoutsRef.current.forEach(to => clearTimeout(to));
+            expirationTimeoutsRef.current.clear();
+        };
+    }, []);
 
     const closeViewer = () => {
         setViewerOpen(false);
@@ -452,10 +671,12 @@ const StoriesView = () => {
                     <UploadStoryCard onOpenChoice={handleOpenChoice} choiceOpen={choiceOpen} onSelectChoice={handleChoiceSelect} />
 
                     {/* Si el usuario tiene su propia historia (isMe) la mostramos aquí; en caso contrario no mostramos el recuadro personal */}
-                    {unseenStories.map((story) => (
+                    {unseenStories.map((story, idx) => (
                         <StoryItem
                             key={story.id}
                             {...story}
+                            index={idx + 1} // +1 porque el 0 lo ocupa la tarjeta de subir
+                            exiting={exitingGroupsRef.current.has(story.id)}
                             onClick={() => openViewerById(story.id)}
                         />
                     ))}
@@ -469,10 +690,13 @@ const StoriesView = () => {
                         <h3 className="text-sm md:text-base font-semibold theme-text-secondary uppercase tracking-wider">VISTOS</h3>
                     </div>
                     <div className="grid grid-cols-2 gap-x-2 gap-y-3 p-1">
-                        {seenStories.map((story) => (
+                        {seenStories.map((story, idx) => (
                             <StoryItem
                                 key={story.id}
                                 {...story}
+                                seen
+                                index={idx}
+                                exiting={exitingGroupsRef.current.has(story.id)}
                                 onClick={() => openViewerById(story.id)}
                             />
                         ))}
