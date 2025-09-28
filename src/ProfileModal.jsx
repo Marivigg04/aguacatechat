@@ -56,7 +56,6 @@ const ProfileModal = ({
 
     // Estado para la info de perfil desde Supabase
     const [profileInfoDb, setProfileInfoDb] = useState('');
-    const [loadingContactInfo, setLoadingContactInfo] = useState(false);
     // Estado y ref para la foto de perfil local (vista previa), url remota y selector de archivos
     const [avatarPreview, setAvatarPreview] = useState(null);
     const [avatarUrl, setAvatarUrl] = useState(null);
@@ -126,7 +125,7 @@ const ProfileModal = ({
     };
 
     React.useEffect(() => {
-        // Si es perfil de contacto (modo lectura) intentar usar datos proporcionados y si faltan, consultar DB
+        // Si es perfil de contacto (modo lectura) usamos directamente los datos proporcionados
         if (contactProfile) {
             if (import.meta.env?.DEV) {
                 console.debug('[ProfileModal] contactProfile recibido', contactProfile);
@@ -178,7 +177,7 @@ const ProfileModal = ({
             return;
         }
         async function fetchProfileInfo() {
-            if (!user?.id || !showProfileModal) return;
+            if (!user?.id) return;
             try {
                 const { selectFrom } = await import('./services/db');
                 const data = await selectFrom('profiles', {
@@ -549,9 +548,8 @@ const ProfileModal = ({
                                         if (newProfileInfo.trim()) {
                                             try {
                                                 const { updateTable } = await import('./services/db');
-                                                const trimmed = newProfileInfo.trim().slice(0, 80);
-                                                await updateTable('profiles', { id: user.id }, { profileInformation: trimmed });
-                                                setProfileInfoDb(trimmed);
+                                                await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                setProfileInfoDb(newProfileInfo.trim());
                                                 if (window.toast) window.toast.success('Información actualizada');
                                                 else {
                                                     const { default: toast } = await import('react-hot-toast');
@@ -568,69 +566,46 @@ const ProfileModal = ({
                                         }
                                     }}
                                 >
-                                    <div className="w-full flex flex-col gap-1">
-                                        <textarea
-                                            id="profileInfoInput"
-                                            className="p-2 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary font-semibold resize-none leading-snug"
-                                            value={newProfileInfo}
-                                            maxLength={80}
-                                            rows={1}
-                                            onChange={e => {
-                                                const val = e.target.value.slice(0, 80);
-                                                setNewProfileInfo(val);
-                                                // Auto-resize
-                                                const el = e.target;
-                                                el.style.height = 'auto';
-                                                el.style.height = Math.min(el.scrollHeight, 140) + 'px';
-                                            }}
-                                            onFocus={e => {
-                                                if (e.target.value === '' || e.target.value === undefined) {
-                                                    setNewProfileInfo('');
-                                                }
-                                                // Ajuste inicial altura
-                                                const el = e.target;
-                                                requestAnimationFrame(() => {
-                                                    el.style.height = 'auto';
-                                                    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
-                                                });
-                                            }}
-                                            onBlur={async () => {
+                                    <input
+                                        id="profileInfoInput"
+                                        type="text"
+                                        className="p-1 w-full rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary font-semibold"
+                                        value={newProfileInfo}
+                                        onChange={e => setNewProfileInfo(e.target.value)}
+                                        onFocus={e => {
+                                            if (e.target.value === '' || e.target.value === undefined) {
+                                                setNewProfileInfo('');
+                                            }
+                                        }}
+                                        onBlur={async () => {
+                                            if (newProfileInfo.trim()) {
+                                                try {
+                                                    const { updateTable } = await import('./services/db');
+                                                    await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                    setProfileInfoDb(newProfileInfo.trim());
+                                                } catch {}
+                                            }
+                                            setIsEditingInfo(false);
+                                        }}
+                                        onKeyDown={async e => {
+                                            if (e.key === 'Enter') {
                                                 if (newProfileInfo.trim()) {
                                                     try {
                                                         const { updateTable } = await import('./services/db');
-                                                        const trimmed = newProfileInfo.trim().slice(0, 80);
-                                                        await updateTable('profiles', { id: user.id }, { profileInformation: trimmed });
-                                                        setProfileInfoDb(trimmed);
+                                                        await updateTable('profiles', { id: user.id }, { profileInformation: newProfileInfo.trim() });
+                                                        setProfileInfoDb(newProfileInfo.trim());
                                                     } catch {}
                                                 }
                                                 setIsEditingInfo(false);
-                                            }}
-                                            onKeyDown={async e => {
-                                                if (e.key === 'Enter' && !e.shiftKey) {
-                                                    e.preventDefault();
-                                                    if (newProfileInfo.trim()) {
-                                                        try {
-                                                            const { updateTable } = await import('./services/db');
-                                                            const trimmed = newProfileInfo.trim().slice(0, 80);
-                                                            await updateTable('profiles', { id: user.id }, { profileInformation: trimmed });
-                                                            setProfileInfoDb(trimmed);
-                                                        } catch {}
-                                                    }
-                                                    setIsEditingInfo(false);
-                                                } else if (e.key === 'Escape') {
-                                                    setNewProfileInfo(profileInfoDb || '');
-                                                    setIsEditingInfo(false);
-                                                }
-                                            }}
-                                            autoFocus
-                                        />
-                                        <div className="flex justify-between text-[11px] px-1 select-none">
-                                            <span className="theme-text-secondary">Enter: guardar | Shift+Enter: salto</span>
-                                            <span className={newProfileInfo.length >= 80 ? 'text-red-500 font-medium' : 'theme-text-secondary'}>
-                                                {80 - newProfileInfo.length} restantes
-                                            </span>
-                                        </div>
-                                    </div>
+                                            }
+                                            if (e.key === 'Escape') {
+                                                setNewProfileInfo(profileInfoDb || '');
+                                                setIsEditingInfo(false);
+                                            }
+                                        }}
+                                        autoFocus
+                                        placeholder="Agrega tu información de perfil aquí"
+                                    />
                                     <div className="flex gap-2 mt-1">
                                         <button
                                             type="submit"
