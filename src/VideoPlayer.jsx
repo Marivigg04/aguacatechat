@@ -5,15 +5,15 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 //  - src: string URL del video
 //  - onOpen: () => void  abre el modal
 //  - loading (opcional): muestra estado de subida
-export const VideoThumbnail = ({ src, onOpen, loading = false }) => {
+export const VideoThumbnail = ({ src, onOpen, loading = false, className = '', radiusClass = 'rounded-2xl', size = 260 }) => {
 	return (
 			<button
 				type="button"
 				onClick={onOpen}
-				className="group relative block w-64 aspect-square rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-teal-primary transition-shadow shadow-sm hover:shadow-lg"
+				className={`group relative block overflow-hidden focus:outline-none focus:ring-2 focus:ring-teal-primary transition-shadow shadow-sm hover:shadow-lg ${radiusClass} ${className}`}
 			title="Reproducir video"
 			disabled={loading}
-			style={{ background: 'var(--bg-chat,#0f172a)' }}
+			style={{ background: 'var(--bg-chat,#0f172a)', width: size, height: size }}
 		>
 			{/* Miniatura usando el primer frame vía poster fallback (simple) */}
 					<video
@@ -22,8 +22,6 @@ export const VideoThumbnail = ({ src, onOpen, loading = false }) => {
 						preload="metadata"
 						muted
 					/>
-					{/* Espaciador para mantener el cuadrado si el navegador ignora aspect-square (fallback) */}
-					<div className="invisible select-none" style={{paddingBottom:'100%'}} />
 			{/* Capa oscura suave */}
 			<div className="absolute inset-0 bg-black/30 group-hover:bg-black/20 transition-colors" />
 			{/* Indicador de subida */}
