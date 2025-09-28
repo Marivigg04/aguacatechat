@@ -9,6 +9,7 @@ const ProfileModal = ({
     showProfileModal,
     setShowProfileModal,
     myProfile,
+    contactProfile = null, // Nuevo: si se pasa, mostrar perfil de contacto en modo lectura
     isEditingName,
     setIsEditingName,
     newProfileName,
@@ -124,6 +125,13 @@ const ProfileModal = ({
     };
 
     React.useEffect(() => {
+        // Si es perfil de contacto (modo lectura) usamos directamente los datos proporcionados
+        if (contactProfile) {
+            setProfileInfoDb(contactProfile.profileInformation || '');
+            setAvatarUrl(contactProfile.avatar_url || null);
+            setProfileName(contactProfile.name || contactProfile.username || 'Contacto');
+            return;
+        }
         async function fetchProfileInfo() {
             if (!user?.id) return;
             try {
@@ -141,14 +149,18 @@ const ProfileModal = ({
             }
         }
         fetchProfileInfo();
-    }, [user?.id, showProfileModal]);
+    }, [user?.id, showProfileModal, contactProfile]);
 
     // Estado local para mostrar el nombre en el modal
-    const [profileName, setProfileName] = useState(myProfile.name);
+    const [profileName, setProfileName] = useState(contactProfile ? (contactProfile.name || contactProfile.username || 'Contacto') : myProfile.name);
 
     React.useEffect(() => {
-        setProfileName(myProfile.name);
-    }, [myProfile.name]);
+        if (contactProfile) {
+            setProfileName(contactProfile.name || contactProfile.username || 'Contacto');
+        } else {
+            setProfileName(myProfile.name);
+        }
+    }, [myProfile.name, contactProfile]);
 
     // Agregar una referencia para evitar llamadas duplicadas al guardar
     const isSavingRef = React.useRef(false);
@@ -213,7 +225,7 @@ const ProfileModal = ({
                 onClick={e => e.stopPropagation()}
             >
                 <div className="p-6 theme-border border-b flex items-center justify-between relative">
-                    <h3 className="text-xl font-bold theme-text-primary">Perfil</h3>
+                    <h3 className="text-xl font-bold theme-text-primary">{contactProfile ? 'Perfil del contacto' : 'Perfil'}</h3>
                     <button
                         onClick={handleCloseModal}
                         className={`
@@ -350,6 +362,7 @@ const ProfileModal = ({
                                 }
                             }}
                         />
+                        {!contactProfile && (
                         <button
                             type="button"
                             className="relative group w-32 h-32 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary text-white flex items-center justify-center shadow-lg overflow-hidden"
@@ -370,35 +383,20 @@ const ProfileModal = ({
                                 </div>
                             )}
                         </button>
+                        )}
+                        {contactProfile && (
+                            <div className="relative w-32 h-32 rounded-full overflow-hidden shadow-lg flex items-center justify-center bg-gradient-to-br from-teal-primary to-teal-secondary">
+                                {avatarUrl ? (
+                                    <img src={avatarUrl} alt={profileName} className="w-full h-full object-cover" />
+                                ) : (
+                                    <span className="font-bold text-5xl select-none">{(contactProfile.initials) || '👤'}</span>
+                                )}
+                            </div>
+                        )}
                         {/* Nombre y edición con transición suave */}
                         <div className="w-full flex flex-col items-center mt-5">
                             <div className={`transition-all duration-300 w-full`}>
-                                {!isEditingName ? (
-                                    <div className="flex items-center gap-4 justify-center">
-                                        <span className="font-semibold theme-text-primary text-3xl">{profileName}</span>
-                                        <div
-                                            className="w-7 h-7"
-                                            onClick={() => {
-                                                setIsEditingName(true);
-                                                setTimeout(() => {
-                                                    document.getElementById('profileNameInput')?.focus();
-                                                }, 100);
-                                            }}
-                                            onMouseEnter={() => {
-                                                setEditProfileStopped(true);
-                                                setTimeout(() => {
-                                                    setEditProfileStopped(false);
-                                                    setEditProfilePaused(false);
-                                                }, 10);
-                                            }}
-                                            onMouseLeave={() => setEditProfilePaused(true)}
-                                            style={{ cursor: 'pointer' }}
-                                            title="Cambiar nombre del perfil"
-                                        >
-                                            <Lottie options={lottieOptions.editProfile} isPaused={isEditProfilePaused} isStopped={isEditProfileStopped} />
-                                        </div>
-                                    </div>
-                                ) : (
+                                {isEditingName && !contactProfile ? (
                                     <form
                                         className="flex flex-col items-center gap-2 w-full"
                                         onSubmit={e => {
@@ -426,9 +424,7 @@ const ProfileModal = ({
                                             }}
                                             onKeyDown={e => {
                                                 if (e.key === 'Enter') {
-                                                    if (newProfileName.trim()) {
-                                                        handleSaveProfileName();
-                                                    }
+                                                    if (newProfileName.trim()) handleSaveProfileName();
                                                 }
                                                 if (e.key === 'Escape') {
                                                     setNewProfileName(profileName);
@@ -459,6 +455,33 @@ const ProfileModal = ({
                                             </button>
                                         </div>
                                     </form>
+                                ) : (
+                                    <div className="flex items-center gap-4 justify-center">
+                                        <span className="font-semibold theme-text-primary text-3xl">{profileName}</span>
+                                        {!contactProfile && (
+                                            <div
+                                                className="w-7 h-7"
+                                                onClick={() => {
+                                                    setIsEditingName(true);
+                                                    setTimeout(() => {
+                                                        document.getElementById('profileNameInput')?.focus();
+                                                    }, 100);
+                                                }}
+                                                onMouseEnter={() => {
+                                                    setEditProfileStopped(true);
+                                                    setTimeout(() => {
+                                                        setEditProfileStopped(false);
+                                                        setEditProfilePaused(false);
+                                                    }, 10);
+                                                }}
+                                                onMouseLeave={() => setEditProfilePaused(true)}
+                                                style={{ cursor: 'pointer' }}
+                                                title="Cambiar nombre del perfil"
+                                            >
+                                                <Lottie options={lottieOptions.editProfile} isPaused={isEditProfilePaused} isStopped={isEditProfileStopped} />
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         </div>
@@ -467,38 +490,7 @@ const ProfileModal = ({
                     <div className="flex flex-col gap-1 mb-2">
                         <span className="text-sm theme-text-secondary">Información del perfil:</span>
                         <div className={`transition-all duration-300 w-full`}>
-                            {!isEditingInfo ? (
-                                <div className="flex items-center gap-2 w-full">
-                                    <span className="theme-text-primary text-base flex-1 font-semibold">
-                                        {profileInfoDb && profileInfoDb.trim() !== ''
-                                            ? profileInfoDb
-                                            : <span className="theme-text-primary font-semibold">Sin información</span>
-                                        }
-                                    </span>
-                                    <div
-                                        className="w-7 h-7"
-                                        onClick={() => {
-                                            setNewProfileInfo(profileInfoDb || '');
-                                            setIsEditingInfo(true);
-                                            setTimeout(() => {
-                                                document.getElementById('profileInfoInput')?.focus();
-                                            }, 100);
-                                        }}
-                                        onMouseEnter={() => {
-                                            setInfoProfileStopped(true);
-                                            setTimeout(() => {
-                                                setInfoProfileStopped(false);
-                                                setInfoProfilePaused(false);
-                                            }, 10);
-                                        }}
-                                        onMouseLeave={() => setInfoProfilePaused(true)}
-                                        style={{ cursor: 'pointer' }}
-                                        title="Editar información del perfil"
-                                    >
-                                        <Lottie options={lottieOptions.infoProfile} isPaused={isInfoProfilePaused} isStopped={isInfoProfileStopped} />
-                                    </div>
-                                </div>
-                            ) : (
+                            {isEditingInfo && !contactProfile ? (
                                 <form
                                     className="flex flex-col items-center gap-2 w-full"
                                     onSubmit={async e => {
@@ -585,10 +577,44 @@ const ProfileModal = ({
                                         </button>
                                     </div>
                                 </form>
+                            ) : (
+                                <div className="flex items-center gap-2 w-full">
+                                    <span className="theme-text-primary text-base flex-1 font-semibold">
+                                        {profileInfoDb && profileInfoDb.trim() !== ''
+                                            ? profileInfoDb
+                                            : <span className="theme-text-primary font-semibold">Sin información</span>
+                                        }
+                                    </span>
+                                    {!contactProfile && (
+                                        <div
+                                            className="w-7 h-7"
+                                            onClick={() => {
+                                                setNewProfileInfo(profileInfoDb || '');
+                                                setIsEditingInfo(true);
+                                                setTimeout(() => {
+                                                    document.getElementById('profileInfoInput')?.focus();
+                                                }, 100);
+                                            }}
+                                            onMouseEnter={() => {
+                                                setInfoProfileStopped(true);
+                                                setTimeout(() => {
+                                                    setInfoProfileStopped(false);
+                                                    setInfoProfilePaused(false);
+                                                }, 10);
+                                            }}
+                                            onMouseLeave={() => setInfoProfilePaused(true)}
+                                            style={{ cursor: 'pointer' }}
+                                            title="Editar información del perfil"
+                                        >
+                                            <Lottie options={lottieOptions.infoProfile} isPaused={isInfoProfilePaused} isStopped={isInfoProfileStopped} />
+                                        </div>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </div>
-                    {/* Botón cambiar contraseña */}
+                    {/* Botón cambiar contraseña (solo perfil propio) */}
+                    {!contactProfile && (
                     <button
                         className="flex items-center gap-2 p-2 rounded transition-colors"
                         onClick={() => setShowEditPasswordModal(true)}
@@ -606,7 +632,9 @@ const ProfileModal = ({
                         </div>
                         <span className="theme-text-primary">Cambiar contraseña</span>
                     </button>
-                    {/* Botón Cerrar sesión */}
+                    )}
+                    {/* Botón Cerrar sesión (solo perfil propio) */}
+                    {!contactProfile && (
                     <div className="flex justify-center mt-2">
                         <button
                             className="flex items-center gap-2 px-3 py-1 rounded transition-colors bg-gradient-to-r from-teal-primary to-teal-secondary text-white font-semibold hover:opacity-90"
@@ -631,10 +659,11 @@ const ProfileModal = ({
                             <span className="font-semibold">Cerrar sesión</span>
                         </button>
                     </div>
+                    )}
                 </div>
             </div>
             {/* Modal cambiar contraseña */}
-            {showEditPasswordModal && (
+            {showEditPasswordModal && !contactProfile && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
                     <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
                         <div className="p-4 theme-border border-b flex items-center justify-between">

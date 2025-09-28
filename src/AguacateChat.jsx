@@ -10,7 +10,9 @@ import './AguacateChat.css';
 import MessageRenderer from './MessageRenderer.jsx';
 import CenterNoticeBox from './components/CenterNoticeBox.jsx';
 import VideoThumbnail, { VideoModal } from './VideoPlayer.jsx';
+import ChatImage from './ChatImage.jsx';
 import AudioPlayer from './AudioPlayer.jsx';
+import MediaGalleryModal from './MediaGalleryModal.jsx';
 import toast, { Toaster } from 'react-hot-toast';
 import StoriesView from './StoriesView';
 import StoriesSkeleton from './components/StoriesSkeleton.jsx';
@@ -130,6 +132,8 @@ const AguacateChat = () => {
     const [isAttachClosing, setIsAttachClosing] = useState(false);
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
+    // Datos del perfil de contacto (si se abre modal desde header de chat)
+    const [contactProfileData, setContactProfileData] = useState(null);
     const [showConfigModal, setShowConfigModal] = useState(false);
     const [showPersonalizationModal, setShowPersonalizationModal] = useState(false);
     // Emoji picker
@@ -224,6 +228,16 @@ const AguacateChat = () => {
     // Modal de video
     const [videoModalOpen, setVideoModalOpen] = useState(false);
     const [currentVideoSrc, setCurrentVideoSrc] = useState(null);
+    // Galería multimedia (imágenes + videos)
+    const [mediaGalleryOpen, setMediaGalleryOpen] = useState(false);
+    const [mediaGalleryIndex, setMediaGalleryIndex] = useState(0);
+    // Cerrar galería automáticamente al cambiar o limpiar el chat seleccionado
+    useEffect(() => {
+        if (!selectedContact) {
+            setMediaGalleryOpen(false);
+            setMediaGalleryIndex(0);
+        }
+    }, [selectedContact]);
 
     // Cambiar vista y, si se pasa a historias, deseleccionar el chat y cerrar menús relacionados
     const handleViewChange = (view) => {
@@ -2410,28 +2424,59 @@ const AguacateChat = () => {
             <div className="flex-1 flex flex-col relative">
                 {/* Header del área principal: solo cuando hay chat seleccionado */}
                 {selectedContact && (
-                    <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                        <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
+                            <div
+                                className="flex items-center gap-3 cursor-pointer group rounded-lg px-1 -mx-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-primary/60 transition-colors"
+                                onClick={() => {
+                                    setShowProfileModal(true);
+                                    setContactProfileData({
+                                        id: selectedContact.id,
+                                        name: selectedContact.name,
+                                        username: selectedContact.username,
+                                        initials: selectedContact.initials || (selectedContact.name ? selectedContact.name.slice(0,2).toUpperCase() : 'CN'),
+                                        avatar_url: selectedContact.avatar_url,
+                                        profileInformation: selectedContact.profileInformation || ''
+                                    });
+                                }}
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`Ver perfil de ${selectedContact.name}`}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
+                                title="Ver perfil del contacto"
+                            >
                             <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
                                 ☰
                             </button>
-                            {selectedContact?.avatar_url ? (
-                                <img
-                                    src={selectedContact.avatar_url}
-                                    alt={selectedContact.name}
-                                    className="w-12 h-12 rounded-full object-cover"
-                                />
-                            ) : (
-                                <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
-                                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
-                                    </svg>
+                                <div className="relative">
+                                    {selectedContact?.avatar_url ? (
+                                        <img
+                                            src={selectedContact.avatar_url}
+                                            alt={selectedContact.name}
+                                            className="w-12 h-12 rounded-full object-cover ring-0 group-hover:ring-2 ring-teal-primary/60 transition-all"
+                                        />
+                                    ) : (
+                                        <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center ring-0 group-hover:ring-2 ring-offset-0 ring-teal-primary/60 transition-all">
+                                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    )}
+                                    <div className="absolute -bottom-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] px-1 py-0.5 rounded bg-teal-primary text-white shadow">
+                                        Ver
+                                    </div>
                                 </div>
-                            )}
-                            <div>
-                                <h2 id="chatName" className="font-semibold theme-text-primary">{selectedContact.name}</h2>
-                                <p id="chatStatus" className="text-sm theme-text-secondary">{selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : selectedContact.status}</p>
-                            </div>
+                                <div className="flex flex-col">
+                                    <h2 id="chatName" className="font-semibold theme-text-primary flex items-center gap-1">
+                                        {selectedContact.name}
+                                        <svg className="w-3.5 h-3.5 opacity-0 group-hover:opacity-80 transition-opacity" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                            <path d="M10.78 2.22a.75.75 0 00-1.06 0L4.97 6.97a.75.75 0 101.06 1.06L10 4.06l3.97 3.97a.75.75 0 101.06-1.06l-4.25-4.75z" />
+                                            <path d="M4.22 12.22a.75.75 0 011.06 0L10 16.94l4.72-4.72a.75.75 0 111.06 1.06l-5.25 5.25a.75.75 0 01-1.06 0l-5.25-5.25a.75.75 0 010-1.06z" />
+                                        </svg>
+                                    </h2>
+                                    <p id="chatStatus" className="text-sm theme-text-secondary group-hover:text-teal-primary transition-colors">
+                                        {selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : selectedContact.status}
+                                    </p>
+                                </div>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="relative">
@@ -2724,7 +2769,7 @@ const AguacateChat = () => {
                                         )}
                                         {/* Mensaje burbuja */}
                                         <div
-                                            className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md px-4 py-2 rounded-2xl break-words flex flex-col relative theme-text-primary`}
+                                            className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md rounded-2xl break-words flex flex-col relative theme-text-primary ${['image','video'].includes(message.messageType) ? 'p-1' : 'px-4 py-2'}`}
                                             style={{
                                                 background: isOwn
                                                     ? personalization.bubbleColors.sent
@@ -2734,28 +2779,56 @@ const AguacateChat = () => {
                                         >
                                             <div>
                                                 {message.messageType === 'image' ? (
-                                                    <img
-                                                        src={message.text}
-                                                        alt="Imagen"
-                                                        loading="lazy"
-                                                        className="rounded-lg cursor-pointer w-64 h-64 object-cover"
-                                                        onClick={() => { setIsImageModalEntering(true); setImagePreviewUrl(message.text); setTimeout(() => setIsImageModalEntering(false), 10); }}
-                                                    />
+                                                    <div className="relative">
+                                                        <ChatImage
+                                                            src={message.text}
+                                                            alt="Imagen"
+                                                            onClick={() => {
+                                                                const mediaMessages = chatMessages.filter(m => ['image','video'].includes(m.messageType));
+                                                                const idx = mediaMessages.findIndex(m => m === message);
+                                                                if (idx >= 0) {
+                                                                    setMediaGalleryIndex(idx);
+                                                                    setMediaGalleryOpen(true);
+                                                                }
+                                                            }}
+                                                        />
+                                                        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/55 text-white backdrop-blur-sm leading-none flex items-center gap-1 select-none">
+                                                            {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
+                                                        </div>
+                                                    </div>
                                                 ) : message.messageType === 'video' ? (
-                                                    <VideoThumbnail
-                                                        src={message.text}
-                                                        loading={!!message.uploading}
-                                                        onOpen={() => { setCurrentVideoSrc(message.text); setVideoModalOpen(true); }}
-                                                    />
+                                                    <div className="relative">
+                                                        <VideoThumbnail
+                                                            src={message.text}
+                                                            loading={!!message.uploading}
+                                                            onOpen={() => {
+                                                                const mediaMessages = chatMessages.filter(m => ['image','video'].includes(m.messageType));
+                                                                const idx = mediaMessages.findIndex(m => m === message);
+                                                                if (idx >= 0) {
+                                                                    setMediaGalleryIndex(idx);
+                                                                    setMediaGalleryOpen(true);
+                                                                }
+                                                            }}
+                                                            className="!m-0"
+                                                            size={260}
+                                                            radiusClass={`${isOwn ? 'rounded-2xl rounded-br-md' : 'rounded-2xl rounded-bl-md'}`}
+                                                        />
+                                                        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/55 text-white backdrop-blur-sm leading-none flex items-center gap-1 select-none">
+                                                            {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
+                                                        </div>
+                                                    </div>
                                                 ) : (message.messageType === 'audio' || message.audioUrl) ? (
                                                     <AudioPlayer src={message.audioUrl || message.text} className="w-full max-w-xs" variant="compact" />
                                                 ) : (
-                                                    <MessageRenderer text={message.text} chunkSize={450} />
+                                                    <>
+                                                        <MessageRenderer text={message.text} chunkSize={450} />
+                                                        <div className="text-[10px] self-end mt-1">
+                                                            {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
-                                            <div className="text-[10px] self-end">
-                                                {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
-                                            </div>
+                                            {['image','video'].includes(message.messageType) ? null : null}
                                             {/* Eliminado: el icono de leído ahora va en un overlay fijo a la derecha */}
                                             {/* Botón de tres puntos solo para mensajes propios, dentro de la burbuja arriba a la derecha */}
                                             {isOwn && (
@@ -3442,8 +3515,9 @@ const AguacateChat = () => {
             )}
             <ProfileModal
                 showProfileModal={showProfileModal}
-                setShowProfileModal={setShowProfileModal}
+                setShowProfileModal={(v) => { if (!v) setContactProfileData(null); setShowProfileModal(v); }}
                 myProfile={myProfile}
+                contactProfile={contactProfileData}
                 isEditingName={isEditingName}
                 setIsEditingName={setIsEditingName}
                 newProfileName={newProfileName}
@@ -3452,10 +3526,7 @@ const AguacateChat = () => {
                 setEditProfilePaused={setEditProfilePaused}
                 isEditProfileStopped={isEditProfileStopped}
                 setEditProfileStopped={setEditProfileStopped}
-                // Eliminado: props de edición de profileInfo
                 lottieOptions={lottieOptions}
-                setShowEditPasswordModal={setShowEditPasswordModal}
-                showEditPasswordModal={showEditPasswordModal} // <-- Añade esta línea
                 setPhotoProfilePaused={setPhotoProfilePaused}
                 setPhotoProfileStopped={setPhotoProfileStopped}
                 isPhotoProfilePaused={isPhotoProfilePaused}
@@ -3543,39 +3614,18 @@ const AguacateChat = () => {
                     </div>
                 </div>
             )}
-            {/* Modal de zoom para imágenes del chat con animación */}
-            {(imagePreviewUrl || isImageModalClosing) && (
-                <div
-                    className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm transition-opacity duration-300 ${
-                        (isImageModalClosing || isImageModalEntering) ? 'opacity-0' : 'opacity-100'
-                    }`}
-                    onClick={closeImagePreview}
-                >
-                    <div
-                        className={`transform transition-all duration-300 modal-transition ${
-                            (isImageModalClosing || isImageModalEntering) ? 'opacity-0 scale-90 translate-y-4' : 'opacity-100 scale-100 translate-y-0'
-                        }`}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <img
-                            src={imagePreviewUrl || ''}
-                            alt="Vista ampliada"
-                            className="max-w-[90vw] max-h-[85vh] rounded-xl shadow-2xl"
-                        />
-                    </div>
-                    <button
-                        className="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-white/90 text-gray-800 hover:bg-white shadow"
-                        onClick={(e) => { e.stopPropagation(); closeImagePreview(); }}
-                    >
-                        Cerrar
-                    </button>
-                </div>
-            )}
-            {/* Modal de reproducción de video */}
-            <VideoModal
-                open={videoModalOpen}
-                src={currentVideoSrc}
-                onClose={() => { setVideoModalOpen(false); setCurrentVideoSrc(null); }}
+            {/* Galería multimedia unificada (imágenes y videos) */}
+            <MediaGalleryModal
+                open={mediaGalleryOpen}
+                index={mediaGalleryIndex}
+                onClose={() => setMediaGalleryOpen(false)}
+                onIndexChange={(i) => setMediaGalleryIndex(i)}
+                items={chatMessages.filter(m => ['image','video'].includes(m.messageType)).map(m => ({
+                    type: m.messageType,
+                    src: m.text,
+                    created_at: m.created_at,
+                    id: m.id
+                }))}
             />
             {/* Overlay de skeleton a pantalla completa mientras cargan conversaciones */}
             {showLoadingSkeleton && (
