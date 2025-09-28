@@ -40,27 +40,37 @@ export default function StoryVideoPreviewModal({ file, onClose, onSave }) {
       {/* Input y botones en el mismo nivel, centrados horizontalmente */}
       <div className="pointer-events-none fixed inset-0 z-[62] flex items-end justify-center p-6">
         <div className="pointer-events-auto w-full max-w-2xl flex flex-row items-center gap-4">
-          <textarea
-            value={storyText}
-            onChange={e => {
-              setStoryText(e.target.value);
-              const textarea = e.target;
-              textarea.style.height = 'auto';
-              textarea.style.height = textarea.scrollHeight + 'px';
-            }}
-            maxLength={120}
-            placeholder="Escribe algo para tu historia..."
-            rows={1}
-            className="flex-1 px-4 py-2 rounded-lg border theme-border bg-black/30 text-white text-base outline-none focus:ring-2 focus:ring-teal-500 resize-none transition-all duration-300 ease-in-out hover:shadow-[0_0_16px_2px_#14b8a6]"
-            style={{
-              whiteSpace: 'pre-line',
-              wordBreak: 'break-word',
-              overflowWrap: 'break-word',
-              minHeight: '40px',
-              maxHeight: '180px',
-              overflowY: storyText.length > 80 ? 'auto' : 'hidden'
-            }}
-          />
+          <div className="flex-1 relative">
+            <textarea
+              value={storyText}
+              onChange={e => {
+                const next = e.target.value.slice(0,500);
+                setStoryText(next);
+                const textarea = e.target;
+                textarea.value = next;
+                const maxH = 140;
+                textarea.style.height = 'auto';
+                const newH = Math.min(textarea.scrollHeight, maxH);
+                textarea.style.height = newH + 'px';
+                textarea.style.overflowY = textarea.scrollHeight > maxH ? 'auto' : 'hidden';
+              }}
+              maxLength={500}
+              placeholder="Escribe algo para tu historia... (máx. 500)"
+              rows={1}
+              className="w-full px-4 py-2 rounded-lg border theme-border bg-black/30 text-white text-base outline-none focus:ring-2 focus:ring-teal-500 resize-none transition-all duration-300 ease-in-out hover:shadow-[0_0_16px_2px_#14b8a6] pr-14"
+              style={{
+                whiteSpace: 'pre-line',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                minHeight: '40px',
+                maxHeight: '140px',
+                overflowY: 'hidden'
+              }}
+            />
+            <div className="absolute bottom-1 right-2 text-[10px] font-medium text-white/60 select-none bg-black/40 px-2 py-0.5 rounded-md">
+              {storyText.length}/500
+            </div>
+          </div>
           <button
             onClick={onClose}
             disabled={uploading}

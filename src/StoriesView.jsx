@@ -530,17 +530,19 @@ const StoriesView = forwardRef((props, ref) => {
         e.target.value = '';
     };
 
-    const handleSaveVideo = async (file) => {
+    const handleSaveVideo = async (file, captionText) => {
         const tId = toast.loading('Subiendo video...');
         try {
             const { publicUrl } = await uploadVideoToBucket({ file, userId: user?.id, bucket: 'histories' });
             // Insertar en tabla 'histories'
+            const rawCaptionVideo = (captionText || '').trim();
+            const caption = rawCaptionVideo ? rawCaptionVideo.slice(0,500) : null;
             const { error: insErr } = await supabase
                 .from('histories')
                 .insert({
                     content_url: publicUrl,
                     content_type: 'video',
-                    caption: null,
+                    caption,
                     user_id: user.id,
                 });
             if (insErr) throw new Error(`Error al guardar en la base de datos: ${insErr.message || insErr}`);
@@ -561,7 +563,8 @@ const StoriesView = forwardRef((props, ref) => {
             return;
         }
         const { text, bg, color } = payload || {};
-        const caption = (text || '').trim();
+        const rawCaptionText = (text || '').trim();
+        const caption = rawCaptionText.slice(0,500);
         if (!caption) {
             toast.error('El texto está vacío');
             return;
@@ -770,7 +773,8 @@ const StoriesView = forwardRef((props, ref) => {
                 <StoryImageEditorModal
                     file={editorFile}
                     onClose={() => setEditorFile(null)}
-                    onSave={async (finalFile) => {
+                    // onSave ahora recibe (file, caption)
+                    onSave={async (finalFile, captionText) => {
                         if (uploading) return;
                         const tId = toast.loading('Subiendo historia...');
                         setUploading(true);
@@ -811,12 +815,14 @@ const StoriesView = forwardRef((props, ref) => {
                             if (!publicUrl) throw new Error('No se pudo obtener URL pública del archivo subido');
 
                             // 4) Insertar en tabla 'histories'
+                            const rawCaptionImg = (captionText || '').trim();
+                            const caption = rawCaptionImg ? rawCaptionImg.slice(0,500) : null;
                             const { error: insErr } = await supabase
                                 .from('histories')
                                 .insert({
                                     content_url: publicUrl,
                                     content_type: 'image',
-                                    caption: null,
+                                    caption,
                                     user_id: user.id,
                                 });
                             if (insErr) throw new Error(`Error al guardar en la base de datos: ${insErr.message || insErr}`);
@@ -843,7 +849,8 @@ const StoriesView = forwardRef((props, ref) => {
                         setVideoModalOpen(false);
                         setVideoFile(null);
                     }}
-                    onSave={handleSaveVideo}
+                    // handleSaveVideo ahora debe recibir (file, caption)
+                    onSave={(file, captionText) => handleSaveVideo(file, captionText)}
                 />
             )}
         </div>

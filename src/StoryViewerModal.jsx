@@ -53,6 +53,9 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     const [viewsLoading, setViewsLoading] = useState(false);
     const [viewsError, setViewsError] = useState(null);
     const [viewersData, setViewersData] = useState([]);
+    // Control de expansión de caption
+    const [showFullCaption, setShowFullCaption] = useState(false);
+    const wasPausedBeforeExpandRef = useRef(false);
     // Recordar si la historia ya estaba en pausa antes de abrir el modal de vistas
     const pauseBeforeViewsRef = useRef(false);
     // Refs para control preciso de pausa en imágenes/texto
@@ -833,6 +836,54 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                             </button>
                         </div>
                     )}
+                    {/* Caption para imágenes / videos si existe */}
+                    {activeType !== 'text' && rawStory && typeof rawStory === 'object' && rawStory.caption && (() => {
+                        const full = rawStory.caption;
+                        const LIMIT = 160; // caracteres para modo truncado
+                        const isLong = full.length > LIMIT;
+                        const visibleText = showFullCaption || !isLong ? full : (full.slice(0, LIMIT).trimEnd() + '…');
+                        const handleExpand = () => {
+                            if (!showFullCaption) {
+                                // Guardar si ya estaba pausado
+                                wasPausedBeforeExpandRef.current = isPausedRef.current;
+                                // Pausar si no lo estaba
+                                if (!isPausedRef.current) {
+                                    if (activeType === 'video' && videoRef.current) { try { videoRef.current.pause(); } catch {} }
+                                    setIsPaused(true); isPausedRef.current = true;
+                                }
+                                setShowFullCaption(true);
+                            } else {
+                                // Colapsar: restaurar pausa previa
+                                setShowFullCaption(false);
+                                if (!wasPausedBeforeExpandRef.current) {
+                                    // Reanudar sólo si antes NO estaba pausado
+                                    if (activeType === 'video' && videoRef.current) { try { videoRef.current.play().catch(()=>{}); } catch {} }
+                                    setIsPaused(false); isPausedRef.current = false;
+                                }
+                            }
+                        };
+                        return (
+                            <div className="absolute bottom-14 left-0 right-0 px-4 pointer-events-none">
+                                <div className="group mx-auto max-w-[85%] bg-black/55 backdrop-blur-sm rounded-2xl px-4 py-2 text-white text-sm leading-snug whitespace-pre-wrap break-words border border-white/15 shadow-md pointer-events-auto select-text">
+                                    {visibleText}
+                                    {isLong && !showFullCaption && (
+                                        <button
+                                            onClick={handleExpand}
+                                            className="ml-2 text-teal-300 hover:text-teal-200 underline-offset-2 hover:underline text-xs font-medium"
+                                            title="Ver todo el texto"
+                                        >Ver más</button>
+                                    )}
+                                    {isLong && showFullCaption && (
+                                        <button
+                                            onClick={handleExpand}
+                                            className="ml-2 text-teal-300 hover:text-teal-200 underline-offset-2 hover:underline text-xs font-medium"
+                                            title="Ocultar texto"
+                                        >Ver menos</button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
             </div>
 
