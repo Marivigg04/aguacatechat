@@ -472,6 +472,42 @@ const AguacateChat = () => {
     const notificationSettingsRef = useRef(notificationSettings);
     useEffect(() => { notificationSettingsRef.current = notificationSettings; }, [notificationSettings]);
 
+    // --- Privacidad ---
+    const PRIVACY_SETTINGS_KEY = 'aguacatechat_privacy_v1';
+    const loadPrivacySettings = () => {
+        try {
+            const raw = localStorage.getItem(PRIVACY_SETTINGS_KEY);
+            if (raw) {
+                const p = JSON.parse(raw);
+                if (p && typeof p === 'object') {
+                    return {
+                        readReceipts: p.readReceipts !== false,
+                        showStatus: p.showStatus !== false,
+                        showLastConex: p.showLastConex !== false,
+                    };
+                }
+            }
+        } catch {}
+        return { readReceipts: true, showStatus: true, showLastConex: true };
+    };
+    const [privacySettings, setPrivacySettings] = useState(loadPrivacySettings);
+    const privacySettingsRef = useRef(privacySettings);
+    const prevPrivacyRef = useRef(privacySettings);
+    useEffect(() => { privacySettingsRef.current = privacySettings; }, [privacySettings]);
+    useEffect(() => {
+        try { localStorage.setItem(PRIVACY_SETTINGS_KEY, JSON.stringify(privacySettings)); } catch {}
+        // Si se desactiva mostrar estado, aseguramos que aparezca offline en la base.
+        const prev = prevPrivacyRef.current;
+        if (prev.showStatus && !privacySettings.showStatus && user?.id) {
+            try { updateTable('profiles', { id: user.id }, { isOnline: false }); } catch {}
+        }
+        // Si se desactiva mostrar última conexión eliminamos el valor público
+        if (prev.showLastConex && !privacySettings.showLastConex && user?.id) {
+            try { updateTable('profiles', { id: user.id }, { lastConex: null }); } catch {}
+        }
+        prevPrivacyRef.current = privacySettings;
+    }, [privacySettings, user?.id]);
+
     const audioCtxRef = useRef(null);
     const ensureAudioCtx = () => {
         if (audioCtxRef.current) return audioCtxRef.current;
@@ -674,9 +710,19 @@ const AguacateChat = () => {
             // console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             const unreadMap = unreadRef.current || {};
             const unread = c?.conversationId ? (unreadMap[c.conversationId] || 0) : 0;
+            const privacy = privacySettingsRef.current;
+            // Construir status según privacidad
+            let computedStatus;
+            const remoteLastConexAvailable = !!c?.otherProfile?.lastConex; // solo si el remoto decidió exponerlo (no lo limpiamos si lo ocultó -> podría ser null más adelante)
+            const canShowLast = privacy?.showLastConex && remoteLastConexAvailable;
+            if (privacy?.showStatus) {
+                computedStatus = c?.otherProfile?.isOnline ? '🟢' : (canShowLast ? formatLastConex(c?.otherProfile?.lastConex) : '');
+            } else {
+                computedStatus = canShowLast ? formatLastConex(c?.otherProfile?.lastConex) : '';
+            }
             return {
                 name,
-                status: c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex),
+                status: computedStatus,
                 lastMessage: lastContent,
                 lastMessageType: lastType,
                 lastMessageId: lastId,
@@ -692,8 +738,8 @@ const AguacateChat = () => {
                 lastConex: c?.otherProfile?.lastConex,
                 last_message: c?.last_message ? { ...c.last_message, type: lastType } : null,
                 // Exponer 'seen' y un booleano útil para la UI
-                lastMessageSeen: lastMessageSeen,
-                lastMessageSeenArr: lastMessageSeenArr,
+                lastMessageSeen: privacy?.readReceipts ? lastMessageSeen : false,
+                lastMessageSeenArr: privacy?.readReceipts ? lastMessageSeenArr : [],
                 unread,
             };
         });
@@ -1449,16 +1495,16 @@ const AguacateChat = () => {
     // Update online status based on tab visibility and window focus
     useEffect(() => {
         if (!user?.id) return;
-
         const updateOnlineStatus = async () => {
+            const privacy = privacySettingsRef.current;
             const shouldBeOnline = !document.hidden && document.hasFocus();
-            console.log('Updating my online status to:', shouldBeOnline);
+            // Si ambas opciones están desactivadas, no publicamos nada nuevo.
+            if (!privacy.showStatus && !privacy.showLastConex) return;
             try {
-                const updateData = { isOnline: shouldBeOnline };
-                if (!shouldBeOnline) {
-                    updateData.lastConex = new Date().toISOString();
-                }
-                await updateTable('profiles', { id: user.id }, updateData);
+                const updateData = {};
+                if (privacy.showStatus) updateData.isOnline = shouldBeOnline;
+                if (!shouldBeOnline && privacy.showLastConex) updateData.lastConex = new Date().toISOString();
+                if (Object.keys(updateData).length > 0) await updateTable('profiles', { id: user.id }, updateData);
             } catch (error) {
                 console.error('Error updating online status:', error);
             }
@@ -1714,6 +1760,7 @@ const AguacateChat = () => {
         try {
             if (!isWindowFocused) return
             if (!user?.id) return
+            if (!privacySettingsRef.current.readReceipts) return
             const container = chatAreaRef.current
             if (!container) return
             // query all message nodes with data attributes
@@ -2018,6 +2065,7 @@ const AguacateChat = () => {
         return -1;
     }, [chatMessages]);
     const readReceiptIndex = React.useMemo(() => {
+        if (!privacySettingsRef.current.readReceipts) return -1;
         // Solo mostrar si existe al menos un mensaje tuyo visto por la otra persona
         if (lastSeenSentIndex === -1) return -1;
         // Si la otra persona escribió después de ese visto, anclar en su último mensaje
@@ -4241,8 +4289,8 @@ const AguacateChat = () => {
                 toggleTheme={toggleTheme}
                 notificationSettings={notificationSettings}
                 onChangeNotificationSettings={setNotificationSettings}
-                privacySettings={null}
-                onChangePrivacySettings={()=>{}}
+                privacySettings={privacySettings}
+                onChangePrivacySettings={setPrivacySettings}
             />
 
             {/* Modal de personalización */}
