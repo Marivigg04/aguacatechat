@@ -107,7 +107,7 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                         {renderSettingItem(
                             BellIcon,
                             'Activar Notificaciones',
-                            'Recibe alertas de nuevos mensajes y llamadas.',
+                            'Recibe alertas de nuevos mensajes.',
                             <ToggleSwitch
                                 isOn={notifications.all}
                                 handleToggle={() => onChangeNotificationSettings && onChangeNotificationSettings({ ...notifications, all: !notifications.all })}
@@ -133,6 +133,9 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                     {/* Sección de Privacidad */}
                     <div className="space-y-2">
                         <h3 className="text-lg font-semibold theme-text-primary px-4">Privacidad</h3>
+                        <p className="px-4 pl-5 text-[16px] leading-relaxed italic relative theme-text-secondary opacity-75 before:content-[''] before:absolute before:left-4 before:top-1 before:bottom-1 before:w-[3px] before:rounded-full before:bg-emerald-500/60 dark:before:bg-emerald-400/60">
+                            No podrás hacer uso de las opciones que deshabilites
+                        </p>
                         {renderSettingItem(
                             LockClosedIcon,
                             'Confirmación de Lectura',
@@ -149,6 +152,15 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                             <ToggleSwitch
                                 isOn={privacy.showStatus}
                                 handleToggle={() => onChangePrivacySettings && onChangePrivacySettings({ ...privacy, showStatus: !privacy.showStatus })}
+                            />
+                        )}
+                        {renderSettingItem(
+                            UserCircleIcon,
+                            'Mostrar Última Conexión',
+                            'Permite que tus contactos vean cuándo fue tu última conexión.',
+                            <ToggleSwitch
+                                isOn={privacy.showLastConex}
+                                handleToggle={() => onChangePrivacySettings && onChangePrivacySettings({ ...privacy, showLastConex: !privacy.showLastConex })}
                             />
                         )}
                     </div>

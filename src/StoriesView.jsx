@@ -40,13 +40,6 @@ const formatStoryTime = (iso) => {
     }
 };
 
-// Fallback de ejemplo si no hay datos reales
-const sampleStories = [
-    { id: 's-1', name: 'Sorianny Jumi', time: 'Hoy a la(s) 9:58 p.m.', image: 'https://i.pravatar.cc/150?img=27', userStories: ['https://i.pravatar.cc/400?img=27', 'https://i.pravatar.cc/400?img=26'] },
-    { id: 's-2', name: 'José David', time: 'Hoy a la(s) 9:38 p.m.', image: 'https://i.pravatar.cc/150?img=28', userStories: ['https://i.pravatar.cc/400?img=28'] },
-    { id: 's-3', name: 'Francia Alejandro', time: 'Hoy a la(s) 9:57 p.m.', image: 'https://i.pravatar.cc/150?img=31', userStories: ['https://i.pravatar.cc/400?img=31'] },
-];
-
 // Novedad: Se han eliminado los comentarios "//" para definir correctamente el componente
 const StoryItem = ({ name, time, image, onClick, index = 0, seen = false, exiting = false }) => (
     <div 
