@@ -898,6 +898,13 @@ const AguacateChat = () => {
                             toast.error('No hay conversación activa para subir el audio');
                         } else {
                             try {
+                                        // Post-proceso: recolectar story replies sin metadata (nuevo formato sin prefijo) y hacer fetch batch de historias
+                                        try {
+                                            setTimeout(async () => {
+                                                const current = chatMessagesRef.current || [];
+                                                const missing = current.filter(mm => mm.messageType && mm.type === undefined && mm.storyReply == null && mm.replyTo && mm.messageType !== 'image' && mm.messageType !== 'video' && mm.messageType !== 'audio' && mm.messageType !== 'text');
+                                            }, 0);
+                                        } catch {}
                                 const { publicUrl } = await uploadAudioToBucket({
                                     blob,
                                     conversationId: selectedContact.conversationId,
@@ -1158,6 +1165,39 @@ const AguacateChat = () => {
                                     if (t === 'image') label = 'Foto';
                                     else if (t === 'audio') label = 'Audio';
                                     else if (t === 'video') label = 'Video';
+                                    else if (t === 'stories') {
+                                        // Asegurar variable local para evitar ReferenceError
+                                        let storyReply = null;
+                                        // Intentar extraer metadata para mostrar un snippet más claro
+                                        // Prioridad 1: nuevo campo persistido story_meta
+                                        if (m.story_meta && typeof m.story_meta === 'object') {
+                                            try {
+                                                storyReply = { ...m.story_meta };
+                                            } catch {}
+                                        }
+                                        // Legacy prefix (solo si aún no lo obtuvimos de story_meta)
+                                        if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                            try {
+                                                const rest = m.content.substring('::storyreply::'.length);
+                                                const sepIdx = rest.indexOf('::');
+                                                if (sepIdx > -1) {
+                                                    const metaStr = rest.slice(0, sepIdx);
+                                                    const storyMeta = JSON.parse(metaStr);
+                                                    const replyType = storyMeta.replyContentType || 'text';
+                                                    if (replyType === 'image') label = 'Respuesta (imagen) a historia';
+                                                    else if (replyType === 'video') label = 'Respuesta (video) a historia';
+                                                    else if (replyType === 'audio') label = 'Respuesta (audio) a historia';
+                                                    else label = 'Respuesta a historia';
+                                                } else {
+                                                    label = 'Respuesta a historia';
+                                                }
+                                            } catch {
+                                                label = 'Respuesta a historia';
+                                            }
+                                        } else {
+                                            label = 'Respuesta a historia';
+                                        }
+                                    }
                                     if (m.sender_id !== user?.id) {
                                         const isActive = m.conversation_id === selectedConvIdRef.current;
                                         if (!isActive && !didIncrementUnread) {
@@ -1212,37 +1252,175 @@ const AguacateChat = () => {
                                     if (!replaced && String(msg.id).startsWith('tmp-') && msg.type === 'sent' && msg.messageType === (m.type || 'text') && msg.text === (m.type === 'audio' ? '(Audio)' : msg.text)) {
                                         // Reemplazar primer candidato temporal (heurística básica)
                                         replaced = true;
+                                        let storyReply = null; let cleanContent = m.content;
+                                        try {
+                                            if (m.type === 'stories') {
+                                                // Prioridad 1: story_meta
+                                                if (m.story_meta && typeof m.story_meta === 'object') {
+                                                    try { storyReply = { ...m.story_meta }; } catch {}
+                                                }
+                                                // Legacy prefix fallback
+                                                if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                                    const rest = m.content.substring('::storyreply::'.length);
+                                                    const sepIdx = rest.indexOf('::');
+                                                    if (sepIdx > -1) {
+                                                        const metaStr = rest.slice(0, sepIdx);
+                                                        storyReply = JSON.parse(metaStr);
+                                                        cleanContent = rest.slice(sepIdx + 2);
+                                                    }
+                                                } else {
+                                                    // Nuevo formato: buscar historia usando replyng_to
+                                                    const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
+                                                    if (storyId) {
+                                                        (async () => {
+                                                            try {
+                                                                const { data: hist, error: histErr } = await supabase
+                                                                    .from('histories')
+                                                                    .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
+                                                                    .eq('id', storyId)
+                                                                    .single();
+                                                                if (!histErr && hist) {
+                                                                    storyReply = {
+                                                                        storyId: hist.id,
+                                                                        ownerId: hist.user_id,
+                                                                        contentType: hist.content_type,
+                                                                        contentUrl: hist.content_url,
+                                                                        caption: hist.caption,
+                                                                        bg_color: hist.bg_color,
+                                                                        font_color: hist.font_color,
+                                                                        replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
+                                                                    };
+                                                                    // Forzar actualización del mensaje ya mapeado
+                                                                    setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                                }
+                                                            } catch {}
+                                                        })();
+                                                    }
+                                                }
+                                            }
+                                        } catch {}
                                         const base = {
                                             id: m.id,
                                             type: 'sent',
                                             created_at: m.created_at,
-                                            messageType: m.type || 'text',
+                                            messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'),
                                             seen: Array.isArray(m.seen) ? m.seen : [],
                                             replyTo: msg.replyTo || m.replyng_to || m.reply_to || m.replyTo || null,
+                                            storyReply,
                                         };
-                                        if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
-                                        if (m.type === 'image') return { ...base, text: m.content };
-                                        if (m.type === 'video') return { ...base, text: m.content };
-                                        return { ...base, text: m.content };
+                                        if (m.type === 'audio') return { ...base, audioUrl: cleanContent, text: '(Audio)' };
+                                        if (m.type === 'image') return { ...base, text: cleanContent };
+                                        if (m.type === 'video') return { ...base, text: cleanContent };
+                                        return { ...base, text: cleanContent };
                                     }
                                     return msg;
                                 });
                                 // Si no se pudo reemplazar (por timing), añadirlo al final evitando duplicados exactos
                                 if (!replaced && !mapped.some(msg => msg.id === m.id)) {
-                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null };
-                                    if (m.type === 'audio') mapped.push({ ...base, audioUrl: m.content, text: '(Audio)' });
-                                    else mapped.push({ ...base, text: m.content });
+                                    let storyReply = null; let cleanContent = m.content;
+                                    try {
+                                        if (m.type === 'stories') {
+                                            // Prioridad 1: story_meta
+                                            if (m.story_meta && typeof m.story_meta === 'object') {
+                                                try { storyReply = { ...m.story_meta }; } catch {}
+                                            }
+                                            // Legacy prefix
+                                            if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                                const rest = m.content.substring('::storyreply::'.length);
+                                                const sepIdx = rest.indexOf('::');
+                                                if (sepIdx > -1) {
+                                                    const metaStr = rest.slice(0, sepIdx);
+                                                    storyReply = JSON.parse(metaStr);
+                                                    cleanContent = rest.slice(sepIdx + 2);
+                                                }
+                                            } else {
+                                                const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
+                                                if (storyId) {
+                                                    (async () => {
+                                                        try {
+                                                            const { data: hist, error: histErr } = await supabase
+                                                                .from('histories')
+                                                                .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
+                                                                .eq('id', storyId)
+                                                                .single();
+                                                            if (!histErr && hist) {
+                                                                storyReply = {
+                                                                    storyId: hist.id,
+                                                                    ownerId: hist.user_id,
+                                                                    contentType: hist.content_type,
+                                                                    contentUrl: hist.content_url,
+                                                                    caption: hist.caption,
+                                                                    bg_color: hist.bg_color,
+                                                                    font_color: hist.font_color,
+                                                                    replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
+                                                                };
+                                                                setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                            }
+                                                        } catch {}
+                                                    })();
+                                                }
+                                            }
+                                        }
+                                    } catch {}
+                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'), seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
+                                    if (m.type === 'audio') mapped.push({ ...base, audioUrl: cleanContent, text: '(Audio)' });
+                                    else mapped.push({ ...base, text: cleanContent });
                                 }
                                 return mapped;
                             }
                             // Mensaje recibido normal (ignorar si está oculto localmente)
                             if (hiddenIdsRef.current.has(m.id)) return prev;
-                            return [
-                                ...prev,
-                                m.type === 'audio'
-                                    ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null }
-                                    : { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null },
-                            ];
+                            let storyReply = null; let cleanContent = m.content;
+                            try {
+                                if (m.type === 'stories') {
+                                            // Prioridad 1: story_meta
+                                            if (m.story_meta && typeof m.story_meta === 'object') {
+                                                try { storyReply = { ...m.story_meta }; } catch {}
+                                            }
+                                            // Legacy prefix
+                                            if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                        const rest = m.content.substring('::storyreply::'.length);
+                                        const sepIdx = rest.indexOf('::');
+                                        if (sepIdx > -1) {
+                                            const metaStr = rest.slice(0, sepIdx);
+                                            storyReply = JSON.parse(metaStr);
+                                            cleanContent = rest.slice(sepIdx + 2);
+                                        }
+                                    } else {
+                                        const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
+                                        if (storyId) {
+                                            (async () => {
+                                                try {
+                                                    const { data: hist, error: histErr } = await supabase
+                                                        .from('histories')
+                                                        .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
+                                                        .eq('id', storyId)
+                                                        .single();
+                                                    if (!histErr && hist) {
+                                                        storyReply = {
+                                                            storyId: hist.id,
+                                                            ownerId: hist.user_id,
+                                                            contentType: hist.content_type,
+                                                            contentUrl: hist.content_url,
+                                                            caption: hist.caption,
+                                                            bg_color: hist.bg_color,
+                                                            font_color: hist.font_color,
+                                                            replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
+                                                        };
+                                                        setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                    }
+                                                } catch {}
+                                            })();
+                                        }
+                                    }
+                                }
+                            } catch {}
+                            const effectiveType = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
+                            const receivedBase = { id: m.id, type: 'received', created_at: m.created_at, messageType: effectiveType, seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
+                            if (effectiveType === 'audio') {
+                                return [...prev, { ...receivedBase, audioUrl: cleanContent, text: '(Audio)' }];
+                            }
+                            return [...prev, { ...receivedBase, text: cleanContent }];
                         });
                     } else if (evt === 'UPDATE') {
                         const m = payload.new;
@@ -1616,18 +1794,24 @@ const AguacateChat = () => {
                     const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE, afterMessageId, afterTimestamp });
                     const mapped = messages.map(m => {
                         const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
+                        let storyReply = null; let cleanContent = m.content;
+                        if (m.type === 'stories') {
+                            if (m.story_meta && typeof m.story_meta === 'object') {
+                                storyReply = { ...m.story_meta };
+                            }
+                        }
+                        const effectiveInner = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
                         const base = {
                             id: m.id,
                             type: m.sender_id === user?.id ? 'sent' : 'received',
                             created_at: m.created_at,
-                            messageType: m.type || 'text',
+                            messageType: effectiveInner,
                             seen: Array.isArray(m.seen) ? m.seen : [],
                             replyTo: replyNormalized,
+                            storyReply,
                         };
-                        if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
-                        if (m.type === 'video') return { ...base, text: m.content };
-                        if (m.type === 'image') return { ...base, text: m.content };
-                        return { ...base, text: m.content };
+                        if (effectiveInner === 'audio') return { ...base, audioUrl: cleanContent, text: '(Audio)' };
+                        return { ...base, text: cleanContent };
                     });
                     setChatMessages(mapped.filter(m => !hiddenIdsRef.current.has(m.id)));
                     setHasMoreOlder(hasMore);
@@ -1664,18 +1848,24 @@ const AguacateChat = () => {
             const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, before: oldestCursor, afterMessageId: afterClearMessageIdRef.current });
             const mapped = messages.map(m => {
                 const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
+                let storyReply = null; let cleanContent = m.content;
+                if (m.type === 'stories') {
+                    if (m.story_meta && typeof m.story_meta === 'object') {
+                        storyReply = { ...m.story_meta };
+                    }
+                }
+                const effectiveInner = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
                 const base = {
                     id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
                     created_at: m.created_at,
-                    messageType: m.type || 'text',
+                    messageType: effectiveInner,
                     seen: Array.isArray(m.seen) ? m.seen : [],
                     replyTo: replyNormalized,
+                    storyReply,
                 };
-                if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
-                if (m.type === 'video') return { ...base, text: m.content };
-                if (m.type === 'image') return { ...base, text: m.content };
-                return { ...base, text: m.content };
+                if (effectiveInner === 'audio') return { ...base, audioUrl: cleanContent, text: '(Audio)' };
+                return { ...base, text: cleanContent };
             });
             setChatMessages(prev => [...mapped.filter(m => !hiddenIdsRef.current.has(m.id)), ...prev]);
             setHasMoreOlder(hasMore);
@@ -3302,7 +3492,44 @@ const AguacateChat = () => {
                                                 }
                                             }}
                                         >
-                                            {message.replyTo && (() => {
+                                            {/* Preview de respuesta a historia (storyReply) */}
+                                            {message.storyReply && (
+                                                <div className={`group relative mb-2 w-full overflow-hidden rounded-xl border border-white/10 shadow-sm ${isOwn ? 'reply-bg-sent' : 'reply-bg-received'} bg-black/10 dark:bg-white/5 backdrop-blur-sm`}> 
+                                                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-teal-400 to-teal-600" />
+                                                    <div className="pl-3 pr-3 py-2 flex items-center gap-3" style={{maskImage:'linear-gradient(to right, black 90%, transparent)'}}>
+                                                        {(() => {
+                                                            const meta = message.storyReply;
+                                                            const ctype = (meta?.contentType || '').toLowerCase();
+                                                            if (ctype === 'image' && meta.contentUrl) {
+                                                                return <img src={meta.contentUrl} alt="historia" className="w-10 h-10 object-cover rounded-md border border-white/20 shadow-sm" loading="lazy" />;
+                                                            }
+                                                            if (ctype === 'video' && meta.contentUrl) {
+                                                                return <div className="relative w-10 h-10 rounded-md overflow-hidden bg-black/40 flex items-center justify-center text-white/80">
+                                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                                                </div>;
+                                                            }
+                                                            if (ctype === 'text') {
+                                                                const bg = meta.bg_color || '#111';
+                                                                const fg = meta.font_color || '#fff';
+                                                                return <div className="w-10 h-10 rounded-md flex items-center justify-center text-[9px] font-medium p-1 text-center" style={{background:bg, color:fg, lineHeight: '1.1'}}>
+                                                                    {(meta.caption || '').slice(0,24) || 'Texto'}
+                                                                </div>;
+                                                            }
+                                                            return <div className="w-10 h-10 rounded-md bg-black/25 dark:bg-white/10 flex items-center justify-center text-teal-400">
+                                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                                            </div>;
+                                                        })()}
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="text-[10px] uppercase tracking-wide font-semibold opacity-70 flex items-center gap-1 mb-0.5">Respuesta a historia</div>
+                                                            <div className="text-xs truncate max-w-[210px]" title={message.storyReply.caption || ''}>
+                                                                {message.storyReply.caption ? message.storyReply.caption.slice(0,120) : (message.storyReply.contentType === 'image' ? 'Foto' : message.storyReply.contentType === 'video' ? 'Video' : 'Historia')}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {/* Mostrar caja de respuesta estándar solo si NO es una respuesta a historia */}
+                                            {message.replyTo && !message.storyReply && (() => {
                                                 const original = chatMessages.find(m => m.id === message.replyTo);
                                                 const getLabel = () => {
                                                     if (!original) return 'Mensaje';

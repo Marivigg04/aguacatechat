@@ -33,7 +33,6 @@ const EmojiPicker = ({ onSelect, onClose, dark, anchorRef }) => {
   // Calcular posición sobre el botón (anchor)
   const computePosition = () => {
     if (isMobile) {
-      // En móvil no calculamos posición relativa; usamos bottom sheet.
       setCoords(prev => ({ ...prev, ready: true }));
       return;
     }
@@ -43,35 +42,44 @@ const EmojiPicker = ({ onSelect, onClose, dark, anchorRef }) => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // Usar ancho medido si está disponible; mientras no, fallback
     const pickerW = measuredWidth || PICKER_WIDTH_FALLBACK;
-
-    // Centro horizontal del botón
     const buttonCenterX = rect.left + rect.width / 2;
-
-    // Posición ideal centrada
     let left = buttonCenterX - pickerW / 2 + GLOBAL_OFFSET_X;
-
-    // Clamp horizontal y recalcular arrow offset relativo
     const minLeft = 8;
     const maxLeft = vw - pickerW - 8;
     const clampedLeft = Math.max(minLeft, Math.min(left, maxLeft));
-
-    // ArrowX: posición relativa dentro del picker para situar la flecha exactamente sobre el centro del botón
-    let arrowX = buttonCenterX - clampedLeft; // px desde el borde izquierdo del picker
-    // Evitar que la flecha se salga del borde del panel (márgenes de 12px)
+    let arrowX = buttonCenterX - clampedLeft;
     arrowX = Math.max(16, Math.min(arrowX, pickerW - 16));
 
-    // Prefer arriba del botón
-    let top = rect.top - GAP - PICKER_HEIGHT;
-    let arrowPosition = 'bottom';
-    if (top < 8) {
+    // Espacio disponible arriba y abajo del botón
+    const spaceAbove = rect.top - GAP; // desde top viewport hasta borde superior del botón - GAP
+    const spaceBelow = vh - rect.bottom - GAP; // desde borde inferior botón + GAP hasta bottom viewport
+
+    // Altura deseada base
+    const desiredHeight = PICKER_HEIGHT;
+    // Determinar si cabe arriba o abajo completamente
+    const canFitAbove = spaceAbove >= desiredHeight;
+    const canFitBelow = spaceBelow >= desiredHeight;
+
+    let arrowPosition = 'bottom'; // por defecto mostramos arriba del botón (flecha abajo del picker)
+    let top;
+    let effectiveHeight = desiredHeight;
+
+    if (canFitAbove || (!canFitBelow && spaceAbove >= spaceBelow)) {
+      // Colocar arriba (preferimos arriba si cabe o si hay más espacio arriba)
+      effectiveHeight = Math.min(desiredHeight, spaceAbove - 8); // margen de seguridad
+      top = rect.top - GAP - effectiveHeight;
+      arrowPosition = 'bottom';
+    } else {
+      // Colocar abajo
+      effectiveHeight = Math.min(desiredHeight, spaceBelow - 8);
       top = rect.bottom + GAP;
       arrowPosition = 'top';
     }
 
-    setCoords({ top, left: clampedLeft, arrowPosition, ready: true, arrowX });
+    // Guardar altura efectiva para estilos inline (usamos cacheRef para reutilizar si re-render)
     cacheRef.current = { width: pickerW, left: clampedLeft, top };
+    setCoords({ top, left: clampedLeft, arrowPosition, ready: true, arrowX, effectiveHeight });
   };
 
   useEffect(() => {
@@ -264,7 +272,8 @@ const EmojiPicker = ({ onSelect, onClose, dark, anchorRef }) => {
           }
           style={{
             backdropFilter: 'blur(10px)',
-            maxHeight: isMobile ? '75vh' : PICKER_HEIGHT,
+            // Si tenemos una altura efectiva calculada (desktop) úsala, sino fallback
+            maxHeight: isMobile ? '75vh' : (coords.effectiveHeight || PICKER_HEIGHT),
             width: isMobile ? '100%' : 'auto'
           }}
         >

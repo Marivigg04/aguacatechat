@@ -197,7 +197,10 @@ const StoriesView = forwardRef((props, ref) => {
 
                 // 1) Obtener conversaciones del usuario para conocer contactos
                 const convs = await fetchUserConversations(user.id);
-                const otherProfiles = convs
+                // Filtrar sólo conversaciones aceptadas. Criterio:
+                // - conv.acepted === true OR conv.created_by === user.id (el creador puede ver su propio contacto aunque espere aceptación)
+                const acceptedConvs = convs.filter(c => c && (c.acepted === true || c.created_by === user.id));
+                const otherProfiles = acceptedConvs
                     .map(c => c.otherProfile)
                     .filter(Boolean);
 
@@ -268,7 +271,7 @@ const StoriesView = forwardRef((props, ref) => {
                 }
 
                 // Ahora los contactos en el mismo orden que convs
-                for (const c of convs) {
+                for (const c of acceptedConvs) {
                     const prof = c.otherProfile;
                     if (!prof) continue;
                     const userHist = byUser.get(prof.id) || [];
@@ -390,6 +393,72 @@ const StoriesView = forwardRef((props, ref) => {
                 // Ignorar si ya expiró
                 const created = new Date(newRow.created_at).getTime();
                 if (Date.now() - created > 24 * 60 * 60 * 1000) return;
+
+                // Verificar que la conversación con este user_id esté aceptada antes de mostrar la historia.
+                // Estrategia: usamos fetchUserConversations almacenado? Para evitar otra carga pesada haremos una verificación ligera asincrónica.
+                // Si la historia es del propio usuario, siempre se permite.
+                const ownerId = newRow.user_id;
+                if (ownerId !== user.id) {
+                    (async () => {
+                        try {
+                            const convs = await fetchUserConversations(user.id);
+                            const accepted = convs.some(c => c.otherUserId === ownerId && (c.acepted === true || c.created_by === user.id));
+                            if (!accepted) return; // no mostrar historia si no hay conversación aceptada
+                            // Proceder a insertar localmente (duplicamos la lógica previa)
+                            setStories(prev => {
+                                const histObj = { ...newRow };
+                                const groupIndex = prev.findIndex(g => g.isMe ? newRow.user_id === user.id && g.id.includes(user.id) : g.id.endsWith(newRow.user_id));
+                                let updatedGroups = [...prev];
+                                if (groupIndex >= 0) {
+                                    const grp = updatedGroups[groupIndex];
+                                    const newUserStories = [...(grp.userStories || []), histObj].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+                                    const latest = newUserStories[newUserStories.length - 1];
+                                    const updatedGroup = { ...grp, userStories: newUserStories, time: formatStoryTime(latest.created_at) };
+                                    updatedGroups[groupIndex] = updatedGroup;
+                                } else {
+                                    const cached = profilesCacheRef.current.get(newRow.user_id);
+                                    const baseGroup = {
+                                        id: `u-${newRow.user_id}`,
+                                        name: (cached?.username || newRow.user_id),
+                                        time: formatStoryTime(newRow.created_at),
+                                        image: (cached?.avatar_url),
+                                        userStories: [histObj],
+                                        isMe: false
+                                    };
+                                    updatedGroups = [baseGroup, ...updatedGroups];
+                                    if (!cached) {
+                                        (async () => {
+                                            try {
+                                                const { data: prof, error: profErr } = await supabase
+                                                    .from('profiles')
+                                                    .select('username, avatar_url')
+                                                    .eq('id', newRow.user_id)
+                                                    .single();
+                                                if (profErr) return;
+                                                profilesCacheRef.current.set(newRow.user_id, { username: prof.username || newRow.user_id, avatar_url: prof.avatar_url });
+                                                setStories(curr => curr.map(g => {
+                                                    if (g.id === baseGroup.id) {
+                                                        return {
+                                                            ...g,
+                                                            name: (prof.username || newRow.user_id),
+                                                            image: (prof.avatar_url || g.image)
+                                                        };
+                                                    }
+                                                    return g;
+                                                }));
+                                            } catch {}
+                                        })();
+                                    }
+                                }
+                                scheduleExpirations([{ userStories: [histObj] }]);
+                                return updatedGroups;
+                            });
+                        } catch (e) {
+                            // Silencioso: si falla el fetch, no mostramos la historia por seguridad
+                        }
+                    })();
+                    return; // salir hasta que verificación async la añada (si procede)
+                }
 
                 setStories(prev => {
                     // Construir objeto historia

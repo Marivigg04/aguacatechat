@@ -213,16 +213,19 @@ export async function fetchUserConversations(currentUserId) {
 }
 
 // Messages helpers
-export async function insertMessage({ conversationId, senderId, content, type, replyng_to }) {
+export async function insertMessage({ conversationId, senderId, content, type, replyng_to, reply_to, replyTo, story_meta }) {
   if (!conversationId || !senderId || !content?.trim()) {
     throw new Error('Datos de mensaje incompletos')
   }
+  // Normalizar posibles nombres de la propiedad (reply_to solicitado, replyTo camelCase)
+  const normalizedReply = replyng_to || reply_to || replyTo || null;
   const payload = {
     conversation_id: conversationId,
     sender_id: senderId,
     content: content.trim(),
     ...(type ? { type } : {}),
-    ...(replyng_to ? { replyng_to } : {}),
+    ...(normalizedReply ? { replyng_to: normalizedReply } : {}),
+    ...(story_meta ? { story_meta } : {}), // JSON oculto con metadata de historia
   }
   console.log('Inserting message:', payload);
   const { error } = await supabase.from('messages').insert(payload)
@@ -238,7 +241,7 @@ export async function fetchMessagesByConversation(conversationId, { limit } = {}
   if (!conversationId) return []
   let query = supabase
     .from('messages')
-    .select('id, sender_id, content, created_at, type, replyng_to')
+  .select('id, sender_id, content, created_at, type, replyng_to, story_meta')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
   if (limit) query = query.limit(limit)
@@ -255,7 +258,7 @@ export async function fetchMessagesPage(conversationId, { limit = 30, before = n
   if (!conversationId) return { messages: [], hasMore: false, nextCursor: null }
   let query = supabase
     .from('messages')
-    .select('id, sender_id, content, type, created_at, seen, replyng_to')
+  .select('id, sender_id, content, type, created_at, seen, replyng_to, story_meta')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit + 1) // fetch one extra to detect if there are more

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import EmojiPicker from './EmojiPicker.jsx';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 const UploadTextStoryModal = ({ open, onClose, onSubmit }) => {
@@ -9,6 +10,8 @@ const UploadTextStoryModal = ({ open, onClose, onSubmit }) => {
   const align = 'center';
   const fontSize = 20;
   const editableRef = useRef(null);
+  const emojiButtonRef = useRef(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -81,8 +84,9 @@ const UploadTextStoryModal = ({ open, onClose, onSubmit }) => {
             </div>
           </div>
 
-          {/* Lienzo de texto */}
-          <div className="relative rounded-xl h-56 overflow-hidden ring-1 ring-teal-500/10" style={{ background: bg }}>
+          {/* Lienzo de texto + botón emoji */}
+          <div className="flex items-stretch gap-3">
+            <div className="relative rounded-xl h-56 flex-1 overflow-hidden ring-1 ring-teal-500/10" style={{ background: bg }}>
             {(!text || !text.trim()) && (
               <span
                 className={`absolute inset-0 flex items-center ${align === 'center' ? 'justify-center text-center' : 'justify-start text-left'} pointer-events-none opacity-60 font-semibold px-4`}
@@ -113,6 +117,68 @@ const UploadTextStoryModal = ({ open, onClose, onSubmit }) => {
                 }}
               />
             </div>
+              <div className="absolute bottom-1 right-2 text-[10px] font-medium px-2 py-0.5 rounded-md bg-black/30 text-white/80 select-none">
+                {text.trim().length}/500
+              </div>
+          </div>
+            <div className="relative flex" ref={emojiButtonRef}>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(v => !v)}
+                className={`self-center h-12 w-12 flex items-center justify-center rounded-xl theme-bg-secondary/70 hover:opacity-80 transition-opacity text-lg shadow border theme-border ${showEmojiPicker ? 'ring-2 ring-teal-500' : ''}`}
+                title="Emojis"
+              >
+                😊
+              </button>
+              {showEmojiPicker && (
+                <EmojiPicker
+                  dark={true}
+                  anchorRef={emojiButtonRef}
+                  onSelect={(emoji) => {
+                    // Insertar emoji en caret dentro del contentEditable
+                    const el = editableRef.current;
+                    if (!el) return;
+                    el.focus();
+                    let sel = window.getSelection();
+                    if (!sel || sel.rangeCount === 0) {
+                      // Append al final
+                      el.innerText = (el.innerText + emoji).slice(0,500);
+                      setText(el.innerText);
+                      return;
+                    }
+                    const range = sel.getRangeAt(0);
+                    // Asegurarnos de que el rango esté dentro del editable
+                    if (!el.contains(range.startContainer)) {
+                      el.innerText = (el.innerText + emoji).slice(0,500);
+                      setText(el.innerText);
+                      return;
+                    }
+                    // Insertar nodo de texto con el emoji
+                    const node = document.createTextNode(emoji);
+                    range.deleteContents();
+                    range.insertNode(node);
+                    // Mover el caret después del emoji
+                    range.setStartAfter(node);
+                    range.setEndAfter(node);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    // Limitar a 500 caracteres
+                    if (el.innerText.length > 500) {
+                      el.innerText = el.innerText.slice(0,500);
+                      // Reposicionar caret al final
+                      sel = window.getSelection();
+                      const r = document.createRange();
+                      r.selectNodeContents(el);
+                      r.collapse(false);
+                      sel.removeAllRanges();
+                      sel.addRange(r);
+                    }
+                    setText(el.innerText);
+                  }}
+                  onClose={() => setShowEmojiPicker(false)}
+                />
+              )}
+            </div>
           </div>
 
           {/* Acciones */}
@@ -121,7 +187,7 @@ const UploadTextStoryModal = ({ open, onClose, onSubmit }) => {
             <button
               className="px-3 py-2 rounded-lg theme-bg-chat theme-text-primary hover:opacity-90 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => {
-                const cleaned = text.trim();
+                const cleaned = text.trim().slice(0,500);
                 if (!cleaned) return; // guard adicional
                 onSubmit?.({ type: 'text', text: cleaned, bg, color });
               }}

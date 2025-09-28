@@ -3,7 +3,9 @@ import toast from 'react-hot-toast';
 import supabase from './services/supabaseClient';
 import { useAuth } from './context/AuthContext';
 import StoryViewsModal from './StoryViewsModal';
-import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from '@heroicons/react/24/solid';
+import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SpeakerWaveIcon, SpeakerXMarkIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
+import StoryReplyComposer from './StoryReplyComposer';
+import { createOrGetDirectConversation } from './services/db';
 
 // Helper local para formatear la hora de publicación de cada historia individual
 // (duplicado ligero de StoriesView; si se repite más veces convendría extraer a utils)
@@ -50,6 +52,7 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     const [isClosing, setIsClosing] = useState(false);
     const [transitionDir, setTransitionDir] = useState(null); // 'next' | 'prev'
     const [showViewsModal, setShowViewsModal] = useState(false);
+    const [showReplyComposer, setShowReplyComposer] = useState(false);
     const [viewsLoading, setViewsLoading] = useState(false);
     const [viewsError, setViewsError] = useState(null);
     const [viewersData, setViewersData] = useState([]);
@@ -811,14 +814,14 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                     </button>
 
                     {/* Botón Ver vistas abajo (siempre en historias propias, incluso 0) */}
-                    {isOwnStory && (
-                        <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none">
+                    <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none">
+                        {/* Historias propias: botón de vistas */}
+                        {isOwnStory && (
                             <button
                                 onClick={() => setShowViewsModal(true)}
                                 className="group pointer-events-auto pl-3 pr-4 py-1.5 rounded-full bg-black/55 hover:bg-black/70 text-white/90 hover:text-white text-xs font-medium backdrop-blur border border-white/15 shadow-sm transition-colors flex items-center gap-1.5"
                                 title="Ver quiénes vieron esta historia"
                             >
-                                {/* Icono ojo */}
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
                                     viewBox="0 0 24 24"
@@ -834,8 +837,26 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                                 </svg>
                                 <span>Vistas: {totalExternalViews || 0}</span>
                             </button>
-                        </div>
-                    )}
+                        )}
+                        {/* Historias ajenas: botón Responder */}
+                        {!isOwnStory && !!activeStoryId && !showReplyComposer && (
+                            <button
+                                onClick={() => {
+                                    // Pausar historia y mostrar composer
+                                    if (!isPausedRef.current) {
+                                        if (activeType === 'video' && videoRef.current) { try { videoRef.current.pause(); } catch {} }
+                                        setIsPaused(true); isPausedRef.current = true;
+                                    }
+                                    setShowReplyComposer(true);
+                                }}
+                                className="group pointer-events-auto pl-3 pr-4 py-1.5 rounded-full bg-teal-600/70 hover:bg-teal-600 text-white/90 hover:text-white text-xs font-semibold backdrop-blur border border-white/20 shadow-sm transition-colors flex items-center gap-1.5"
+                                title="Responder a esta historia"
+                            >
+                                <PaperAirplaneIcon className="w-4 h-4 rotate-45 opacity-90 group-hover:opacity-100 transition-opacity" />
+                                <span>Responder</span>
+                            </button>
+                        )}
+                    </div>
                     {/* Caption para imágenes / videos si existe */}
                     {activeType !== 'text' && rawStory && typeof rawStory === 'object' && rawStory.caption && (() => {
                         const full = rawStory.caption;
@@ -936,6 +957,35 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                 error={viewsError}
                 viewers={viewersData}
             />
+            {/* Composer de respuesta a historia */}
+            {showReplyComposer && !isOwnStory && !!activeStoryId && (
+                <StoryReplyComposer
+                    storyOwnerId={rawStory?.user_id}
+                    storyId={activeStoryId}
+                    storyData={rawStory}
+                    onClose={() => {
+                        setShowReplyComposer(false);
+                        // Reanudar si estaba en play antes
+                        if (isPausedRef.current) {
+                            setIsPaused(false); isPausedRef.current = false;
+                            if (activeType === 'video' && videoRef.current) { try { videoRef.current.play().catch(()=>{}); } catch {} }
+                        }
+                    }}
+                    ensureConversation={async (ownerId) => {
+                        const conv = await createOrGetDirectConversation(user.id, ownerId);
+                        return { conversationId: conv.id };
+                    }}
+                    onSent={() => {
+                        // Mantener historia pausada después de enviar? Decidimos cerrar y reanudar.
+                        setShowReplyComposer(false);
+                        if (isPausedRef.current) {
+                            setIsPaused(false); isPausedRef.current = false;
+                            if (activeType === 'video' && videoRef.current) { try { videoRef.current.play().catch(()=>{}); } catch {} }
+                        }
+                        toast.success('Respuesta enviada');
+                    }}
+                />
+            )}
         </div>
     );
 };
