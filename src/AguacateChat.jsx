@@ -422,17 +422,19 @@ const AguacateChat = () => {
             const second = parts[1]?.[0] || parts[0]?.[1] || '';
             return (first + second).toUpperCase();
         };
-        const formatTime = (iso) => {
+        // Formatea un ISO timestamp a formato 12H: h:mm AM/PM
+        const formatTime12 = (iso) => {
             if (!iso) return '';
             const d = new Date(iso);
             if (Number.isNaN(d.getTime())) return '';
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            // toLocaleTimeString con hour12: true garantiza formato 12H y localiza AM/PM
+            return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
         };
         const formatLastConex = (iso) => {
             if (!iso) return 'Desconectado';
             const d = new Date(iso);
             if (Number.isNaN(d.getTime())) return 'Desconectado';
-            return `Última conexión a las ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+            return `Última conexión a las ${formatTime12(iso)}`;
         };
         return (convs || []).map((c) => {
             const username = c?.otherProfile?.username || 'Usuario';
@@ -455,6 +457,20 @@ const AguacateChat = () => {
             // Derivados del último mensaje
             const lastId = c?.last_message?.id ?? null;
             const lastAudioUrl = lastType === 'audio' ? c?.last_message?.content : undefined;
+            // Asegurar que pasamos el array de 'seen' del último mensaje cuando exista
+            const lastMessageSeenArr = Array.isArray(c?.last_message?.seen) ? c.last_message.seen : [];
+            // Determinar si la otra persona (otherProfile.id) vio el último mensaje (solo aplica si el último mensaje lo enviaste tú)
+            let lastMessageSeen = false;
+            try {
+                if (c?.last_message?.sender_id && user?.id && String(c.last_message.sender_id) === String(user.id) && c?.otherProfile?.id) {
+                    lastMessageSeen = lastMessageSeenArr.includes(c.otherProfile.id);
+                }
+            } catch (e) { /* ignore */ }
+            // Debug: loguear el estado de visto para ayudar a depuración
+            try {
+                // eslint-disable-next-line no-console
+                console.log('conversationsToContacts: conversation', c?.conversationId, 'otherProfile', c?.otherProfile?.id, 'lastMessageId', c?.last_message?.id, 'lastMessageSeen', lastMessageSeen, 'seenArr', lastMessageSeenArr);
+            } catch (e) {}
             // console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             return {
                 name,
@@ -463,7 +479,7 @@ const AguacateChat = () => {
                 lastMessageType: lastType,
                 lastMessageId: lastId,
                 lastAudioUrl,
-                time: formatTime(lastAt),
+                time: formatTime12(lastAt),
                 initials: deriveInitials(name),
                 profileId: c?.otherProfile?.id,
                 username: c?.otherProfile?.username,
@@ -472,6 +488,9 @@ const AguacateChat = () => {
                 last_message_at: lastAt,
                 lastConex: c?.otherProfile?.lastConex,
                 last_message: c?.last_message ? { ...c.last_message, type: lastType } : null,
+                // Exponer 'seen' y un booleano útil para la UI
+                lastMessageSeen: lastMessageSeen,
+                lastMessageSeenArr: lastMessageSeenArr,
             };
         });
     };
@@ -1566,6 +1585,17 @@ const AguacateChat = () => {
 
     const contacts = conversationsToContacts(normalConversations);
     const chatRequestContacts = conversationsToContacts(chatRequestConversations);
+    // Debug: exponer contactos en window para inspección rápida en consola
+    React.useEffect(() => {
+        try {
+            // No bloquear producción si window no existe
+            if (typeof window !== 'undefined') {
+                window.__AG_CONTACTS__ = contacts || [];
+                window.__AG_FILTERED_CONTACTS__ = filteredContacts || [];
+            }
+        } catch (e) {}
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [contacts]);
 
     // Cálculo del ancla para "visto" al estilo Messenger
     // Regla: mostrar mini avatar del otro usuario en:
@@ -2202,7 +2232,20 @@ const AguacateChat = () => {
                                                                     <span>Video</span>
                                                                 </>
                                                             ) : (
-                                                                contact.lastMessage
+                                                                        <>
+                                                                            {contact.lastMessage}
+                                                                            {contact.lastMessageSeen && (
+                                                                                <span className="ml-2 inline-flex items-center flex-shrink-0" title="Visto">
+                                                                                    {contact.avatar_url ? (
+                                                                                        <img src={contact.avatar_url} alt="Visto" className="w-4 h-4 rounded-full object-cover" onError={(e)=>{ e.currentTarget.style.display = 'none'; }} />
+                                                                                    ) : (
+                                                                                        <div className="w-4 h-4 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary flex items-center justify-center text-white text-[10px] font-bold">
+                                                                                            {String(contact.initials || '').slice(0,2) || '•'}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </span>
+                                                                            )}
+                                                                        </>
                                                             )}
                                                         </p>
                                                     </div>
@@ -2272,7 +2315,20 @@ const AguacateChat = () => {
                                                         <span>Video</span>
                                                     </>
                                                 ) : (
-                                                    contact.lastMessage
+                                                        <>
+                                                            {contact.lastMessage}
+                                                            {contact.lastMessageSeen && (
+                                                                <span className="ml-2 inline-flex items-center flex-shrink-0" title="Visto">
+                                                                    {contact.avatar_url ? (
+                                                                        <img src={contact.avatar_url} alt="Visto" className="w-4 h-4 rounded-full object-cover" onError={(e)=>{ e.currentTarget.style.display = 'none'; }} />
+                                                                    ) : (
+                                                                        <div className="w-4 h-4 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary flex items-center justify-center text-white text-[10px] font-bold">
+                                                                            {String(contact.initials || '').slice(0,2) || '•'}
+                                                                        </div>
+                                                                    )}
+                                                                </span>
+                                                            )}
+                                                        </>
                                                 )}
                                             </p>
                                             {contact.unread > 0 && (
@@ -2698,7 +2754,7 @@ const AguacateChat = () => {
                                                 )}
                                             </div>
                                             <div className="text-[10px] self-end">
-                                                {message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
                                             </div>
                                             {/* Eliminado: el icono de leído ahora va en un overlay fijo a la derecha */}
                                             {/* Botón de tres puntos solo para mensajes propios, dentro de la burbuja arriba a la derecha */}

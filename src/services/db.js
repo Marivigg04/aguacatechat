@@ -165,7 +165,7 @@ export async function fetchUserConversations(currentUserId) {
     // Traer mensajes de todas las conv en orden descendente y quedarnos con el primero de cada conv
     const { data: msgs, error: msgErr } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, created_at, type')
+      .select('id, conversation_id, sender_id, content, created_at, type, seen')
       .in('conversation_id', convIds)
       .order('created_at', { ascending: false })
       .limit(convIds.length * 20) // margen por si hay convs sin mensajes
@@ -197,7 +197,7 @@ export async function fetchUserConversations(currentUserId) {
       acepted: conv.acepted, // puede venir null/false
       otherUserId: otherId,
       otherProfile: prof,
-      last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id, type: last.type || 'text' } : null,
+      last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id, type: last.type || 'text', seen: Array.isArray(last.seen) ? last.seen : [] } : null,
       last_message_at: last?.created_at || conv.created_at,
     })
   }
