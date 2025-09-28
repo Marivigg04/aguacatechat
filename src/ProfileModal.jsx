@@ -217,9 +217,9 @@ const ProfileModal = ({
                     <button
                         onClick={handleCloseModal}
                         className={`
-                            ml-4 p-2 rounded-full
+                            ml-4 w-10 h-10 rounded-full flex items-center justify-center
                             transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
-                            theme-bg-chat
+                            theme-bg-chat ring-1 ring-white/10 hover:ring-white/20
                         `}
                         title="Cerrar modal"
                         style={{ zIndex: 10 }}
@@ -642,9 +642,9 @@ const ProfileModal = ({
                             <button
                                 onClick={() => setShowEditPasswordModal(false)}
                                 className={`
-                                    ml-4 p-2 rounded-full
+                                    ml-4 w-10 h-10 rounded-full flex items-center justify-center
                                     transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
-                                    theme-bg-chat
+                                    theme-bg-chat ring-1 ring-white/10 hover:ring-white/20
                                 `}
                                 title="Cerrar modal"
                                 style={{ zIndex: 10 }}
