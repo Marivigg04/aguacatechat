@@ -133,7 +133,8 @@ const ProfileModal = ({
             }
             setProfileInfoDb(contactProfile.profileInformation); // sin fallback
             setAvatarUrl(contactProfile.avatar_url || null);
-            setProfileName(contactProfile.name || contactProfile.username || 'Contacto');
+            // Obtener el nombre desde profiles.username via fetch
+            setProfileName('Cargando...');
             // Fetch explícito si viene undefined (no fue incluido en el bulk select)
             if (typeof contactProfile.profileInformation === 'undefined' && contactProfile.id) {
                 (async () => {
@@ -151,7 +152,7 @@ const ProfileModal = ({
                     }
                 })();
             }
-            // Si no hay información de perfil, intentar fetch
+            // Siempre hacer fetch para obtener username desde profiles
             const contactId = contactProfile.id || contactProfile.profileId;
             // Antes se usaba una variable inexistente "baseInfo" que causaba ReferenceError.
             // Usamos profileInfoDb (estado) para decidir si hace falta completar datos del contacto.
@@ -168,10 +169,12 @@ const ProfileModal = ({
                         if (data) {
                             setProfileInfoDb(data.profileInformation || '');
                             if (data.avatar_url) setAvatarUrl(data.avatar_url);
-                            if (data.username && !contactProfile.name) setProfileName(data.username);
+                            // Usar username de profiles
+                            setProfileName(data.username || 'Contacto');
                         }
                     } catch (err) {
                         // Silencioso, se mostrará fallback
+                        setProfileName('Contacto');
                     } finally {
                         setLoadingContactInfo(false);
                     }
@@ -184,7 +187,7 @@ const ProfileModal = ({
             try {
                 const { selectFrom } = await import('./services/db');
                 const data = await selectFrom('profiles', {
-                    columns: 'profileInformation, avatar_url',
+                    columns: 'profileInformation, avatar_url, username',
                     match: { id: user.id },
                     single: true
                 });
@@ -193,25 +196,29 @@ const ProfileModal = ({
                 }
                 setProfileInfoDb(data?.profileInformation ?? null);
                 setAvatarUrl(data?.avatar_url || null);
+                setProfileName(data?.username || myProfile.name);
             } catch (err) {
                 if (import.meta.env?.DEV) {
                     console.warn('[ProfileModal] Error fetch propio perfil', err);
                 }
                 setProfileInfoDb(null);
                 setAvatarUrl(null);
+                setProfileName(myProfile.name);
             }
         }
         fetchProfileInfo();
     }, [user?.id, showProfileModal, contactProfile]);
 
     // Estado local para mostrar el nombre en el modal
-    const [profileName, setProfileName] = useState(contactProfile ? (contactProfile.name || contactProfile.username || 'Contacto') : myProfile.name);
+    const [profileName, setProfileName] = useState('Cargando...');
 
     React.useEffect(() => {
         if (contactProfile) {
-            setProfileName(contactProfile.name || contactProfile.username || 'Contacto');
+            // Para contactos, el nombre se obtiene del fetch en el useEffect anterior
+            // No hacer nada aquí para evitar sobrescribir
         } else {
-            setProfileName(myProfile.name);
+            // Para perfil propio, el nombre se obtiene del fetchProfileInfo
+            // No sobrescribir aquí
         }
     }, [myProfile.name, contactProfile]);
 
