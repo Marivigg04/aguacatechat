@@ -213,7 +213,7 @@ export async function fetchUserConversations(currentUserId) {
 }
 
 // Messages helpers
-export async function insertMessage({ conversationId, senderId, content, type }) {
+export async function insertMessage({ conversationId, senderId, content, type, replyng_to }) {
   if (!conversationId || !senderId || !content?.trim()) {
     throw new Error('Datos de mensaje incompletos')
   }
@@ -222,6 +222,7 @@ export async function insertMessage({ conversationId, senderId, content, type })
     sender_id: senderId,
     content: content.trim(),
     ...(type ? { type } : {}),
+    ...(replyng_to ? { replyng_to } : {}),
   }
   console.log('Inserting message:', payload);
   const { error } = await supabase.from('messages').insert(payload)
@@ -237,7 +238,7 @@ export async function fetchMessagesByConversation(conversationId, { limit } = {}
   if (!conversationId) return []
   let query = supabase
     .from('messages')
-    .select('id, sender_id, content, created_at, type')
+    .select('id, sender_id, content, created_at, type, replyng_to')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
   if (limit) query = query.limit(limit)
@@ -254,7 +255,7 @@ export async function fetchMessagesPage(conversationId, { limit = 30, before = n
   if (!conversationId) return { messages: [], hasMore: false, nextCursor: null }
   let query = supabase
     .from('messages')
-    .select('id, sender_id, content, type, created_at, seen')
+    .select('id, sender_id, content, type, created_at, seen, replyng_to')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit + 1) // fetch one extra to detect if there are more
@@ -280,6 +281,18 @@ export async function fetchMessagesPage(conversationId, { limit = 30, before = n
   const nextCursor = messages.length > 0 ? messages[0].created_at : before
 
   return { messages, hasMore, nextCursor }
+}
+
+// Delete a single message (hard delete) so it's removed for all participants.
+// Returns true if successful. Relies on RLS so only sender (or authorized) can delete.
+export async function deleteMessageById(messageId) {
+  if (!messageId) throw new Error('messageId requerido');
+  const { error } = await supabase
+    .from('messages')
+    .delete()
+    .eq('id', messageId);
+  if (error) throw error;
+  return true;
 }
 
 // Upload an audio blob to 'chataudios' bucket and return its public URL
