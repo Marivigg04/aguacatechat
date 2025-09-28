@@ -399,6 +399,84 @@ const AguacateChat = () => {
     const [isProfilePaused, setProfilePaused] = useState(true);
     const [isProfileStopped, setProfileStopped] = useState(false);
 
+    // --- Sonidos y Notificaciones ---
+    const audioCtxRef = useRef(null);
+    const ensureAudioCtx = () => {
+        if (audioCtxRef.current) return audioCtxRef.current;
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return null;
+            audioCtxRef.current = new Ctx();
+            return audioCtxRef.current;
+        } catch { return null; }
+    };
+    const playNotificationSound = () => {
+        try {
+            const ctx = ensureAudioCtx();
+            if (!ctx) return;
+            if (ctx.state === 'suspended') ctx.resume().catch(()=>{});
+            const now = ctx.currentTime;
+            // Sonido único de campana (antes era la variante "normal").
+            const baseFreq = 660;
+            const partials = [1, 2.01, 2.99, 4.23];
+            const decay = 0.9;
+            partials.forEach((ratio, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(baseFreq * ratio, now);
+                const attack = 0.008 + i * 0.003;
+                gain.gain.setValueAtTime(0.0001, now);
+                gain.gain.exponentialRampToValueAtTime(0.3 / (i + 1), now + attack);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+                if (i === 0) {
+                    const lfo = ctx.createOscillator();
+                    const lfoGain = ctx.createGain();
+                    lfo.frequency.setValueAtTime(5, now);
+                    lfoGain.gain.setValueAtTime(8, now);
+                    lfo.connect(lfoGain).connect(osc.frequency);
+                    lfo.start(now);
+                    lfo.stop(now + 0.5);
+                }
+                osc.connect(gain).connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.9);
+            });
+        } catch { /* ignore */ }
+    };
+
+    const requestNotificationPermissionIfNeeded = async () => {
+        if (!('Notification' in window)) return false;
+        if (Notification.permission === 'granted') return true;
+        if (Notification.permission === 'denied') return false;
+        try {
+            const perm = await Notification.requestPermission();
+            return perm === 'granted';
+        } catch { return false; }
+    };
+    const showBrowserNotification = async ({ conversationId, contactName, body, isNewChat }) => {
+        if (!('Notification' in window)) return;
+        // No mostrar si pestaña visible y ventana enfocada
+        if (document.visibilityState === 'visible' && document.hasFocus()) return;
+        const granted = await requestNotificationPermissionIfNeeded();
+        if (!granted) return;
+        const n = new Notification(contactName || 'Nuevo mensaje', {
+            body: body || 'Tienes un nuevo mensaje',
+            tag: `conv-${conversationId || contactName || Math.random()}`,
+            renotify: true,
+        });
+        n.onclick = () => {
+            try { window.focus(); } catch {}
+            // Despachar evento personalizado para seleccionar el chat
+            if (conversationId) {
+                window.dispatchEvent(new CustomEvent('aguacatechat:focus-conversation', { detail: { conversationId } }));
+            }
+            n.close();
+        };
+        // Sonido
+    playNotificationSound();
+    };
+
     // Estados para animación del pin
     const [isPinPaused, setPinPaused] = useState(true);
     const [isPinStopped, setPinStopped] = useState(false);
@@ -416,6 +494,26 @@ const AguacateChat = () => {
 
     // Lista real de conversaciones del usuario
     const [conversations, setConversations] = useState([]);
+    // --- Persistencia de contadores de mensajes no leídos ---
+    const UNREAD_LS_KEY = 'aguacatechat_unread_v1';
+    const unreadRef = useRef({});
+    const loadUnreadFromStorage = () => {
+        try {
+            const raw = localStorage.getItem(UNREAD_LS_KEY);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') return parsed;
+        } catch { /* ignore */ }
+        return {};
+    };
+    const saveUnreadToStorage = (data) => {
+        try { localStorage.setItem(UNREAD_LS_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+    };
+    const [_, forceUnreadRender] = useState(0);
+    useEffect(() => {
+        unreadRef.current = loadUnreadFromStorage();
+        forceUnreadRender(v => v + 1);
+    }, []);
     // Estado para plegar/desplegar sección de solicitudes entrantes
     const [showChatRequests, setShowChatRequests] = useState(false);
     const [loadingConversations, setLoadingConversations] = useState(true);
@@ -449,7 +547,18 @@ const AguacateChat = () => {
             if (!iso) return 'Desconectado';
             const d = new Date(iso);
             if (Number.isNaN(d.getTime())) return 'Desconectado';
-            return `Última conexión a las ${formatTime12(iso)}`;
+
+            const now = new Date();
+            // Comparar por componente de fecha local (no UTC) para determinar si es el mismo día
+            const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+            if (sameDay) {
+                return `Última conexión a las ${formatTime12(iso)}`;
+            }
+            // Si no es el mismo día, mostrar fecha en formato dd/mm/aaaa
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `Última conexión el ${day}/${month}/${year}`;
         };
         return (convs || []).map((c) => {
             const username = c?.otherProfile?.username || 'Usuario';
@@ -487,6 +596,8 @@ const AguacateChat = () => {
                 console.log('conversationsToContacts: conversation', c?.conversationId, 'otherProfile', c?.otherProfile?.id, 'lastMessageId', c?.last_message?.id, 'lastMessageSeen', lastMessageSeen, 'seenArr', lastMessageSeenArr);
             } catch (e) {}
             // console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
+            const unreadMap = unreadRef.current || {};
+            const unread = c?.conversationId ? (unreadMap[c.conversationId] || 0) : 0;
             return {
                 name,
                 status: c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex),
@@ -506,6 +617,7 @@ const AguacateChat = () => {
                 // Exponer 'seen' y un booleano útil para la UI
                 lastMessageSeen: lastMessageSeen,
                 lastMessageSeenArr: lastMessageSeenArr,
+                unread,
             };
         });
     };
@@ -852,11 +964,33 @@ const AguacateChat = () => {
     // Mantener referencia de la conversación seleccionada para Realtime global
     const selectedConvIdRef = useRef(null);
     const photoInputRef = useRef(null);
+    // Evitar procesar dos veces el mismo INSERT (a veces realtime puede entregar duplicados o múltiples listeners)
+    const processedMessageIdsRef = useRef(new Set());
 
     useEffect(() => {
         selectedConvIdRef.current = selectedContact?.conversationId || null;
         console.log('Selected conversation id set to:', selectedConvIdRef.current);
     }, [selectedContact?.conversationId]);
+
+    // Listener para enfocarse en conversación desde notificación
+    useEffect(() => {
+        const handler = (e) => {
+            const convId = e?.detail?.conversationId;
+            if (!convId) return;
+            // Buscar conversación existente
+            const conv = conversations.find(c => c.conversationId === convId);
+            if (conv) {
+                // Derivar contacto para selectContact: reuse mapping
+                const contactsList = conversationsToContacts([conv]);
+                if (contactsList[0]) {
+                    handleSelectContact(contactsList[0]);
+                }
+            }
+        };
+        window.addEventListener('aguacatechat:focus-conversation', handler);
+        return () => window.removeEventListener('aguacatechat:focus-conversation', handler);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [conversations]);
 
     // Realtime global: escuchar eventos de messages para
     // a) actualizar chat activo
@@ -874,7 +1008,22 @@ const AguacateChat = () => {
                     if (evt === 'INSERT') {
                         const m = payload.new;
                         if (!m) return;
-                        console.log('Event conversation:', m.conversation_id, 'selected:', selectedConvIdRef.current);
+                        const msgIdKey = m.id != null ? String(m.id) : null;
+                        if (!msgIdKey) {
+                            console.warn('[realtime] INSERT sin id, se ignora incremento unread');
+                        } else if (processedMessageIdsRef.current.has(msgIdKey)) {
+                            // Ya procesado este mensaje
+                            return;
+                        } else {
+                            processedMessageIdsRef.current.add(msgIdKey);
+                            // Evitar crecimiento ilimitado
+                            if (processedMessageIdsRef.current.size > 2000) {
+                                const trimmed = new Set(Array.from(processedMessageIdsRef.current).slice(-1000));
+                                processedMessageIdsRef.current = trimmed;
+                            }
+                        }
+                        console.log('[realtime] INSERT messageId', msgIdKey, 'conv', m.conversation_id, 'selected', selectedConvIdRef.current);
+                        let didIncrementUnread = false;
                         // b) Actualizar conversaciones y reordenar (para cualquier conversación)
                         setConversations((prev) => {
                             if (!Array.isArray(prev) || prev.length === 0) return prev;
@@ -885,6 +1034,27 @@ const AguacateChat = () => {
                                     if (t === 'image') label = 'Foto';
                                     else if (t === 'audio') label = 'Audio';
                                     else if (t === 'video') label = 'Video';
+                                    if (m.sender_id !== user?.id) {
+                                        const isActive = m.conversation_id === selectedConvIdRef.current;
+                                        if (!isActive && !didIncrementUnread) {
+                                            const map = { ...(unreadRef.current || {}) };
+                                            const prevVal = map[m.conversation_id] || 0;
+                                            map[m.conversation_id] = prevVal + 1;
+                                            unreadRef.current = map;
+                                            saveUnreadToStorage(map);
+                                            didIncrementUnread = true;
+                                            console.log('[unread] inc conv', m.conversation_id, 'prev', prevVal, 'now', map[m.conversation_id]);
+                                            // Sonido + notificación
+                                            playNotificationSound();
+                                            let snippet = label || '';
+                                            if (typeof snippet === 'string' && snippet.length > 60) snippet = snippet.slice(0,57) + '…';
+                                            const contactName = c?.otherProfile?.username || 'Nuevo mensaje';
+                                            showBrowserNotification({ conversationId: m.conversation_id, contactName, body: snippet, isNewChat: prevVal === 0 });
+                                        } else if (isActive && !document.hasFocus()) {
+                                            // Chat abierto pero ventana no enfocada -> sonido único
+                                            playNotificationSound();
+                                        }
+                                    }
                                     return {
                                         ...c,
                                         last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t, seen: Array.isArray(m.seen) ? m.seen : [] },
@@ -903,6 +1073,10 @@ const AguacateChat = () => {
                             });
                             return [...updated];
                         });
+                        if (didIncrementUnread) {
+                            // Rerender para reflejar unread actualizado en contactos derivados
+                            forceUnreadRender(v => v + 1);
+                        }
 
                         // a) Actualizar chat activo si coincide
                         if (m.conversation_id !== selectedConvIdRef.current) return;
@@ -1936,6 +2110,15 @@ const AguacateChat = () => {
         // También comparar por profileId si aún no hay conversationId (chat recién iniciado)
         if (!contact?.conversationId && selectedContact?.profileId && contact?.profileId && selectedContact.profileId === contact.profileId) {
             return;
+        }
+        if (contact?.conversationId) {
+            const map = { ...(unreadRef.current || {}) };
+            if (map[contact.conversationId]) {
+                map[contact.conversationId] = 0;
+                unreadRef.current = map;
+                saveUnreadToStorage(map);
+                forceUnreadRender(v => v + 1);
+            }
         }
         selectContact(contact);
     };
