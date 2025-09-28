@@ -1084,7 +1084,15 @@ const AguacateChat = () => {
             prevScrollHeightRef.current = 0;
             prevScrollTopRef.current = 0;
         } else if (shouldScrollToBottomRef.current || stickToBottomRef.current) {
-            el.scrollTop = el.scrollHeight;
+            try {
+                if (typeof el.scrollTo === 'function') {
+                    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+                } else {
+                    el.scrollTop = el.scrollHeight;
+                }
+            } catch (e) {
+                el.scrollTop = el.scrollHeight;
+            }
             shouldScrollToBottomRef.current = false;
         }
     }, [chatMessages, selectedContact]);
@@ -3293,7 +3301,7 @@ const AguacateChat = () => {
                 <div
                     id="chatArea"
                     ref={chatAreaRef}
-                    className="flex-1 overflow-y-auto p-4 space-y-4 chat-container relative"
+                    className="flex-1 overflow-y-auto p-4 space-y-4 chat-container relative smooth-scroll"
                     style={
         selectedContact
             ? (
@@ -3474,12 +3482,14 @@ const AguacateChat = () => {
                                         )}
                                         {/* Mensaje burbuja */}
                                         <div
-                                            className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md rounded-2xl break-words flex flex-col relative theme-text-primary ${['image','video'].includes(message.messageType) ? 'p-1' : 'px-4 py-2'}`}
+                                            className={`${isOwn ? 'message-sent rounded-br-md' : 'message-received rounded-bl-md'} max-w-xs lg:max-w-md rounded-2xl break-words flex flex-col relative theme-text-primary ${['image','video'].includes(message.messageType) ? 'p-1' : 'px-4 py-2'} animate-message-in`}
                                             style={{
                                                 background: isOwn
                                                     ? personalization.bubbleColors.sent
                                                     : personalization.bubbleColors.received,
-                                                fontSize: personalization.fontSize
+                                                fontSize: personalization.fontSize,
+                                                // custom property para controlar el delay por índice (efecto cascada)
+                                                ['--appear-delay']: `${Math.min(index * 35, 600)}ms`
                                             }}
                                             onContextMenu={(e) => {
                                                 e.preventDefault();
