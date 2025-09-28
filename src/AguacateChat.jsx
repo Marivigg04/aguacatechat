@@ -22,7 +22,7 @@ import ConfigModal from './ConfigModal';
 import PersonalizationModal from './PersonalizationModal';
 import { useAuth } from './context/AuthContext.jsx';
 import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen, toggleConversationBlocked, clearChatForUser, fetchLastClearChat } from './services/db';
+import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen, toggleConversationBlocked, clearChatForUser, fetchLastClearChat, deleteMessageById } from './services/db';
 
 // 1. Importar los archivos de animación desde la carpeta src/animations
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
@@ -89,8 +89,6 @@ const AguacateChat = () => {
     // Estado para animación del botón +
     const [isPlusStopped, setPlusStopped] = useState(true);
     const plusOptions = {
-        loop: false,
-        autoplay: false,
         animationData: wiredPlusCircle,
         rendererSettings: {
             preserveAspectRatio: 'xMidYMid slice'
@@ -159,29 +157,35 @@ const AguacateChat = () => {
             backgroundType: 'solid',
             backgroundColor: '#F2F2F7',
             backgroundImage: '',
-            bubbleColors: { sent: '#34C759', received: '#E5E5EA' },
+            bubbleColors: { sent: '#DCF8C6', received: '#FFFFFF' },
             accentColor: '#14B8A6',
             fontSize: 16
         };
     };
-    
-    const loadInitialPersonalization = () => {
-        const dark = typeof document !== 'undefined' && document.body.classList.contains('dark-mode');
-        const defaults = getDefaultPersonalization(dark);
+
+    // Restaurada: función que lee personalización previa de cookies y si falla retorna defaults segun modo
+    function loadInitialPersonalization() {
         try {
+            const isDark = getCookie('darkMode') === 'true';
+            const base = getDefaultPersonalization(isDark);
             const bgType = getCookie('personal_bgType');
-            if (bgType) defaults.backgroundType = bgType;
-            const bgColor = getCookie('personal_bgColor');
-            if (bgColor) defaults.backgroundColor = decodeURIComponent(bgColor);
-            const sent = getCookie('personal_bubbleSent');
-            if (sent) defaults.bubbleColors.sent = decodeURIComponent(sent);
-            const received = getCookie('personal_bubbleReceived');
-            if (received) defaults.bubbleColors.received = decodeURIComponent(received);
-            const fs = getCookie('personal_fontSize');
-            if (fs && !Number.isNaN(parseInt(fs, 10))) defaults.fontSize = parseInt(fs, 10);
-        } catch { /* ignore cookie parsing issues */ }
-        return defaults;
-    };
+            const bgColor = decodeURIComponent(getCookie('personal_bgColor') || '') || base.backgroundColor;
+            const sent = decodeURIComponent(getCookie('personal_bubbleSent') || '') || base.bubbleColors.sent;
+            const received = decodeURIComponent(getCookie('personal_bubbleReceived') || '') || base.bubbleColors.received;
+            const fontSizeRaw = parseInt(getCookie('personal_fontSize'), 10);
+            const fontSize = !isNaN(fontSizeRaw) && fontSizeRaw >= 10 && fontSizeRaw <= 26 ? fontSizeRaw : base.fontSize;
+            return {
+                backgroundType: bgType || base.backgroundType,
+                backgroundColor: bgColor,
+                backgroundImage: base.backgroundImage,
+                bubbleColors: { sent, received },
+                accentColor: base.accentColor,
+                fontSize,
+            };
+        } catch (e) {
+            return getDefaultPersonalization(getCookie('darkMode') === 'true');
+        }
+    }
 
     const [personalization, setPersonalization] = useState(loadInitialPersonalization);
     // (Debug toast removed) lastSeenToastRef eliminado
@@ -768,7 +772,7 @@ const AguacateChat = () => {
                         // Optimista: mostrar audio local en el chat mientras sube
                         setChatMessages((prev) => [
                             ...prev,
-                            { type: 'sent', audioUrl: localUrl, text: '(Audio)', created_at: new Date().toISOString() },
+                            { type: 'sent', audioUrl: localUrl, text: '(Audio)', created_at: new Date().toISOString(), messageType: 'audio', replyTo: replyToMessage ? replyToMessage.id : null },
                         ]);
 
                         if (!selectedContact?.conversationId) {
@@ -786,6 +790,7 @@ const AguacateChat = () => {
                                     senderId: user?.id,
                                     content: publicUrl,
                                     type: 'audio',
+                                    replyTo: replyToMessage ? replyToMessage.id : null,
                                 });
                                 toast.success(`Audio enviado`);
                             } catch (e) {
@@ -1094,6 +1099,7 @@ const AguacateChat = () => {
                                             created_at: m.created_at,
                                             messageType: m.type || 'text',
                                             seen: Array.isArray(m.seen) ? m.seen : [],
+                                            replyTo: msg.replyTo || m.replyng_to || m.reply_to || m.replyTo || null,
                                         };
                                         if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
                                         if (m.type === 'image') return { ...base, text: m.content };
@@ -1104,18 +1110,19 @@ const AguacateChat = () => {
                                 });
                                 // Si no se pudo reemplazar (por timing), añadirlo al final evitando duplicados exactos
                                 if (!replaced && !mapped.some(msg => msg.id === m.id)) {
-                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] };
+                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null };
                                     if (m.type === 'audio') mapped.push({ ...base, audioUrl: m.content, text: '(Audio)' });
                                     else mapped.push({ ...base, text: m.content });
                                 }
                                 return mapped;
                             }
-                            // Mensaje recibido normal
+                            // Mensaje recibido normal (ignorar si está oculto localmente)
+                            if (hiddenIdsRef.current.has(m.id)) return prev;
                             return [
                                 ...prev,
                                 m.type === 'audio'
-                                    ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : [] }
-                                    : { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] },
+                                    ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null }
+                                    : { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null },
                             ];
                         });
                     } else if (evt === 'UPDATE') {
@@ -1164,6 +1171,7 @@ const AguacateChat = () => {
                                 }
                                 if (row.created_at) next.created_at = row.created_at;
                                 if (Array.isArray(row.seen)) next.seen = row.seen;
+                                if (row.reply_to != null && typeof next.replyTo === 'undefined') next.replyTo = row.reply_to;
                                 return next;
                             }));
                         };
@@ -1451,19 +1459,21 @@ const AguacateChat = () => {
                     afterClearMessageIdRef.current = afterMessageId; // cachear id (legacy)
                     const { messages, hasMore, nextCursor } = await fetchMessagesPage(contact.conversationId, { limit: PAGE_SIZE, afterMessageId, afterTimestamp });
                     const mapped = messages.map(m => {
+                        const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
                         const base = {
                             id: m.id,
                             type: m.sender_id === user?.id ? 'sent' : 'received',
                             created_at: m.created_at,
                             messageType: m.type || 'text',
                             seen: Array.isArray(m.seen) ? m.seen : [],
+                            replyTo: replyNormalized,
                         };
                         if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
                         if (m.type === 'video') return { ...base, text: m.content };
                         if (m.type === 'image') return { ...base, text: m.content };
                         return { ...base, text: m.content };
                     });
-                    setChatMessages(mapped);
+                    setChatMessages(mapped.filter(m => !hiddenIdsRef.current.has(m.id)));
                     setHasMoreOlder(hasMore);
                     setOldestCursor(nextCursor);
                     // Intentar marcar como visto lo que ya esté en pantalla
@@ -1497,19 +1507,21 @@ const AguacateChat = () => {
             // No usamos afterTimestamp aquí porque ya estamos navegando a mensajes más antiguos que los cargados post-limpieza.
             const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, before: oldestCursor, afterMessageId: afterClearMessageIdRef.current });
             const mapped = messages.map(m => {
+                const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
                 const base = {
                     id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
                     created_at: m.created_at,
                     messageType: m.type || 'text',
                     seen: Array.isArray(m.seen) ? m.seen : [],
+                    replyTo: replyNormalized,
                 };
                 if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
                 if (m.type === 'video') return { ...base, text: m.content };
                 if (m.type === 'image') return { ...base, text: m.content };
                 return { ...base, text: m.content };
             });
-            setChatMessages(prev => [...mapped, ...prev]);
+            setChatMessages(prev => [...mapped.filter(m => !hiddenIdsRef.current.has(m.id)), ...prev]);
             setHasMoreOlder(hasMore);
             setOldestCursor(nextCursor);
         } catch (e) {
@@ -1637,6 +1649,8 @@ const AguacateChat = () => {
     }, [isWindowFocused, chatMessages, selectedContact?.conversationId])
 
     const messageInputRef = useRef(null);
+    // Estado para respuesta a un mensaje
+    const [replyToMessage, setReplyToMessage] = useState(null); // {id, text, messageType}
 
     // --- Restricción: creador solo puede enviar 1 mensaje hasta que el otro responda ---
     // isConversationCreator ya se setea al seleccionar la conversación (cuando created_by === user.id)
@@ -1662,17 +1676,18 @@ const AguacateChat = () => {
             toast.info('Espera a que el otro usuario responda para continuar la conversación.');
             return;
         }
-    const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text' };
+        const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text', replyTo: replyToMessage ? replyToMessage.id : null };
         setChatMessages(prev => [...prev, optimistic]);
         setMessageInput('');
+        setReplyToMessage(null);
         // Restablecer altura del textarea al tamaño base
         if (messageInputRef.current) {
             messageInputRef.current.style.height = '44px';
             // Forzar reflow opcional si fuera necesario
         }
         try {
-            await insertMessage({ conversationId: selectedContact.conversationId, senderId: user?.id, content });
+            await insertMessage({ conversationId: selectedContact.conversationId, senderId: user?.id, content, replyng_to: replyToMessage ? replyToMessage.id : null });
         } catch (e) {
             console.error('Error enviando mensaje:', e);
             toast.error('No se pudo enviar el mensaje');
@@ -1718,7 +1733,7 @@ const AguacateChat = () => {
 
             const tempId = `tmp-img-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const localPreviewUrl = URL.createObjectURL(fileToUpload);
-            setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localPreviewUrl, created_at: new Date().toISOString(), messageType: 'image' }]);
+            setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localPreviewUrl, created_at: new Date().toISOString(), messageType: 'image', replyTo: replyToMessage ? replyToMessage.id : null }]);
 
             const { error: uploadError } = await supabase.storage
                 .from('chatphotos')
@@ -1746,7 +1761,8 @@ const AguacateChat = () => {
                 conversationId: selectedContact.conversationId,
                 senderId: user?.id,
                 content: photoUrl,
-                type: 'image'
+                type: 'image',
+                replyTo: replyToMessage ? replyToMessage.id : null
             });
 
             toast.success('Foto enviada');
@@ -1794,7 +1810,7 @@ const AguacateChat = () => {
             const tempId = `tmp-vid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const localUrl = URL.createObjectURL(file);
             // Mensaje optimista
-            setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localUrl, created_at: new Date().toISOString(), messageType: 'video', uploading: true }]);
+            setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localUrl, created_at: new Date().toISOString(), messageType: 'video', uploading: true, replyTo: replyToMessage ? replyToMessage.id : null }]);
 
             // Subir al bucket
             const { uploadVideoToBucket } = await import('./services/db');
@@ -1804,7 +1820,8 @@ const AguacateChat = () => {
                 conversationId: selectedContact.conversationId,
                 senderId: user?.id,
                 content: publicUrl,
-                type: 'video'
+                type: 'video',
+                replyTo: replyToMessage ? replyToMessage.id : null
             });
             // Reemplazar optimista
             setChatMessages(prev => prev.map(m => m.id === tempId ? { ...m, text: publicUrl, uploading: false } : m));
@@ -2043,7 +2060,8 @@ const AguacateChat = () => {
                     afterClearMessageIdRef.current = afterMessageId2;
                     const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, afterMessageId: afterMessageId2, afterTimestamp: afterTimestamp2 });
                     const mapped = messages.map(m => {
-                        const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] };
+                        const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
+                        const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: replyNormalized };
                         if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
                         if (m.type === 'video') return { ...base, text: m.content };
                         if (m.type === 'image') return { ...base, text: m.content };
@@ -2290,6 +2308,59 @@ const AguacateChat = () => {
     const [isLockProfilePaused, setLockProfilePaused] = useState(true);
     const [isLockProfileStopped, setLockProfileStopped] = useState(false);
 
+    // ---------------- Eliminación / ocultar mensaje ----------------
+    const [showDeleteMessageModal, setShowDeleteMessageModal] = useState(false);
+    const [deleteTargetMessage, setDeleteTargetMessage] = useState(null); // { id, isOwn }
+    const [hiddenMessageIdsVersion, setHiddenMessageIdsVersion] = useState(0); // para forzar renders tras ocultar
+    const hiddenIdsRef = useRef(new Set());
+    const HIDDEN_KEY_PREFIX = 'aguacatechat:hiddenMessages:';
+    const storageHiddenKey = (conversationId, userId) => `${HIDDEN_KEY_PREFIX}${userId || 'anon'}:${conversationId || 'none'}`;
+    const loadHiddenIds = (conversationId, userId) => {
+        if (!conversationId || !userId) { hiddenIdsRef.current = new Set(); return; }
+        try {
+            const raw = localStorage.getItem(storageHiddenKey(conversationId, userId));
+            const arr = raw ? JSON.parse(raw) : [];
+            hiddenIdsRef.current = Array.isArray(arr) ? new Set(arr) : new Set();
+        } catch { hiddenIdsRef.current = new Set(); }
+    };
+    const persistHiddenIds = (conversationId, userId) => {
+        if (!conversationId || !userId) return;
+        try { localStorage.setItem(storageHiddenKey(conversationId, userId), JSON.stringify(Array.from(hiddenIdsRef.current))); } catch {}
+    };
+    useEffect(() => {
+        if (selectedContact?.conversationId && user?.id) {
+            loadHiddenIds(selectedContact.conversationId, user.id);
+            setHiddenMessageIdsVersion(v => v + 1);
+        } else {
+            hiddenIdsRef.current = new Set();
+            setHiddenMessageIdsVersion(v => v + 1);
+        }
+    }, [selectedContact?.conversationId, user?.id]);
+    const openDeleteMessageModal = (message, isOwn) => {
+        if (!message?.id) return;
+        setDeleteTargetMessage({ id: message.id, isOwn });
+        setShowDeleteMessageModal(true);
+    };
+    const handleHideMessageLocally = (messageId) => {
+        if (!messageId) return;
+        hiddenIdsRef.current.add(messageId);
+        persistHiddenIds(selectedContact?.conversationId, user?.id);
+        setChatMessages(prev => prev.filter(m => m.id !== messageId));
+        setHiddenMessageIdsVersion(v => v + 1);
+    };
+    const handleDeleteForAll = async (messageId) => {
+        if (!messageId) return;
+        try {
+            await deleteMessageById(messageId);
+            // Optimista (realtime también disparará DELETE)
+            setChatMessages(prev => prev.filter(m => m.id !== messageId));
+            toast.success('Mensaje eliminado para todos');
+        } catch (e) {
+            console.error('Error al eliminar para todos:', e);
+            toast.error(e?.message || 'No se pudo eliminar');
+        }
+    };
+
     // Mantener sincronizado el nombre editable cuando cambia el usuario y no se está editando
     useEffect(() => {
         if (!isEditingName) {
@@ -2314,28 +2385,40 @@ const AguacateChat = () => {
                     setShowChatOptionsMenu(false);
                     setShowAttachMenu(false);
                 }
+                if (replyToMessage) setReplyToMessage(null);
             }
         };
         window.addEventListener('keydown', handleEsc);
         return () => window.removeEventListener('keydown', handleEsc);
-    }, [selectedContact]);
+    }, [selectedContact, replyToMessage]);
 
     const [messageMenuOpenId, setMessageMenuOpenId] = useState(null);
+    // Tipo de mensaje cuyo menú está abierto: 'own' | 'received'
+    const [messageMenuType, setMessageMenuType] = useState(null);
     const messageMenuRef = useRef(null);
 
     useEffect(() => {
-      function handleClickOutside(event) {
-        if (messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
-          setMessageMenuOpenId(null);
-        }
-      }
-      if (messageMenuOpenId !== null) {
-        document.addEventListener("mousedown", handleClickOutside);
-      }
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside);
-      };
-    }, [messageMenuOpenId]);
+            function handleClickOutside(event) {
+                if (messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
+                    setMessageMenuOpenId(null);
+                    setMessageMenuType(null);
+                }
+            }
+            function handleEsc(e){
+                if(e.key === 'Escape'){
+                    setMessageMenuOpenId(null);
+                    setMessageMenuType(null);
+                }
+            }
+            if (messageMenuOpenId !== null) {
+                document.addEventListener("mousedown", handleClickOutside);
+                document.addEventListener('keydown', handleEsc);
+            }
+            return () => {
+                document.removeEventListener("mousedown", handleClickOutside);
+                document.removeEventListener('keydown', handleEsc);
+            };
+        }, [messageMenuOpenId]);
 
     // Sincronizar el estado del skeleton para permitir animación de salida
     useEffect(() => {
@@ -2688,7 +2771,8 @@ const AguacateChat = () => {
                                         console.debug('[AguacateChat] Abriendo modal contacto selectedContact.profileInformation=', selectedContact.profileInformation);
                                     }
                                     setContactProfileData({
-                                        id: selectedContact.id,
+                                        // Usar el id real del perfil (profileId) en lugar de selectedContact.id (no definido)
+                                        id: selectedContact.profileId,
                                         name: selectedContact.name,
                                         username: selectedContact.username,
                                         initials: selectedContact.initials || (selectedContact.name ? selectedContact.name.slice(0,2).toUpperCase() : 'CN'),
@@ -3034,58 +3118,129 @@ const AguacateChat = () => {
                                                     : personalization.bubbleColors.received,
                                                 fontSize: personalization.fontSize
                                             }}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                if (messageMenuOpenId === index && messageMenuType === (isOwn ? 'own' : 'received')) {
+                                                    setMessageMenuOpenId(null);
+                                                    setMessageMenuType(null);
+                                                } else {
+                                                    setMessageMenuOpenId(index);
+                                                    setMessageMenuType(isOwn ? 'own' : 'received');
+                                                }
+                                            }}
                                         >
-                                            <div>
-                                                {message.messageType === 'image' ? (
-                                                    <div className="relative">
-                                                        <ChatImage
-                                                            src={message.text}
-                                                            alt="Imagen"
-                                                            onClick={() => {
-                                                                const mediaMessages = chatMessages.filter(m => ['image','video'].includes(m.messageType));
-                                                                const idx = mediaMessages.findIndex(m => m === message);
-                                                                if (idx >= 0) {
-                                                                    setMediaGalleryIndex(idx);
-                                                                    setMediaGalleryOpen(true);
-                                                                }
-                                                            }}
-                                                        />
-                                                        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/55 text-white backdrop-blur-sm leading-none flex items-center gap-1 select-none">
-                                                            {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
+                                            {message.replyTo && (() => {
+                                                const original = chatMessages.find(m => m.id === message.replyTo);
+                                                const getLabel = () => {
+                                                    if (!original) return 'Mensaje';
+                                                    if (original.messageType === 'image') return 'Imagen';
+                                                    if (original.messageType === 'video') return 'Video';
+                                                    if (original.messageType === 'audio' || original?.audioUrl) return 'Audio';
+                                                    return (original.text || '(sin contenido)').slice(0,120);
+                                                };
+                                                const label = getLabel();
+                                                const titleText = original ? (
+                                                    original.messageType === 'image' ? 'Imagen' :
+                                                    original.messageType === 'video' ? 'Video' :
+                                                    (original.messageType === 'audio' || original.audioUrl) ? 'Audio' : (original.text || '(sin contenido)')
+                                                ) : 'Mensaje';
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Ver mensaje original"
+                                                        className={`group relative mb-2 w-full text-left overflow-hidden rounded-xl border border-white/10/20 dark:border-white/10 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 transition-colors ${isOwn ? 'reply-bg-sent' : 'reply-bg-received'} hover:brightness-105`}
+                                                        onClick={() => {
+                                                            const el = document.querySelector(`[data-message-id='${message.replyTo}']`);
+                                                            if (el) {
+                                                                el.scrollIntoView({behavior:'smooth', block:'center'});
+                                                                el.classList.add('ring-2','ring-teal-400');
+                                                                setTimeout(()=>{ try { el.classList.remove('ring-2','ring-teal-400'); } catch{} }, 1500);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-teal-400 to-teal-600" />
+                                                        <div className="pl-3 pr-2 py-2 flex items-center gap-2 bg-black/5 dark:bg-white/5 backdrop-blur-sm" style={{maskImage:'linear-gradient(to right, black 85%, transparent)'}}>
+                                                            {original && original.messageType === 'image' && (
+                                                                <img src={original.text} alt="miniatura" className="w-8 h-8 object-cover rounded-md border border-white/20 shadow-sm" loading="lazy" />
+                                                            )}
+                                                            {original && original.messageType === 'video' && (
+                                                                <div className="w-8 h-8 rounded-md bg-black/30 dark:bg-white/10 flex items-center justify-center text-teal-400">
+                                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                                                </div>
+                                                            )}
+                                                            {original && (original.messageType === 'audio' || original.audioUrl) && (
+                                                                <div className="w-8 h-8 rounded-md bg-black/30 dark:bg-white/10 flex items-center justify-center text-teal-400">
+                                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                                                                </div>
+                                                            )}
+                                                            {!original || ['text', undefined, null].includes(original.messageType) && (
+                                                                <div className="w-8 h-8 rounded-md bg-black/20 dark:bg-white/10 flex items-center justify-center text-teal-400">
+                                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                                                </div>
+                                                            )}
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="text-[10px] uppercase tracking-wide font-semibold opacity-70 group-hover:opacity-90 flex items-center gap-1">
+                                                                    <span>Respuesta a</span>
+                                                                    {original && original.user_id && (
+                                                                        <span className="text-[10px] font-medium opacity-60 max-w-[90px] truncate">{original.user_id === user?.id ? 'tú' : (selectedContact?.name || '')}</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-xs truncate max-w-[200px]" title={titleText}>{label}</div>
+                                                            </div>
                                                         </div>
+                                                    </button>
+                                                );
+                                            })()}
+                                            {message.messageType === 'image' ? (
+                                                <div className="relative">
+                                                    <ChatImage
+                                                        src={message.text}
+                                                        alt="Imagen"
+                                                        onClick={() => {
+                                                            const mediaMessages = chatMessages.filter(m => ['image','video'].includes(m.messageType));
+                                                            const idx = mediaMessages.findIndex(m => m === message);
+                                                            if (idx >= 0) {
+                                                                setMediaGalleryIndex(idx);
+                                                                setMediaGalleryOpen(true);
+                                                            }
+                                                        }}
+                                                    />
+                                                    <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/55 text-white backdrop-blur-sm leading-none flex items-center gap-1 select-none">
+                                                        {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
                                                     </div>
-                                                ) : message.messageType === 'video' ? (
-                                                    <div className="relative">
-                                                        <VideoThumbnail
-                                                            src={message.text}
-                                                            loading={!!message.uploading}
-                                                            onOpen={() => {
-                                                                const mediaMessages = chatMessages.filter(m => ['image','video'].includes(m.messageType));
-                                                                const idx = mediaMessages.findIndex(m => m === message);
-                                                                if (idx >= 0) {
-                                                                    setMediaGalleryIndex(idx);
-                                                                    setMediaGalleryOpen(true);
-                                                                }
-                                                            }}
-                                                            className="!m-0"
-                                                            size={260}
-                                                            radiusClass={`${isOwn ? 'rounded-2xl rounded-br-md' : 'rounded-2xl rounded-bl-md'}`}
-                                                        />
-                                                        <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/55 text-white backdrop-blur-sm leading-none flex items-center gap-1 select-none">
-                                                            {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
-                                                        </div>
+                                                </div>
+                                            ) : message.messageType === 'video' ? (
+                                                <div className="relative">
+                                                    <VideoThumbnail
+                                                        src={message.text}
+                                                        loading={!!message.uploading}
+                                                        onOpen={() => {
+                                                            const mediaMessages = chatMessages.filter(m => ['image','video'].includes(m.messageType));
+                                                            const idx = mediaMessages.findIndex(m => m === message);
+                                                            if (idx >= 0) {
+                                                                setMediaGalleryIndex(idx);
+                                                                setMediaGalleryOpen(true);
+                                                            }
+                                                        }}
+                                                        className="!m-0"
+                                                        size={260}
+                                                        radiusClass={`${isOwn ? 'rounded-2xl rounded-br-md' : 'rounded-2xl rounded-bl-md'}`}
+                                                    />
+                                                    <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-black/55 text-white backdrop-blur-sm leading-none flex items-center gap-1 select-none">
+                                                        {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
                                                     </div>
-                                                ) : (message.messageType === 'audio' || message.audioUrl) ? (
-                                                    <AudioPlayer src={message.audioUrl || message.text} className="w-full max-w-xs" variant="compact" />
-                                                ) : (
-                                                    <>
-                                                        <MessageRenderer text={message.text} chunkSize={450} />
-                                                        <div className="text-[10px] self-end mt-1">
-                                                            {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
-                                                        </div>
-                                                    </>
-                                                )}
-                                            </div>
+                                                </div>
+                                            ) : (message.messageType === 'audio' || message.audioUrl) ? (
+                                                <AudioPlayer src={message.audioUrl || message.text} className="w-full max-w-xs" variant="compact" />
+                                            ) : (
+                                                <>
+                                                    <MessageRenderer text={message.text} chunkSize={450} />
+                                                    <div className="text-[10px] self-end mt-1">
+                                                        {message.created_at ? (function(){ try { return (new Date(message.created_at) && (new Date(message.created_at).toString() !== 'Invalid Date')) ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }) : ''; } catch(e){ return ''; } })() : ''}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
                                             {['image','video'].includes(message.messageType) ? null : null}
                                             {/* Eliminado: el icono de leído ahora va en un overlay fijo a la derecha */}
                                             {/* Botón de tres puntos solo para mensajes propios, dentro de la burbuja arriba a la derecha */}
@@ -3095,10 +3250,12 @@ const AguacateChat = () => {
                                                     style={{ background: 'transparent', border: 'none', padding: 0 }}
                                                     title="Más opciones"
                                                     onClick={() => {
-                                                        if (messageMenuOpenId === index) {
+                                                        if (messageMenuOpenId === index && messageMenuType==='own') {
                                                             setMessageMenuOpenId(null);
+                                                            setMessageMenuType(null);
                                                         } else {
                                                             setMessageMenuOpenId(index);
+                                                            setMessageMenuType('own');
                                                         }
                                                     }}
                                                 >
@@ -3109,8 +3266,8 @@ const AguacateChat = () => {
                                                     </svg>
                                                 </button>
                                             )}
-                                            {/* Menú contextual */}
-                                            {isOwn && messageMenuOpenId === index && (
+                                            {/* Menú contextual mensajes propios */}
+                                            {isOwn && messageMenuOpenId === index && messageMenuType==='own' && (
                                                 <div
                                                     ref={messageMenuRef}
                                                     className="absolute right-5 top-6 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in"
@@ -3118,8 +3275,17 @@ const AguacateChat = () => {
                                                     <button
                                                         className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
                                                         onClick={() => {
+                                                            setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType });
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
+                                                        }}
+                                                    >
+                                                        Responder
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
                                                             toast.success('Información del mensaje (no implementado)');
-                                                            setMessageMenuOpenId(null);
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
                                                         }}
                                                     >
                                                         Ver información
@@ -3128,7 +3294,7 @@ const AguacateChat = () => {
                                                         className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
                                                         onClick={() => {
                                                             toast.success('Mensaje fijado.');
-                                                            setMessageMenuOpenId(null);
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
                                                         }}
                                                     >
                                                         Fijar mensaje
@@ -3137,7 +3303,7 @@ const AguacateChat = () => {
                                                         className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
                                                         onClick={() => {
                                                             toast.success('Editar mensaje (no implementado)');
-                                                            setMessageMenuOpenId(null);
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
                                                         }}
                                                     >
                                                         Editar mensaje
@@ -3145,17 +3311,60 @@ const AguacateChat = () => {
                                                     <button
                                                         className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
                                                         onClick={() => {
-                                                            toast.success('Mensaje eliminado.');
-                                                            setMessageMenuOpenId(null);
+                                                            openDeleteMessageModal(message, true);
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
                                                         }}
                                                     >
                                                         Eliminar mensaje
                                                     </button>
                                                 </div>
                                             )}
-                                 </div>
-                                </div>
-                             </React.Fragment>
+                                            {/* Menú contextual mensajes recibidos */}
+                                            {!isOwn && messageMenuOpenId === index && messageMenuType==='received' && (
+                                                <div
+                                                    ref={messageMenuRef}
+                                                    className="absolute left-5 top-6 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in"
+                                                >
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType });
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
+                                                        }}
+                                                    >
+                                                        Responder
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            try { navigator.clipboard.writeText(message.text || ''); toast.success('Copiado'); } catch(e){ toast.error('No se pudo copiar'); }
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
+                                                        }}
+                                                    >
+                                                        Copiar
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            toast.success('Mensaje fijado.');
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
+                                                        }}
+                                                    >
+                                                        Fijar
+                                                    </button>
+                                                    <button
+                                                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg"
+                                                        onClick={() => {
+                                                            openDeleteMessageModal(message, false);
+                                                            setMessageMenuOpenId(null); setMessageMenuType(null);
+                                                        }}
+                                                    >
+                                                        Eliminar
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div> {/* cierre flex contenedor de mensaje */}
+                                    </React.Fragment>
                                 );
                             })}
                             {/* Indicador de escribiendo */}
@@ -3520,6 +3729,52 @@ const AguacateChat = () => {
                             )}
                         </div>
                         <div className="flex-1 relative">
+                            {replyToMessage && (
+                                <div className="absolute -top-20 left-0 right-0 animate-fade-in">
+                                    <div className="relative rounded-xl overflow-hidden border theme-border flex items-stretch shadow-sm reply-preview-solid">
+                                        <div className="w-1.5 bg-teal-500" />
+                                        <div className="flex-1 min-w-0 flex items-center gap-3 px-3 py-2">
+                                            {/* Mini preview según tipo */}
+                                            {replyToMessage.messageType === 'image' && (
+                                                <img src={replyToMessage.text} alt="miniatura" className="w-10 h-10 object-cover rounded-md border border-white/20" />
+                                            )}
+                                            {replyToMessage.messageType === 'video' && (
+                                                <div className="w-10 h-10 rounded-md bg-black/30 dark:bg-white/10 flex items-center justify-center text-teal-400">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                                </div>
+                                            )}
+                                            {replyToMessage.messageType === 'audio' && (
+                                                <div className="w-10 h-10 rounded-md bg-black/30 dark:bg-white/10 flex items-center justify-center text-teal-400">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                                                </div>
+                                            )}
+                                            {['text', undefined, null].includes(replyToMessage.messageType) && (
+                                                <div className="w-10 h-10 rounded-md bg-black/20 dark:bg-white/10 flex items-center justify-center text-teal-400">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                                </div>
+                                            )}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="reply-label text-[11px] uppercase tracking-wide font-semibold opacity-70 mb-0.5">Respondiendo a</div>
+                                                <div className="text-xs truncate" title={replyToMessage.text || ''}>
+                                                    {replyToMessage.messageType === 'image' && 'Imagen'}
+                                                    {replyToMessage.messageType === 'video' && 'Video'}
+                                                    {replyToMessage.messageType === 'audio' && 'Audio'}
+                                                    {['text', undefined, null].includes(replyToMessage.messageType) && (replyToMessage.text || '(sin contenido)')}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center px-1">
+                                                <button
+                                                    onClick={() => setReplyToMessage(null)}
+                                                    className="p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                                                    title="Cancelar respuesta"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             {isRecording && (
                                 <div className="absolute -top-12 left-0 right-0 flex items-center justify-between gap-3 px-3 py-2 rounded-xl theme-bg-chat theme-border border">
                                     <div className="flex items-center gap-2">
@@ -3768,6 +4023,44 @@ const AguacateChat = () => {
                                 className="px-4 py-2 rounded-md bg-gradient-to-r from-teal-primary to-teal-secondary text-white text-sm hover:opacity-90"
                             >Limpiar</button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {showDeleteMessageModal && deleteTargetMessage && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowDeleteMessageModal(false)}>
+                    <div className="w-full max-w-sm rounded-lg theme-bg-chat shadow-xl border theme-border p-5 animate-fade-in" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-lg font-semibold mb-2 theme-text-primary">Eliminar mensaje</h3>
+                        <p className="text-sm theme-text-secondary mb-4">Selecciona cómo deseas eliminar este mensaje.</p>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                className="px-4 py-2 rounded-md theme-bg-secondary theme-text-primary hover:opacity-80 text-sm flex items-center justify-between"
+                                onClick={() => {
+                                    handleHideMessageLocally(deleteTargetMessage.id);
+                                    setShowDeleteMessageModal(false);
+                                    toast.success('Mensaje ocultado para ti');
+                                }}
+                            >
+                                <span>Eliminar para mí</span>
+                                <span className="text-[10px] opacity-60">Solo tú</span>
+                            </button>
+                            {deleteTargetMessage.isOwn && (
+                                <button
+                                    className="px-4 py-2 rounded-md bg-gradient-to-r from-rose-500 to-rose-600 text-white text-sm hover:opacity-90 flex items-center justify-between"
+                                    onClick={() => {
+                                        handleDeleteForAll(deleteTargetMessage.id);
+                                        setShowDeleteMessageModal(false);
+                                    }}
+                                >
+                                    <span>Eliminar para todos</span>
+                                    <span className="text-[10px] text-white/70">Irreversible</span>
+                                </button>
+                            )}
+                            <button
+                                className="px-4 py-2 rounded-md theme-bg-chat theme-text-secondary hover:opacity-80 text-sm"
+                                onClick={() => setShowDeleteMessageModal(false)}
+                            >Cancelar</button>
+                        </div>
+                        <p className="mt-4 text-[11px] leading-snug opacity-60">Esta acción no deja rastro. El mensaje se eliminará permanentemente para ambos si eliges "Eliminar para todos".</p>
                     </div>
                 </div>
             )}
