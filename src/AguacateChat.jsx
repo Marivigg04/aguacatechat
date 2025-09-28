@@ -1069,6 +1069,8 @@ const AguacateChat = () => {
     const prevScrollTopRef = useRef(0);
     const shouldScrollToBottomRef = useRef(false);
     const stickToBottomRef = useRef(true);
+    // Fuerza un salto inmediato al fondo (sin animación) cuando se abre una conversación
+    const jumpToBottomImmediateRef = useRef(false);
     const chatMessagesRef = useRef([]);
 
     useLayoutEffect(() => {
@@ -1083,6 +1085,11 @@ const AguacateChat = () => {
             pendingPrependRef.current = false;
             prevScrollHeightRef.current = 0;
             prevScrollTopRef.current = 0;
+        } else if (jumpToBottomImmediateRef.current) {
+            // Si acabamos de abrir la conversación, saltar inmediatamente al fondo (sin animación)
+            try { el.scrollTop = el.scrollHeight; } catch (e) { /* fall back silencioso */ }
+            jumpToBottomImmediateRef.current = false;
+            shouldScrollToBottomRef.current = false;
         } else if (shouldScrollToBottomRef.current || stickToBottomRef.current) {
             try {
                 if (typeof el.scrollTo === 'function') {
@@ -1756,7 +1763,8 @@ const AguacateChat = () => {
         setHasMoreOlder(false);
         setOldestCursor(null);
         setLoadingOlder(false);
-        shouldScrollToBottomRef.current = true; // al abrir chat, ir al final
+    shouldScrollToBottomRef.current = true; // al abrir chat, ir al final
+    jumpToBottomImmediateRef.current = true; // forzar salto inmediato al fondo al iniciar la conversación
         // Reset de buffer de vistos al cambiar de conversación
         try { seenBufferRef.current.clear(); } catch {}
         // Cargar última página si hay conversationId
@@ -2805,19 +2813,114 @@ const AguacateChat = () => {
 
     // Sincronizar salida del skeleton de área de chat
     useEffect(() => {
+        let t = null;
+        let raf = null;
+        // Cuando termina la carga del área de chat, asegurarnos de que el scroll esté abajo
         if (!loadingChatArea && showChatSkeleton && !chatSkeletonExiting) {
-            setChatSkeletonExiting(true);
-            const t = setTimeout(() => {
-                setShowChatSkeleton(false);
-                setChatSkeletonExiting(false);
-            }, 240);
-            return () => clearTimeout(t);
+            // Marcar salida de skeleton (animación), pero primero forzamos scroll al fondo
+            const el = chatAreaRef.current;
+            const ensureScrolledAndHide = () => {
+                if (!el) {
+                    setChatSkeletonExiting(true);
+                    setTimeout(() => {
+                        setShowChatSkeleton(false);
+                        setChatSkeletonExiting(false);
+                    }, 240);
+                    return;
+                }
+
+                const maxTimeout = 4000; // max espera 4s
+                const stableThreshold = 300; // ms sin cambios para considerar estable
+                const pollInterval = 120; // ms
+                let resolved = false;
+                let observers = [];
+                let imgListeners = [];
+                let intervalId = null;
+                let timeoutId = null;
+
+                const cleanupAll = () => {
+                    observers.forEach(o => { try { o.disconnect(); } catch(e){} });
+                    observers = [];
+                    imgListeners.forEach(({img, handler}) => { try { img.removeEventListener('load', handler); img.removeEventListener('error', handler); } catch(e){} });
+                    imgListeners = [];
+                    if (intervalId) { clearInterval(intervalId); intervalId = null; }
+                    if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+                };
+
+                const tryResolve = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    cleanupAll();
+                    // iniciar animación de salida
+                    setChatSkeletonExiting(true);
+                    setTimeout(() => {
+                        setShowChatSkeleton(false);
+                        setChatSkeletonExiting(false);
+                    }, 240);
+                };
+
+                // Scroll inmediato al fondo
+                try { el.scrollTop = el.scrollHeight; } catch (e) {}
+
+                let lastHeight = el.scrollHeight;
+                let lastChangeAt = Date.now();
+
+                // Observador de mutaciones en el contenedor
+                try {
+                    const mo = new MutationObserver((mutations) => {
+                        lastHeight = el.scrollHeight;
+                        lastChangeAt = Date.now();
+                    });
+                    mo.observe(el, { childList: true, subtree: true, attributes: true, characterData: true });
+                    observers.push(mo);
+                } catch (e) {}
+
+                // Escuchar cargas de imágenes no completadas
+                try {
+                    const imgs = Array.from(el.querySelectorAll('img'));
+                    imgs.forEach((img) => {
+                        if (!img.complete) {
+                            const handler = () => { lastHeight = el.scrollHeight; lastChangeAt = Date.now(); };
+                            img.addEventListener('load', handler);
+                            img.addEventListener('error', handler);
+                            imgListeners.push({img, handler});
+                        }
+                    });
+                } catch (e) {}
+
+                // Intervalo que intenta scrollear y comprueba estabilidad
+                intervalId = setInterval(() => {
+                    try { el.scrollTop = el.scrollHeight; } catch (e) {}
+                    const now = Date.now();
+                    const currentHeight = el.scrollHeight;
+                    const atBottom = Math.abs((el.scrollTop + el.clientHeight) - el.scrollHeight) <= 2;
+                    if (currentHeight !== lastHeight) {
+                        lastHeight = currentHeight;
+                        lastChangeAt = now;
+                        return; // esperamos a que se estabilice
+                    }
+                    // si llevamos tiempo estables y estamos al bottom, resolvemos
+                    if ((now - lastChangeAt) >= stableThreshold && atBottom) {
+                        tryResolve();
+                    }
+                }, pollInterval);
+
+                // timeout por si algo no converge
+                timeoutId = setTimeout(() => {
+                    tryResolve();
+                }, maxTimeout);
+            };
+            ensureScrolledAndHide();
         }
         if (loadingChatArea && !showChatSkeleton) {
             setShowChatSkeleton(true);
             setChatSkeletonExiting(false);
         }
-    }, [loadingChatArea]);
+        return () => {
+            if (t) clearTimeout(t);
+            if (raf) cancelAnimationFrame(raf);
+        };
+    }, [loadingChatArea, showChatSkeleton, chatSkeletonExiting]);
 
     // Nota: en vez de hacer early return, mostraremos un overlay mientras carga para permitir el fade-out sobre el contenido ya montado.
 
