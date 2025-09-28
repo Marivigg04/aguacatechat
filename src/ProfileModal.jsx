@@ -153,7 +153,9 @@ const ProfileModal = ({
             }
             // Si no hay información de perfil, intentar fetch
             const contactId = contactProfile.id || contactProfile.profileId;
-            if (!baseInfo && contactId && showProfileModal) {
+            // Antes se usaba una variable inexistente "baseInfo" que causaba ReferenceError.
+            // Usamos profileInfoDb (estado) para decidir si hace falta completar datos del contacto.
+            if (!profileInfoDb && contactId && showProfileModal) {
                 (async () => {
                     setLoadingContactInfo(true);
                     try {

@@ -404,6 +404,30 @@ const AguacateChat = () => {
     const [isProfileStopped, setProfileStopped] = useState(false);
 
     // --- Sonidos y Notificaciones ---
+    const NOTIFICATION_SETTINGS_KEY = 'aguacatechat_notifications_v1';
+    const loadNotificationSettings = () => {
+        try {
+            const raw = localStorage.getItem(NOTIFICATION_SETTINGS_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    return {
+                        all: parsed.all !== false, // default true
+                        sound: parsed.sound !== false, // default true
+                    };
+                }
+            }
+        } catch {}
+        return { all: true, sound: true };
+    };
+    const [notificationSettings, setNotificationSettings] = useState(loadNotificationSettings);
+    useEffect(() => {
+        try { localStorage.setItem(NOTIFICATION_SETTINGS_KEY, JSON.stringify(notificationSettings)); } catch {}
+    }, [notificationSettings]);
+    // Ref para que los handlers (realtime) siempre lean valores actuales sin necesidad de re-suscribir
+    const notificationSettingsRef = useRef(notificationSettings);
+    useEffect(() => { notificationSettingsRef.current = notificationSettings; }, [notificationSettings]);
+
     const audioCtxRef = useRef(null);
     const ensureAudioCtx = () => {
         if (audioCtxRef.current) return audioCtxRef.current;
@@ -415,6 +439,9 @@ const AguacateChat = () => {
         } catch { return null; }
     };
     const playNotificationSound = () => {
+        const settings = notificationSettingsRef.current;
+        if (!settings?.all) return; // notificaciones desactivadas
+        if (!settings?.sound) return; // sonido desactivado
         try {
             const ctx = ensureAudioCtx();
             if (!ctx) return;
@@ -459,6 +486,8 @@ const AguacateChat = () => {
         } catch { return false; }
     };
     const showBrowserNotification = async ({ conversationId, contactName, body, isNewChat }) => {
+        const settings = notificationSettingsRef.current;
+        if (!settings?.all) return; // no mostrar si está desactivado
         if (!('Notification' in window)) return;
         // No mostrar si pestaña visible y ventana enfocada
         if (document.visibilityState === 'visible' && document.hasFocus()) return;
@@ -4098,6 +4127,10 @@ const AguacateChat = () => {
                 setShowConfigModal={setShowConfigModal}
                 isDarkMode={isDarkMode}
                 toggleTheme={toggleTheme}
+                notificationSettings={notificationSettings}
+                onChangeNotificationSettings={setNotificationSettings}
+                privacySettings={null}
+                onChangePrivacySettings={()=>{}}
             />
 
             {/* Modal de personalización */}
