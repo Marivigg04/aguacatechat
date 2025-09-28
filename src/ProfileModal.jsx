@@ -128,10 +128,29 @@ const ProfileModal = ({
     React.useEffect(() => {
         // Si es perfil de contacto (modo lectura) intentar usar datos proporcionados y si faltan, consultar DB
         if (contactProfile) {
-            const baseInfo = contactProfile.profileInformation || '';
-            setProfileInfoDb(baseInfo);
+            if (import.meta.env?.DEV) {
+                console.debug('[ProfileModal] contactProfile recibido', contactProfile);
+            }
+            setProfileInfoDb(contactProfile.profileInformation); // sin fallback
             setAvatarUrl(contactProfile.avatar_url || null);
             setProfileName(contactProfile.name || contactProfile.username || 'Contacto');
+            // Fetch explícito si viene undefined (no fue incluido en el bulk select)
+            if (typeof contactProfile.profileInformation === 'undefined' && contactProfile.id) {
+                (async () => {
+                    try {
+                        const { selectFrom } = await import('./services/db');
+                        const data = await selectFrom('profiles', {
+                            columns: 'profileInformation',
+                            match: { id: contactProfile.id },
+                            single: true
+                        });
+                        if (import.meta.env?.DEV) console.debug('[ProfileModal] fetch puntual contacto data=', data);
+                        setProfileInfoDb(data?.profileInformation ?? null);
+                    } catch (e) {
+                        if (import.meta.env?.DEV) console.warn('[ProfileModal] Error fetch puntual contacto', e);
+                    }
+                })();
+            }
             // Si no hay información de perfil, intentar fetch
             const contactId = contactProfile.id || contactProfile.profileId;
             if (!baseInfo && contactId && showProfileModal) {
@@ -167,10 +186,16 @@ const ProfileModal = ({
                     match: { id: user.id },
                     single: true
                 });
-                setProfileInfoDb(data?.profileInformation || '');
+                if (import.meta.env?.DEV) {
+                    console.debug('[ProfileModal] fetch propio perfil data=', data);
+                }
+                setProfileInfoDb(data?.profileInformation ?? null);
                 setAvatarUrl(data?.avatar_url || null);
             } catch (err) {
-                setProfileInfoDb('');
+                if (import.meta.env?.DEV) {
+                    console.warn('[ProfileModal] Error fetch propio perfil', err);
+                }
+                setProfileInfoDb(null);
                 setAvatarUrl(null);
             }
         }
@@ -629,14 +654,10 @@ const ProfileModal = ({
                                 </form>
                             ) : (
                                 <div className="flex items-center gap-2 w-full">
-                                    <span className="theme-text-primary text-base flex-1 font-semibold break-words" style={{ overflowWrap: 'break-word', wordBreak: 'break-word', hyphens: 'auto', whiteSpace: 'pre-wrap' }}>
-                                        {loadingContactInfo ? (
-                                            <span className="theme-text-secondary italic">Cargando...</span>
-                                        ) : profileInfoDb && profileInfoDb.trim() !== '' ? (
-                                            profileInfoDb
-                                        ) : (
-                                            <span className="theme-text-primary font-semibold">Sin información</span>
-                                        )}
+                                    <span className="theme-text-primary text-base flex-1 font-semibold">
+                                        {typeof profileInfoDb === 'string' && profileInfoDb.trim() !== ''
+                                            ? profileInfoDb
+                                            : <span className="theme-text-primary font-semibold">Sin información</span>}
                                     </span>
                                     {!contactProfile && (
                                         <div
