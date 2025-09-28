@@ -152,11 +152,9 @@ const ProfileModal = ({
                     }
                 })();
             }
-            // Siempre hacer fetch para obtener username desde profiles
+                        // Siempre hacer fetch para obtener username desde profiles
             const contactId = contactProfile.id || contactProfile.profileId;
-            // Antes se usaba una variable inexistente "baseInfo" que causaba ReferenceError.
-            // Usamos profileInfoDb (estado) para decidir si hace falta completar datos del contacto.
-            if (!profileInfoDb && contactId && showProfileModal) {
+            if (contactId && showProfileModal) {
                 (async () => {
                     setLoadingContactInfo(true);
                     try {
@@ -221,6 +219,28 @@ const ProfileModal = ({
             // No sobrescribir aquí
         }
     }, [myProfile.name, contactProfile]);
+
+    // Limpiar estados cuando se cierra el modal
+    React.useEffect(() => {
+        if (!showProfileModal) {
+            setIsEditingInfo(false);
+            setNewProfileInfo('');
+            setShowEditPasswordModal(false);
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setShowCurrentPassword(false);
+            setShowNewPassword(false);
+            setShowConfirmPassword(false);
+            setIsClosing(false);
+            setProfileInfoDb('');
+            setLoadingContactInfo(false);
+            setAvatarPreview(null);
+            setAvatarUrl(null);
+            setUploadingAvatar(false);
+            setProfileName('Cargando...');
+        }
+    }, [showProfileModal]);
 
     // Agregar una referencia para evitar llamadas duplicadas al guardar
     const isSavingRef = React.useRef(false);
