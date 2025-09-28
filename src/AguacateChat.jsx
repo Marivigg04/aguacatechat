@@ -184,6 +184,7 @@ const AguacateChat = () => {
     };
 
     const [personalization, setPersonalization] = useState(loadInitialPersonalization);
+    // (Debug toast removed) lastSeenToastRef eliminado
 
     // Persistir personalización en cookies cada vez que cambie (solo campos solicitados)
     useEffect(() => {
@@ -886,7 +887,7 @@ const AguacateChat = () => {
                                     else if (t === 'video') label = 'Video';
                                     return {
                                         ...c,
-                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t },
+                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t, seen: Array.isArray(m.seen) ? m.seen : [] },
                                         last_message_at: m.created_at,
                                         lastMessage: label,
                                         lastMessageType: t,
@@ -905,28 +906,78 @@ const AguacateChat = () => {
 
                         // a) Actualizar chat activo si coincide
                         if (m.conversation_id !== selectedConvIdRef.current) return;
-                        // Evitar duplicar los propios (ya agregados de forma optimista)
-                        if (m.sender_id === user?.id) return;
-                        setChatMessages((prev) => [
-                            ...prev,
-                            m.type === 'audio'
-                                ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : [] }
-                                : { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] },
-                        ]);
+                        setChatMessages((prev) => {
+                            // Si es un mensaje propio, buscar un optimista tmp-* para reemplazar
+                            if (m.sender_id === user?.id) {
+                                let replaced = false;
+                                const mapped = prev.map(msg => {
+                                    if (!replaced && String(msg.id).startsWith('tmp-') && msg.type === 'sent' && msg.messageType === (m.type || 'text') && msg.text === (m.type === 'audio' ? '(Audio)' : msg.text)) {
+                                        // Reemplazar primer candidato temporal (heurística básica)
+                                        replaced = true;
+                                        const base = {
+                                            id: m.id,
+                                            type: 'sent',
+                                            created_at: m.created_at,
+                                            messageType: m.type || 'text',
+                                            seen: Array.isArray(m.seen) ? m.seen : [],
+                                        };
+                                        if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
+                                        if (m.type === 'image') return { ...base, text: m.content };
+                                        if (m.type === 'video') return { ...base, text: m.content };
+                                        return { ...base, text: m.content };
+                                    }
+                                    return msg;
+                                });
+                                // Si no se pudo reemplazar (por timing), añadirlo al final evitando duplicados exactos
+                                if (!replaced && !mapped.some(msg => msg.id === m.id)) {
+                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] };
+                                    if (m.type === 'audio') mapped.push({ ...base, audioUrl: m.content, text: '(Audio)' });
+                                    else mapped.push({ ...base, text: m.content });
+                                }
+                                return mapped;
+                            }
+                            // Mensaje recibido normal
+                            return [
+                                ...prev,
+                                m.type === 'audio'
+                                    ? { id: m.id, type: 'received', audioUrl: m.content, text: '(Audio)', created_at: m.created_at, messageType: 'audio', seen: Array.isArray(m.seen) ? m.seen : [] }
+                                    : { id: m.id, type: 'received', text: m.content, created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [] },
+                            ];
+                        });
                     } else if (evt === 'UPDATE') {
                         const m = payload.new;
                         if (!m) return;
-                        if (m.conversation_id !== selectedConvIdRef.current) return;
+                        // Debug toast eliminado
+                        // Helper para aplicar cambios a conversación (sidebar) si este mensaje es el último
+                        const updateConversationSeen = (row) => {
+                            setConversations(prev => prev.map(c => {
+                                if (c.conversationId === row.conversation_id && c.last_message?.id === row.id) {
+                                    return {
+                                        ...c,
+                                        last_message: {
+                                            ...c.last_message,
+                                            // Solo actualizamos campos que puedan haber cambiado
+                                            type: row.type || c.last_message.type || 'text',
+                                            content: row.content != null ? row.content : c.last_message.content,
+                                            seen: Array.isArray(row.seen) ? row.seen : c.last_message.seen,
+                                        }
+                                    };
+                                }
+                                return c;
+                            }));
+                        };
 
                         const applyUpdate = (row) => {
+                            // Actualizar conversaciones siempre (aunque el chat no esté abierto)
+                            updateConversationSeen(row);
+                            // Solo actualizar area de chat si es la conversación seleccionada
+                            if (row.conversation_id !== selectedConvIdRef.current) return;
                             setChatMessages((prev) => prev.map((msg) => {
                                 if (msg.id !== row.id) return msg;
                                 const next = { ...msg };
-                                // messageType si viene en la fila
                                 if (typeof row.type === 'string') {
                                     next.messageType = row.type || 'text';
                                 }
-                                // contenido (si viene). Mantener el anterior si no llega.
                                 const effectiveType = (typeof row.type === 'string' ? row.type : msg.messageType) || 'text';
                                 if (row.content != null) {
                                     if (effectiveType === 'audio') {
@@ -943,7 +994,6 @@ const AguacateChat = () => {
                             }));
                         };
 
-                        // Si por alguna razón el payload no trae 'seen' (o viene indefinido), hacemos un fetch puntual
                         if (typeof m.seen === 'undefined' || m.seen === null) {
                             supabase
                                 .from('messages')
@@ -952,7 +1002,6 @@ const AguacateChat = () => {
                                 .single()
                                 .then(({ data, error }) => {
                                     if (error || !data) return;
-                                    if (data.conversation_id !== selectedConvIdRef.current) return;
                                     applyUpdate(data);
                                 })
                                 .catch(() => {});
@@ -975,6 +1024,29 @@ const AguacateChat = () => {
             try { supabase.removeChannel(channel); } catch {}
         };
     }, [user?.id]);
+
+    // Suscripción focalizada a la conversación seleccionada: refuerza updates de 'seen'
+    useEffect(() => {
+        if (!user?.id || !selectedContact?.conversationId) return;
+        const convId = selectedContact.conversationId;
+        const channel = supabase
+            .channel(`messages:conv:${convId}`)
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${convId}` },
+                (payload) => {
+                    const row = payload.new;
+                    if (!row) return;
+                    // Solo nos interesa cuando cambie 'seen'
+                    if (typeof row.seen === 'undefined') return;
+                    // Debug toast eliminado
+                    setChatMessages(prev => prev.map(m => m.id === row.id ? { ...m, seen: Array.isArray(row.seen) ? row.seen : m.seen } : m));
+                }
+            )
+            .subscribe();
+
+        return () => { try { supabase.removeChannel(channel); } catch {} };
+    }, [user?.id, selectedContact?.conversationId]);
 
     // Realtime para updates en profiles (isOnline)
     useEffect(() => {

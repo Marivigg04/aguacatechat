@@ -53,6 +53,8 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     const [viewsLoading, setViewsLoading] = useState(false);
     const [viewsError, setViewsError] = useState(null);
     const [viewersData, setViewersData] = useState([]);
+    // Recordar si la historia ya estaba en pausa antes de abrir el modal de vistas
+    const pauseBeforeViewsRef = useRef(false);
     // Refs para control preciso de pausa en imágenes/texto
     const accumulatedRef = useRef(0); // ms acumulados confirmados
     const lastFrameRef = useRef(null); // timestamp del último frame activo (no en pausa)
@@ -572,6 +574,32 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
         ), { duration: 60000, id: `confirm-delete-${activeStoryId}` });
         pendingDeleteToastRef.current = id;
     };
+
+    // Pausar automáticamente al abrir el modal de vistas (solo historias propias)
+    // y reanudar al cerrarlo si antes no estaba pausada manualmente
+    useEffect(() => {
+        if (!isOwnStory) return; // Solo aplica a historias propias
+        if (showViewsModal) {
+            // Guardar estado de pausa previo
+            const videoWasPaused = (activeType === 'video' && videoRef.current) ? videoRef.current.paused : false;
+            pauseBeforeViewsRef.current = isPausedRef.current || videoWasPaused;
+            // Forzar pausa si no lo estaba
+            if (!isPausedRef.current) {
+                if (activeType === 'video' && videoRef.current) {
+                    try { videoRef.current.pause(); } catch {}
+                }
+                setIsPaused(true); isPausedRef.current = true;
+            }
+        } else {
+            // Al cerrar: solo reanudar si no estaba pausada antes
+            if (pauseBeforeViewsRef.current === false) {
+                if (activeType === 'video' && videoRef.current) {
+                    try { videoRef.current.play().catch(()=>{}); } catch {}
+                }
+                setIsPaused(false); isPausedRef.current = false;
+            }
+        }
+    }, [showViewsModal, isOwnStory, activeType]);
 
     return (
     <div
