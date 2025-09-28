@@ -154,7 +154,9 @@ const ProfileModal = ({
             }
             // Siempre hacer fetch para obtener username desde profiles
             const contactId = contactProfile.id || contactProfile.profileId;
-            if (contactId && showProfileModal) {
+            // Antes se usaba una variable inexistente "baseInfo" que causaba ReferenceError.
+            // Usamos profileInfoDb (estado) para decidir si hace falta completar datos del contacto.
+            if (!profileInfoDb && contactId && showProfileModal) {
                 (async () => {
                     setLoadingContactInfo(true);
                     try {

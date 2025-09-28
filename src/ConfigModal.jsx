@@ -9,17 +9,10 @@ import {
     MoonIcon
 } from '@heroicons/react/24/outline';
 
-const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTheme }) => {
-    // Estados para controlar las opciones de configuración (puedes conectarlos a tu lógica global)
-    const [notifications, setNotifications] = useState({
-        all: true,
-        sound: true,
-    });
-
-    const [privacy, setPrivacy] = useState({
-        readReceipts: true,
-        showStatus: true,
-    });
+const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTheme, notificationSettings, onChangeNotificationSettings, privacySettings, onChangePrivacySettings }) => {
+    // Los estados ahora se reciben desde arriba para persistencia centralizada
+    const notifications = notificationSettings || { all: true, sound: true };
+    const privacy = privacySettings || { readReceipts: true, showStatus: true };
 
     // Estado para animación de cierre
     const [isClosing, setIsClosing] = useState(false);
@@ -117,17 +110,23 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                             'Recibe alertas de nuevos mensajes y llamadas.',
                             <ToggleSwitch
                                 isOn={notifications.all}
-                                handleToggle={() => setNotifications(prev => ({ ...prev, all: !prev.all }))}
+                                handleToggle={() => onChangeNotificationSettings && onChangeNotificationSettings({ ...notifications, all: !notifications.all })}
                             />
                         )}
                         {renderSettingItem(
                             BellIcon,
                             'Sonido de Notificación',
                             'Reproducir un sonido cuando llega una notificación.',
-                            <ToggleSwitch
-                                isOn={notifications.sound}
-                                handleToggle={() => setNotifications(prev => ({ ...prev, sound: !prev.sound }))}
-                            />
+                            <div className={notifications.all ? '' : 'pointer-events-none'}>
+                                <ToggleSwitch
+                                    isOn={notifications.sound && notifications.all}
+                                    disabled={!notifications.all}
+                                    handleToggle={() => {
+                                        if (!notifications.all) return;
+                                        onChangeNotificationSettings && onChangeNotificationSettings({ ...notifications, sound: !notifications.sound });
+                                    }}
+                                />
+                            </div>
                         )}
                     </div>
 
@@ -140,7 +139,7 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                             'Permite que otros vean si has leído sus mensajes.',
                             <ToggleSwitch
                                 isOn={privacy.readReceipts}
-                                handleToggle={() => setPrivacy(prev => ({ ...prev, readReceipts: !prev.readReceipts }))}
+                                handleToggle={() => onChangePrivacySettings && onChangePrivacySettings({ ...privacy, readReceipts: !privacy.readReceipts })}
                             />
                         )}
                         {renderSettingItem(
@@ -149,7 +148,7 @@ const ConfigModal = ({ showConfigModal, setShowConfigModal, isDarkMode, toggleTh
                             'Permite que tus contactos vean cuándo estás activo.',
                             <ToggleSwitch
                                 isOn={privacy.showStatus}
-                                handleToggle={() => setPrivacy(prev => ({ ...prev, showStatus: !prev.showStatus }))}
+                                handleToggle={() => onChangePrivacySettings && onChangePrivacySettings({ ...privacy, showStatus: !privacy.showStatus })}
                             />
                         )}
                     </div>
