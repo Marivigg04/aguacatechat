@@ -439,7 +439,18 @@ const AguacateChat = () => {
             const name = username.trim();
             const lastType = c?.last_message?.type || 'text';
             const lastContentRaw = c?.last_message?.content || '';
-            const lastContent = lastType === 'image' ? 'Foto' : lastContentRaw;
+            let lastContent = lastType === 'image' ? 'Foto' : lastContentRaw;
+            // Si el último mensaje lo envió el usuario actual, anteponer 'Tu:' (evitar duplicados)
+            try {
+                if (c?.last_message?.sender_id && user?.id && String(c.last_message.sender_id) === String(user.id)) {
+                    const lc = typeof lastContent === 'string' ? lastContent.trim() : String(lastContent || '');
+                    if (!lc.toLowerCase().startsWith('tu:')) {
+                        lastContent = `Tu: ${lastContent}`;
+                    }
+                }
+            } catch (e) {
+                // Silenciar cualquier error de comparación
+            }
             const lastAt = c?.last_message_at || c?.created_at;
             // Derivados del último mensaje
             const lastId = c?.last_message?.id ?? null;
