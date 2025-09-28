@@ -217,6 +217,50 @@ const AguacateChat = () => {
         return () => observer.disconnect();
     }, []);
     const [isTyping, setIsTyping] = useState(false); // Nuevo estado
+    // --- Typing indicador remoto ---
+    const typingTimeoutRef = useRef(null); // timeout para auto-off al dejar de escribir
+    const selfTypingRef = useRef(false); // track estado enviado para evitar updates redundantes
+    const lastTypingConvRef = useRef(null);
+
+    const updateTypingRemote = async (conversationId, userId, flag) => {
+        if (!conversationId || !userId) return;
+        try {
+            await updateTable('participants', { conversation_id: conversationId, user_id: userId }, { isTyping: flag });
+        } catch (e) {
+            console.warn('No se pudo actualizar isTyping remoto:', e?.message || e);
+        }
+    };
+
+    const stopTypingImmediate = async () => {
+        if (!selfTypingRef.current) return; // ya está en false remoto
+        selfTypingRef.current = false;
+        const convId = selectedContact?.conversationId;
+        if (convId && user?.id) {
+            updateTypingRemote(convId, user.id, false);
+        }
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
+        }
+    };
+
+    const triggerTyping = () => {
+        const convId = selectedContact?.conversationId;
+        if (!convId || !user?.id) return;
+        lastTypingConvRef.current = convId;
+        // Enviar TRUE sólo si aún no se marcó
+        if (!selfTypingRef.current) {
+            selfTypingRef.current = true;
+            updateTypingRemote(convId, user.id, true);
+        }
+        // Reiniciar timeout
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+            // Si la conversación activa cambió, evitar enviar
+            if (lastTypingConvRef.current !== convId) return;
+            stopTypingImmediate();
+        }, 2500); // 2.5s sin teclear -> false
+    };
     const [currentView, setCurrentView] = useState('chats'); // 'chats' o 'stories'
     const [loadingStories, setLoadingStories] = useState(false); // Skeleton al entrar a historias
     const [loadingChatsSidebar, setLoadingChatsSidebar] = useState(false); // Skeleton de barra de chats al volver
@@ -1258,6 +1302,43 @@ const AguacateChat = () => {
         };
     }, [user?.id]);
 
+    // Suscripción realtime para indicador de escritura de otros participantes
+    useEffect(() => {
+        if (!user?.id || !selectedContact?.conversationId) return;
+        const convId = selectedContact.conversationId;
+        // Al cambiar de conversación, reiniciar indicador local
+        setIsTyping(false);
+        const channel = supabase
+            .channel(`participants:typing:${convId}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'participants', filter: `conversation_id=eq.${convId}` }, (payload) => {
+                const row = payload.new;
+                if (!row) return;
+                if (row.user_id === user.id) return; // ignorar self
+                if (typeof row.isTyping !== 'undefined') {
+                    setIsTyping(!!row.isTyping);
+                }
+            })
+            .subscribe();
+        return () => {
+            // Al salir de la conversación actual, enviar false si seguíamos marcados
+            if (selfTypingRef.current && user?.id) {
+                updateTypingRemote(convId, user.id, false);
+                selfTypingRef.current = false;
+            }
+            try { supabase.removeChannel(channel); } catch {}
+        };
+    }, [user?.id, selectedContact?.conversationId]);
+
+    // Cleanup global on unmount
+    useEffect(() => {
+        return () => {
+            if (selfTypingRef.current && user?.id && selectedContact?.conversationId) {
+                updateTypingRemote(selectedContact.conversationId, user.id, false);
+            }
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        };
+    }, []);
+
     // Update selectedContact when conversations change
     useEffect(() => {
         if (selectedContact?.conversationId) {
@@ -1666,6 +1747,8 @@ const AguacateChat = () => {
     const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text' };
         setChatMessages(prev => [...prev, optimistic]);
         setMessageInput('');
+        // Al enviar mensaje, marcar typing false inmediatamente
+        stopTypingImmediate();
         // Restablecer altura del textarea al tamaño base
         if (messageInputRef.current) {
             messageInputRef.current.style.height = '44px';
@@ -1678,6 +1761,13 @@ const AguacateChat = () => {
             toast.error('No se pudo enviar el mensaje');
             // opcional: revertir optimismo o marcar como fallido
         }
+    };
+
+    // Handler de cambio del textarea para enviar indicador de typing
+    const handleMessageInputChange = (e) => {
+        const val = e.target.value;
+        setMessageInput(val);
+        triggerTyping();
     };
 
     // Reutilizable: envía una foto (File/Blob) comprimiéndola y subiéndola al bucket 'chatphotos'
@@ -2732,7 +2822,13 @@ const AguacateChat = () => {
                                         </svg>
                                     </h2>
                                     <p id="chatStatus" className="text-sm theme-text-secondary group-hover:text-teal-primary transition-colors">
-                                        {selectedContact.status === '🟢' ? 'En línea' : selectedContact.status === '🟡' ? 'Ausente' : selectedContact.status}
+                                        {isTyping
+                                            ? 'Escribiendo...'
+                                            : selectedContact.status === '🟢'
+                                                ? 'En línea'
+                                                : selectedContact.status === '🟡'
+                                                    ? 'Ausente'
+                                                    : selectedContact.status}
                                     </p>
                                 </div>
                         </div>
@@ -3556,7 +3652,7 @@ const AguacateChat = () => {
                                         background: 'var(--bg-chat, #222)'
                                     }}
                                     value={messageInput}
-                                    onChange={e => setMessageInput(e.target.value)}
+                                    onChange={handleMessageInputChange}
                                     onInput={e => {
                                         e.target.style.height = '44px';
                                         const fullScrollHeight = e.target.scrollHeight;
@@ -3567,8 +3663,24 @@ const AguacateChat = () => {
                                         } else {
                                             e.target.style.overflowY = 'hidden';
                                         }
+                                        // También considerar que input implica typing
+                                        triggerTyping();
                                     }}
                                     onKeyPress={handleKeyPress}
+                                    onBlur={() => {
+                                        // Pequeño delay para permitir click en botón enviar sin cortar antes
+                                        setTimeout(() => { stopTypingImmediate(); }, 200);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            // Enter para enviar -> el sendMessage ya llama stopTypingImmediate
+                                            // pero por si hay race, limpiamos timeout antes
+                                            if (typingTimeoutRef.current) {
+                                                clearTimeout(typingTimeoutRef.current);
+                                                typingTimeoutRef.current = null;
+                                            }
+                                        }
+                                    }}
                                     rows={1}
                                     disabled={!selectedContact || isCreatorSendingLocked || (!isConversationCreator && !isConversationAccepted)}
                                     placeholder={
