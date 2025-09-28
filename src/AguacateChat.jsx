@@ -593,7 +593,6 @@ const AguacateChat = () => {
             // Debug: loguear el estado de visto para ayudar a depuración
             try {
                 // eslint-disable-next-line no-console
-                console.log('conversationsToContacts: conversation', c?.conversationId, 'otherProfile', c?.otherProfile?.id, 'lastMessageId', c?.last_message?.id, 'lastMessageSeen', lastMessageSeen, 'seenArr', lastMessageSeenArr);
             } catch (e) {}
             // console.log('Contact', name, 'isOnline:', c?.otherProfile?.isOnline, 'status:', c?.otherProfile?.isOnline ? '🟢' : formatLastConex(c?.otherProfile?.lastConex));
             const unreadMap = unreadRef.current || {};
@@ -610,6 +609,7 @@ const AguacateChat = () => {
                 profileId: c?.otherProfile?.id,
                 username: c?.otherProfile?.username,
                 avatar_url: c?.otherProfile?.avatar_url,
+                profileInformation: c?.otherProfile?.profileInformation,
                 conversationId: c?.conversationId,
                 last_message_at: lastAt,
                 lastConex: c?.otherProfile?.lastConex,
@@ -2684,13 +2684,16 @@ const AguacateChat = () => {
                                 className="flex items-center gap-3 cursor-pointer group rounded-lg px-1 -mx-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-primary/60 transition-colors"
                                 onClick={() => {
                                     setShowProfileModal(true);
+                                    if (import.meta.env?.DEV) {
+                                        console.debug('[AguacateChat] Abriendo modal contacto selectedContact.profileInformation=', selectedContact.profileInformation);
+                                    }
                                     setContactProfileData({
                                         id: selectedContact.id,
                                         name: selectedContact.name,
                                         username: selectedContact.username,
                                         initials: selectedContact.initials || (selectedContact.name ? selectedContact.name.slice(0,2).toUpperCase() : 'CN'),
                                         avatar_url: selectedContact.avatar_url,
-                                        profileInformation: selectedContact.profileInformation || ''
+                                        profileInformation: selectedContact.profileInformation
                                     });
                                 }}
                                 role="button"
