@@ -3759,10 +3759,10 @@ const AguacateChat = () => {
                                             <div className="flex items-center px-1">
                                                 <button
                                                     onClick={() => setReplyToMessage(null)}
-                                                    className="p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                                                    className="p-1 rounded-md hover:bg-teal-500/10 dark:hover:bg-teal-400/10 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/40"
                                                     title="Cancelar respuesta"
                                                 >
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                    <svg className="w-4 h-4 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 transition-colors" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                                                 </button>
                                             </div>
                                         </div>
