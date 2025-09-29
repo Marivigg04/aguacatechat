@@ -1097,6 +1097,33 @@ const AguacateChat = () => {
     const jumpToBottomImmediateRef = useRef(false);
     const chatMessagesRef = useRef([]);
 
+    // Listener para gestionar auto-scroll inteligente: si el usuario se aleja del fondo, dejar de seguir hasta que vuelva.
+    useEffect(() => {
+        const el = chatAreaRef.current;
+        if (!el) return;
+        const handleScroll = () => {
+            // Distancia desde el fondo
+            const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+            // Si el usuario está a menos de 60px del fondo, activamos seguir al fondo
+            if (distanceFromBottom < 60) {
+                if (!stickToBottomRef.current) {
+                    stickToBottomRef.current = true;
+                }
+            } else {
+                // Usuario se alejó: desactivar seguimiento
+                if (stickToBottomRef.current) {
+                    stickToBottomRef.current = false;
+                }
+            }
+        };
+        el.addEventListener('scroll', handleScroll, { passive: true });
+        // Ejecutar una vez para estado inicial
+        handleScroll();
+        return () => {
+            try { el.removeEventListener('scroll', handleScroll); } catch {}
+        };
+    }, [selectedContact]);
+
     useLayoutEffect(() => {
         if (!selectedContact) return; // sin chat seleccionado, no movemos scroll
         const el = chatAreaRef.current;
@@ -2065,9 +2092,22 @@ const AguacateChat = () => {
             toast.info('Espera a que el otro usuario responda para continuar la conversación.');
             return;
         }
+        // Detectar si el usuario estaba al fondo antes de agregar el mensaje para decidir auto-scroll
+        let wasAtBottom = false;
+        try {
+            const el = chatAreaRef.current;
+            if (el) {
+                const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+                wasAtBottom = distance < 60; // tolerancia
+            }
+        } catch {}
         const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text', replyTo: replyToMessage ? replyToMessage.id : null };
         setChatMessages(prev => [...prev, optimistic]);
+        if (wasAtBottom) {
+            shouldScrollToBottomRef.current = true;
+            stickToBottomRef.current = true; // continuar siguiendo
+        }
         setMessageInput('');
         setReplyToMessage(null);
         // Al enviar mensaje, marcar typing false inmediatamente
