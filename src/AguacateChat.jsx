@@ -3296,9 +3296,9 @@ const AguacateChat = () => {
             <div className={`flex-1 flex-col relative ${isMobile && selectedContact ? 'w-full h-full' : (isMobile ? 'hidden' : 'flex')}`}>
                 {/* Header del área principal: solo cuando hay chat seleccionado */}
                 {selectedContact && (
-                        <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
+                        <div className="theme-bg-secondary theme-border border-b p-3 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 min-h-[64px] sm:min-h-[72px]">
                             <div
-                                className="flex items-center gap-3 cursor-pointer group rounded-lg px-1 -mx-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-primary/60 transition-colors"
+                                className="flex items-center gap-2 sm:gap-3 cursor-pointer group rounded-lg px-1 -mx-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-primary/60 transition-colors"
                                 onClick={() => {
                                     setShowProfileModal(true);
                                     if (import.meta.env?.DEV) {
@@ -3320,7 +3320,7 @@ const AguacateChat = () => {
                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
                                 title="Ver perfil del contacto"
                             >
-                            <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
+                            <button className="md:hidden p-1.5 sm:p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
                                 ☰
                             </button>
                                 <div className="relative">
@@ -3328,11 +3328,11 @@ const AguacateChat = () => {
                                         <img
                                             src={selectedContact.avatar_url}
                                             alt={selectedContact.name}
-                                            className="w-12 h-12 rounded-full object-cover ring-0 group-hover:ring-2 ring-teal-primary/60 transition-all"
+                                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover ring-0 group-hover:ring-2 ring-teal-primary/60 transition-all"
                                         />
                                     ) : (
-                                        <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center ring-0 group-hover:ring-2 ring-offset-0 ring-teal-primary/60 transition-all">
-                                            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center ring-0 group-hover:ring-2 ring-offset-0 ring-teal-primary/60 transition-all">
+                                            <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
                                                 <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
                                             </svg>
                                         </div>
@@ -3341,15 +3341,15 @@ const AguacateChat = () => {
                                         Ver
                                     </div>
                                 </div>
-                                <div className="flex flex-col">
-                                    <h2 id="chatName" className="font-semibold theme-text-primary flex items-center gap-1">
+                                <div className="flex flex-col leading-tight">
+                                    <h2 id="chatName" className="font-semibold theme-text-primary flex items-center gap-1 text-sm sm:text-base">
                                         {selectedContact.name}
                                         <svg className="w-3.5 h-3.5 opacity-0 group-hover:opacity-80 transition-opacity" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                                             <path d="M10.78 2.22a.75.75 0 00-1.06 0L4.97 6.97a.75.75 0 101.06 1.06L10 4.06l3.97 3.97a.75.75 0 101.06-1.06l-4.25-4.75z" />
                                             <path d="M4.22 12.22a.75.75 0 011.06 0L10 16.94l4.72-4.72a.75.75 0 111.06 1.06l-5.25 5.25a.75.75 0 01-1.06 0l-5.25-5.25a.75.75 0 010-1.06z" />
                                         </svg>
                                     </h2>
-                                    <p id="chatStatus" className="text-sm theme-text-secondary group-hover:text-teal-primary transition-colors">
+                                    <p id="chatStatus" className="text-xs sm:text-sm theme-text-secondary group-hover:text-teal-primary transition-colors">
                                         {isTyping
                                             ? 'Escribiendo...'
                                             : selectedContact.status === '🟢'
@@ -3360,11 +3360,11 @@ const AguacateChat = () => {
                                     </p>
                                 </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
                             <div className="relative">
                                 <button
                                     onClick={toggleChatOptions}
-                                    className={`p-2 rounded-lg theme-bg-chat transition-opacity flex flex-col gap-1 items-center justify-center w-10 h-10 ${(!selectedContact || isConvBlocked) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
+                                    className={`p-1.5 sm:p-2 rounded-lg theme-bg-chat transition-opacity flex flex-col gap-0.5 sm:gap-1 items-center justify-center w-9 h-9 sm:w-10 sm:h-10 ${(!selectedContact || isConvBlocked) ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-80'}`}
                                     title="Opciones del chat"
                                     disabled={!selectedContact || isConvBlocked}
                                     aria-disabled={!selectedContact || isConvBlocked}
@@ -3506,8 +3506,8 @@ const AguacateChat = () => {
                 />
 
                 {selectedContact && !isConvBlocked && (
-                <div className="theme-bg-secondary theme-border border-t p-4">
-                    <div className="flex items-center gap-3">
+                <div className="theme-bg-secondary theme-border border-t p-3 sm:p-4">
+                    <div className="flex items-center gap-2 sm:gap-3 w-full">
                         {/* 4. REEMPLAZO DEL ICONO DE ADJUNTAR */}
                         <button 
                             onClick={() => {
@@ -3523,7 +3523,7 @@ const AguacateChat = () => {
                                     setShowAttachMenu(true);
                                 }
                             }} 
-                            className="p-1 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" 
+                            className="p-1 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity shrink-0" 
                             title="Adjuntar archivo"
                             onMouseEnter={() => {
                                 setLinkStopped(true);
