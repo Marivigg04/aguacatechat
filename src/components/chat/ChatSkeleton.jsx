@@ -1,7 +1,7 @@
 import React from 'react';
-import SidebarSkeleton from './SidebarSkeleton';
+import SidebarSkeleton from '../SidebarSkeleton';
 import ChatAreaSkeleton from './ChatAreaSkeleton';
-import LeftToolbarSkeleton from './LeftToolbarSkeleton';
+import LeftToolbarSkeleton from '../LeftToolbarSkeleton';
 
 /**
  * ChatSkeleton

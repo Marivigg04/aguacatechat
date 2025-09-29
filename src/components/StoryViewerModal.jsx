@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import supabase from './services/supabaseClient';
-import { useAuth } from './context/AuthContext';
+import supabase from '../services/supabaseClient';
+import { useAuth } from '../context/AuthContext';
 import StoryViewsModal from './StoryViewsModal';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon, PlayIcon, PauseIcon, SpeakerWaveIcon, SpeakerXMarkIcon, PaperAirplaneIcon } from '@heroicons/react/24/solid';
 import StoryReplyComposer from './StoryReplyComposer';
-import { createOrGetDirectConversation } from './services/db';
+import { createOrGetDirectConversation } from '../services/db';
 
 // Helper local para formatear la hora de publicación de cada historia individual
 // (duplicado ligero de StoriesView; si se repite más veces convendría extraer a utils)

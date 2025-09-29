@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import EmojiPicker from './components/chat/EmojiPicker.jsx';
+import EmojiPicker from './chat/EmojiPicker.jsx';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 
 const UploadTextStoryModal = ({ open, onClose, onSubmit }) => {

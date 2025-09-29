@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
 import Lottie from 'react-lottie';
-import wiredPhotoAnimation from './animations/wired-outline-54-photo-hover-pinch.json';
-import filterAnimationData from './animations/Filter.json';
-import paperPlaneAnimation from './animations/Paper Plane.json';
-import storiesAnimationData from './animations/wired-outline-2626-logo-circle-instagram-hover-pinch.json';
-import { useAuth } from './context/AuthContext.jsx';
+import wiredPhotoAnimation from '../animations/wired-outline-54-photo-hover-pinch.json';
+import filterAnimationData from '../animations/Filter.json';
+import paperPlaneAnimation from '../animations/Paper Plane.json';
+import storiesAnimationData from '../animations/wired-outline-2626-logo-circle-instagram-hover-pinch.json';
+import { useAuth } from '../context/AuthContext.jsx';
 
 // Carga simple del avatar desde la tabla profiles
 async function fetchAvatarUrl(userId) {
     if (!userId) return null;
     try {
-        const { selectFrom } = await import('./services/db');
+        const { selectFrom } = await import('../services/db');
         const data = await selectFrom('profiles', {
             columns: 'avatar_url',
             match: { id: userId },

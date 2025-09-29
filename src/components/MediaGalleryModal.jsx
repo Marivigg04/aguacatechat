@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import ChatImage from './components/chat/ChatImage.jsx';
+import ChatImage from './components/ChatImage.jsx';
 import VideoThumbnail from './components/VideoPlayer.jsx';
 
 /**

@@ -9,11 +9,11 @@ import UploadTextStoryModal from './UploadTextStoryModal';
 import UploadMediaStoriesModal from './UploadMediaStoriesModal';
 import StoryVideoPreviewModal from './StoryVideoPreviewModal';
 import StoryImageEditorModal from './StoryImageEditorModal';
-import supabase from './services/supabaseClient';
-import { compressImage } from './utils/compressImage';
-import { useAuth } from './context/AuthContext.jsx';
-import { fetchUserConversations, selectFrom, uploadVideoToBucket } from './services/db';
-import StoriesSkeleton from './components/StoriesSkeleton.jsx';
+import supabase from '../services/supabaseClient';
+import { compressImage } from '../utils/compressImage';
+import { useAuth } from '../context/AuthContext.jsx';
+import { fetchUserConversations, selectFrom, uploadVideoToBucket } from '../services/db';
+import StoriesSkeleton from '../components/StoriesSkeleton.jsx';
 
 // Utilidad para formatear la hora de una historia
 const formatStoryTime = (iso) => {

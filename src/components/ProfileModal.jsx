@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import Lottie from 'react-lottie';
 import { FaEye, FaEyeSlash, FaPen } from 'react-icons/fa';
-import { supabase } from './services/supabaseClient';
-import { useAuth } from './context/AuthContext.jsx'
+import { supabase } from '../services/supabaseClient';
+import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router-dom'
 
 const ProfileModal = ({
@@ -139,7 +139,7 @@ const ProfileModal = ({
             if (typeof contactProfile.profileInformation === 'undefined' && contactProfile.id) {
                 (async () => {
                     try {
-                        const { selectFrom } = await import('./services/db');
+                        const { selectFrom } = await import('../services/db');
                         const data = await selectFrom('profiles', {
                             columns: 'profileInformation',
                             match: { id: contactProfile.id },
@@ -158,7 +158,7 @@ const ProfileModal = ({
                 (async () => {
                     setLoadingContactInfo(true);
                     try {
-                        const { selectFrom } = await import('./services/db');
+                        const { selectFrom } = await import('../services/db');
                         const data = await selectFrom('profiles', {
                             columns: 'profileInformation, avatar_url, username',
                             match: { id: contactId },
@@ -183,7 +183,7 @@ const ProfileModal = ({
         async function fetchProfileInfo() {
             if (!user?.id || !showProfileModal) return;
             try {
-                const { selectFrom } = await import('./services/db');
+                const { selectFrom } = await import('../services/db');
                 const data = await selectFrom('profiles', {
                     columns: 'profileInformation, avatar_url, username',
                     match: { id: user.id },
@@ -250,7 +250,7 @@ const ProfileModal = ({
         if (!user?.id || isSavingRef.current) return;
         isSavingRef.current = true;
         try {
-            const { updateTable } = await import('./services/db');
+            const { updateTable } = await import('../services/db');
             await updateTable('profiles', { id: user.id }, { username: newProfileName });
             setProfileName(newProfileName);
             setIsEditingName(false);
@@ -396,7 +396,7 @@ const ProfileModal = ({
 
                                     const { data: sess2 } = await supabase.auth.getSession();
                                     const profileId = sess2?.session?.user?.id || user?.id;
-                                    const { updateTable } = await import('./services/db');
+                                    const { updateTable } = await import('../services/db');
                                     await updateTable('profiles', { id: profileId }, { avatar_url: publicUrl });
 
                                     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -577,7 +577,7 @@ const ProfileModal = ({
                                         e.preventDefault();
                                         if (newProfileInfo.trim()) {
                                             try {
-                                                const { updateTable } = await import('./services/db');
+                                                const { updateTable } = await import('../services/db');
                                                 const trimmed = newProfileInfo.trim().slice(0, 80);
                                                 await updateTable('profiles', { id: user.id }, { profileInformation: trimmed });
                                                 setProfileInfoDb(trimmed);
@@ -626,7 +626,7 @@ const ProfileModal = ({
                                             onBlur={async () => {
                                                 if (newProfileInfo.trim()) {
                                                     try {
-                                                        const { updateTable } = await import('./services/db');
+                                                        const { updateTable } = await import('../services/db');
                                                         const trimmed = newProfileInfo.trim().slice(0, 80);
                                                         await updateTable('profiles', { id: user.id }, { profileInformation: trimmed });
                                                         setProfileInfoDb(trimmed);
@@ -639,7 +639,7 @@ const ProfileModal = ({
                                                     e.preventDefault();
                                                     if (newProfileInfo.trim()) {
                                                         try {
-                                                            const { updateTable } = await import('./services/db');
+                                                            const { updateTable } = await import('../services/db');
                                                             const trimmed = newProfileInfo.trim().slice(0, 80);
                                                             await updateTable('profiles', { id: user.id }, { profileInformation: trimmed });
                                                             setProfileInfoDb(trimmed);
