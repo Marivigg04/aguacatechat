@@ -527,64 +527,39 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
         else if (e.key === 'ArrowRight') { e.preventDefault(); goToNextStoryInUser(); }
     }, [goToPrevStoryInUser, goToNextStoryInUser]);
 
-    const pendingDeleteToastRef = useRef(null);
+    // Estado para modal de confirmación de eliminación estético
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleting, setDeleting] = useState(false);
     const handleDelete = () => {
         if (!isOwnStory || !activeStoryId || !onDeleteStory) return;
-        // Pausar historia actual (imagen/texto) y video si aplica
-        if (activeType === 'video' && videoRef.current) {
-            try { videoRef.current.pause(); } catch {}
+        if (!isPausedRef.current) {
+            if (activeType === 'video' && videoRef.current) { try { videoRef.current.pause(); } catch {} }
+            setIsPaused(true); isPausedRef.current = true;
         }
-        setIsPaused(true); isPausedRef.current = true;
-        // Evitar múltiples toasts de confirmación
-        if (pendingDeleteToastRef.current) {
-            toast.dismiss(pendingDeleteToastRef.current);
-            pendingDeleteToastRef.current = null;
+        setShowDeleteConfirm(true);
+    };
+    const cancelDelete = () => {
+        setShowDeleteConfirm(false);
+        if (isPausedRef.current) {
+            // Reanudar reproducción tras cancelar
+            setIsPaused(false); isPausedRef.current = false;
+            if (activeType === 'video' && videoRef.current) { try { videoRef.current.play().catch(()=>{}); } catch {} }
         }
-        const id = toast.custom((t) => (
-            <div className={`max-w-sm w-full bg-[#0f172a] text-white rounded-xl shadow-lg border border-white/10 p-4 flex flex-col gap-3 ${t.visible ? 'animate-enter' : 'animate-leave'}`}
-                 style={{ fontSize: '13px' }}>
-                <div className="font-semibold text-sm">Eliminar historia</div>
-                <p className="text-[12px] text-white/70 leading-snug">Esta acción es permanente. ¿Deseas continuar?</p>
-                <div className="flex gap-2 justify-end">
-                    <button
-                        onClick={() => { 
-                            toast.dismiss(id); 
-                            pendingDeleteToastRef.current = null; 
-                            // Reanudar si era video y no estaba en pausa manual
-                            if (activeType === 'video' && videoRef.current) {
-                                try { videoRef.current.play().catch(()=>{}); } catch {}
-                            }
-                            setIsPaused(false); isPausedRef.current = false;
-                        }}
-                        className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white/80 hover:text-white text-xs font-medium transition-colors"
-                    >Cancelar</button>
-                    <button
-                        onClick={async () => {
-                            // feedback inmediato
-                            const loadingId = toast.loading('Eliminando historia...');
-                            try {
-                                await onDeleteStory({ storyId: activeStoryId, userId: user?.id, currentUserIndex, currentStoryInUser });
-                                toast.success('Historia eliminada');
-                            } catch (e) {
-                                toast.error('No se pudo eliminar');
-                            } finally {
-                                toast.dismiss(loadingId);
-                                toast.dismiss(id);
-                                pendingDeleteToastRef.current = null;
-                            }
-                        }}
-                        className="px-3 py-1.5 rounded-md bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold shadow-sm transition-colors"
-                    >Eliminar</button>
-                </div>
-                <style jsx>{`
-                  .animate-enter { animation: toastIn .28s cubic-bezier(.4,0,.2,1); }
-                  .animate-leave { animation: toastOut .18s ease forwards; }
-                  @keyframes toastIn { from { opacity:0; transform: translateY(6px) scale(.96); } to { opacity:1; transform: translateY(0) scale(1); } }
-                  @keyframes toastOut { from { opacity:1; transform: translateY(0) scale(1); } to { opacity:0; transform: translateY(-2px) scale(.96); } }
-                `}</style>
-            </div>
-        ), { duration: 60000, id: `confirm-delete-${activeStoryId}` });
-        pendingDeleteToastRef.current = id;
+    };
+    const confirmDelete = async () => {
+        if (deleting) return;
+        setDeleting(true);
+        const loadingId = toast.loading('Eliminando historia...');
+        try {
+            await onDeleteStory({ storyId: activeStoryId, userId: user?.id, currentUserIndex, currentStoryInUser });
+            toast.success('Historia eliminada');
+            setShowDeleteConfirm(false);
+        } catch (e) {
+            toast.error('No se pudo eliminar');
+        } finally {
+            toast.dismiss(loadingId);
+            setDeleting(false);
+        }
     };
 
     // Pausar automáticamente al abrir el modal de vistas (solo historias propias)
@@ -992,8 +967,91 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                     }}
                 />
             )}
+            {/* Modal confirmación eliminar */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
+                    <div
+                        className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-[fadeIn_.25s_ease-out]"
+                        onClick={cancelDelete}
+                        aria-hidden="true"
+                    />
+                    <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="Confirmar eliminación de historia"
+                        className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-gradient-to-b from-slate-900/95 via-slate-900/90 to-slate-950/95 shadow-2xl overflow-hidden animate-[scaleIn_.32s_cubic-bezier(.4,.15,.2,1)]"
+                    >
+                        <div className="absolute -inset-px rounded-2xl pointer-events-none opacity-70">
+                            <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.12),transparent_60%)]" />
+                        </div>
+                        <div className="p-6 flex flex-col gap-5 relative">
+                            <div className="flex items-center gap-4">
+                                <div className="w-14 h-14 rounded-xl bg-red-500/15 border border-red-400/30 flex items-center justify-center shadow-inner">
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="w-7 h-7 text-red-300 animate-[popIn_.4s_ease-out]"
+                                    >
+                                        <polyline points="3 6 5 6 21 6" />
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                        <line x1="10" y1="11" x2="10" y2="17" />
+                                        <line x1="14" y1="11" x2="14" y2="17" />
+                                    </svg>
+                                </div>
+                                <div className="min-w-0">
+                                    <h2 className="text-base font-semibold text-white tracking-wide">Eliminar historia</h2>
+                                    <p className="text-[13px] text-white/70 leading-snug mt-1">Esta acción es permanente. No podrás recuperarla.</p>
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2 text-xs font-medium text-white/60 bg-white/5 px-4 py-3 rounded-lg border border-white/10">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                                    <span>No se notificará a otros usuarios.</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse delay-100" />
+                                    <span>Respuestas asociadas podrían perderse.</span>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 justify-end pt-2">
+                                <button
+                                    onClick={cancelDelete}
+                                    disabled={deleting}
+                                    className="px-4 h-10 rounded-lg bg-white/10 hover:bg-white/15 text-white/80 hover:text-white text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >Cancelar</button>
+                                <button
+                                    onClick={confirmDelete}
+                                    disabled={deleting}
+                                    className="relative px-5 h-10 rounded-lg bg-gradient-to-r from-red-500 via-red-500 to-red-600 text-white text-sm font-semibold shadow hover:shadow-red-500/30 hover:brightness-110 active:scale-[.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {deleting && (
+                                        <span className="absolute inset-0 flex items-center justify-center">
+                                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        </span>
+                                    )}
+                                    <span className={deleting ? 'opacity-0' : ''}>Eliminar</span>
+                                </button>
+                            </div>
+                        </div>
+                        <style jsx>{`
+                          @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+                          @keyframes scaleIn { 0% { opacity:0; transform:translateY(14px) scale(.94) } 60% { opacity:1; } 100% { opacity:1; transform:translateY(0) scale(1) } }
+                          @keyframes popIn { 0% { opacity:0; transform:scale(.4) rotate(-10deg) } 60% { opacity:1; transform:scale(1.08) rotate(2deg) } 100% { opacity:1; transform:scale(1) rotate(0) } }
+                        `}</style>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 export default StoryViewerModal;
+
+// Modal de confirmación de eliminación (inline para evitar archivo nuevo si se revertían cambios)
+// Se coloca fuera del componente principal para mantener JSX organizado
+// Render condicional in situ dentro del return principal (seccion superior) sería otra opción.
