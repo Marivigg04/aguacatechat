@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import './index.css'
+import './utils/css/index.css'
 // Initialize Supabase client globally once
 import './services/supabaseClient.js'
 import { AuthProvider } from './context/AuthContext.jsx'

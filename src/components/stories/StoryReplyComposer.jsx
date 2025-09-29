@@ -1,9 +1,15 @@
+
+// Externas
 import React, { useState, useRef, useEffect } from 'react';
 import { PaperAirplaneIcon, PhotoIcon, MicrophoneIcon, XMarkIcon } from '@heroicons/react/24/solid';
-import EmojiPicker from './chat/EmojiPicker';
-import { uploadAudioToBucket, uploadVideoToBucket } from '../services/db';
-import supabase from '../services/supabaseClient';
-import { useAuth } from '../context/AuthContext';
+
+// Componentes internos
+import EmojiPicker from '../chat/EmojiPicker';
+
+// Servicios y hooks
+import { uploadAudioToBucket, uploadVideoToBucket } from '../../services/db';
+import supabase from '../../services/supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 /**
  * StoryReplyComposer
@@ -139,7 +145,7 @@ const StoryReplyComposer = ({ storyOwnerId, storyId, storyData, onClose, onSent,
       // Guardar type='stories' y replyng_to=storyId para poder reconstruir metadata luego (buscando la historia por id)
     const payload = { conversationId, senderId: user.id, content: finalContent, type: 'stories', replyng_to: storyId, _storyMeta: storyMeta };
     // Persistimos story_meta oculto en la fila (nuevo requerimiento)
-    const { insertMessage } = await import('../services/db');
+    const { insertMessage } = await import('../../services/db');
     await insertMessage({ conversationId, senderId: user.id, content: payload.content, type: payload.type, replyng_to: payload.replyng_to, story_meta: storyMeta });
       onSent?.(payload);
       setText('');

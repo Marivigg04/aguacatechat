@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import PasswordReset from '../Login/components/PasswordReset/PasswordReset.jsx';
-import AuthPage from '../Login/pages/AuthPage.jsx';
-import useFadeSwitcher from '../hooks/useFadeSwitcher';
+import PasswordReset from '../../Login/components/PasswordReset/PasswordReset.jsx';
+import AuthPage from '../../Login/pages/AuthPage.jsx';
+import useFadeSwitcher from '../../hooks/useFadeSwitcher.js';
 
 export default function AuthContainer({ onLoginSuccess }) {
   const { fadeState, fadeOutThen } = useFadeSwitcher(350);

@@ -1,15 +1,24 @@
-// React hooks y utilidades en una sola importación
-import './Login/styles/AuthPage.css';
+
+// Externas
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import LoadingScreen from './components/LoadingScreen.jsx';
-import ChatSkeleton from './components/chat/ChatSkeleton.jsx';
-import { withMinDelay } from './utils/withMinDelay.js';
-const AguacateChat = lazy(() => withMinDelay(import('./AguacateChat')));
-const AuthContainer = lazy(() => withMinDelay(import('./components/AuthContainer.jsx')));
+
+// Componentes internos
+import LoadingScreen from './components/loading/LoadingScreen.jsx';
+import ChatSkeleton from './components/skeletons/ChatSkeleton.jsx';
+import ChatShell from './components/chat/ChatShell.jsx';
+
+// Utilidades y hooks
+import { withMinDelay } from './utils/js/withMinDelay.js';
 import { useAuth } from './context/AuthContext.jsx';
 import useAuthDelay from './hooks/useAuthDelay';
-import ChatShell from './components/chat/ChatShell.jsx';
+
+// Lazy imports
+const AguacateChat = lazy(() => withMinDelay(import('./AguacateChat')));
+const AuthContainer = lazy(() => withMinDelay(import('./components/utilscomponents/AuthContainer.jsx')));
+
+// Estilos
+import './Login/styles/AuthPage.css';
 
 function App() {
   // Autenticación derivada del contexto global

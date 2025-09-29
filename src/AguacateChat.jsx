@@ -1,34 +1,53 @@
-import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react'; // (Se mantiene, añadimos lógica extra abajo)
-import SidebarSkeleton from './components/SidebarSkeleton';
-import ChatAreaSkeleton from './components/chat/ChatAreaSkeleton.jsx';
-import LeftToolbarSkeleton from './components/LeftToolbarSkeleton';
-import EmojiPicker from './components/chat/EmojiPicker.jsx';
-import imageCompression from 'browser-image-compression';
+
+// Externas
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import Lottie from 'react-lottie';
-import './AguacateChat.css';
-import MessageRenderer from './components/MessageRenderer.jsx';
-import CenterNoticeBox from './components/CenterNoticeBox.jsx';
-import VideoThumbnail, { VideoModal } from './components/VideoPlayer.jsx';
+import imageCompression from 'browser-image-compression';
+import toast, { Toaster } from 'react-hot-toast';
+
+// Componentes internos
+import SidebarSkeleton from './components/skeletons/SidebarSkeleton';
+import ChatAreaSkeleton from './components/skeletons/ChatAreaSkeleton.jsx';
+import StoriesSkeleton from './components/skeletons/StoriesSkeleton.jsx';
+import LeftToolbarSkeleton from './components/skeletons/LeftToolbarSkeleton';
+import Sidebar from './components/utilscomponents/Sidebar';
+import EmojiPicker from './components/chat/EmojiPicker.jsx';
 import ChatImage from './components/chat/ChatImage.jsx';
 import AudioPlayer from './components/players/AudioPlayer.jsx';
-import MediaGalleryModal from './MediaGalleryModal.jsx';
-import toast, { Toaster } from 'react-hot-toast';
-import StoriesView from './components/StoriesView';
-import StoriesSkeleton from './components/StoriesSkeleton.jsx';
-import Sidebar from './components/Sidebar';
-import ProfileModal from './components/ProfileModal';
-import ConfigModal from './components/ConfigModal';
-import PersonalizationModal from './components/PersonalizationModal';
-import { useAuth } from './context/AuthContext.jsx';
-import supabase from './services/supabaseClient';
-import { createOrGetDirectConversation, fetchUserConversations, insertMessage, fetchMessagesPage, updateTable, uploadAudioToBucket, appendUserToMessageSeen, toggleConversationBlocked, clearChatForUser, fetchLastClearChat, deleteMessageById } from './services/db';
+import MessageRenderer from './components/utilscomponents/MessageRenderer.jsx';
+import CenterNoticeBox from './components/utilscomponents/CenterNoticeBox.jsx';
+import VideoThumbnail, { VideoModal } from './components/utilscomponents/VideoPlayer.jsx';
+import MediaGalleryModal from './components/utilscomponents/MediaGalleryModal.jsx';
+import StoriesView from './components/stories/StoriesView';
+import ProfileModal from './components/config/ProfileModal';
+import ConfigModal from './components/config/ConfigModal';
+import PersonalizationModal from './components/config/PersonalizationModal';
 
-// 1. Importar los archivos de animación desde la carpeta src/animations
+// Contextos y hooks
+import { useAuth } from './context/AuthContext.jsx';
+
+// Servicios
+import supabase from './services/supabaseClient';
+import {
+    createOrGetDirectConversation,
+    fetchUserConversations,
+    insertMessage,
+    fetchMessagesPage,
+    updateTable,
+    uploadAudioToBucket,
+    appendUserToMessageSeen,
+    toggleConversationBlocked,
+    clearChatForUser,
+    fetchLastClearChat,
+    deleteMessageById
+} from './services/db';
+
+// Animaciones y assets
+import animationTrash from './animations/wired-flat-185-trash-bin-hover-pinch.json';
 import animationSearch from './animations/wired-flat-19-magnifier-zoom-search-hover-rotation.json';
 import animationSmile from './animations/wired-flat-261-emoji-smile-hover-smile.json';
 import animationLink from './animations/wired-flat-11-link-unlink-hover-bounce.json';
-import animationShare from './animations/wired-flat-751-share-hover-pointing.json'; 
+import animationShare from './animations/wired-flat-751-share-hover-pointing.json';
 import animationSend from './animations/Paper Plane.json';
 import animationPhoto from './animations/wired-lineal-61-camera-hover-flash.json';
 import animationVideo from './animations/wired-flat-1037-vlog-camera-hover-pinch.json';
@@ -47,6 +66,9 @@ import animationMic from './animations/wired-outline-188-microphone-recording-mo
 import wiredPlusCircle from './animations/wired-outline-49-plus-circle-hover-rotation.json';
 import individualIcon from './animations/Individual.json';
 import teamIcon from './animations/Team.json';
+
+// Estilos
+import './utils/css/AguacateChat.css';
 
 // Funciones para manejar cookies
 const getCookie = (name) => {

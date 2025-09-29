@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import EmojiPicker from './components/chat/EmojiPicker.jsx';
+import EmojiPicker from '../chat/EmojiPicker.jsx';
 
 // Modal simple de vista previa de imagen para historias
 // Props: file (File), onClose(), onSave(file: File)

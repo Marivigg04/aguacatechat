@@ -1,6 +1,10 @@
+
+// Externas
 import React, { useCallback, useEffect, useRef } from 'react';
-import ChatImage from './components/ChatImage.jsx';
-import VideoThumbnail from './components/VideoPlayer.jsx';
+
+// Componentes internos (rutas corregidas)
+import ChatImage from '../chat/ChatImage.jsx';
+import VideoThumbnail from './VideoPlayer.jsx';
 
 /**
  * MediaGalleryModal

@@ -1,19 +1,24 @@
+
+// Externas
 import React, { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
-import StoryViewerModal from './StoryViewerModal'; 
-// Novedad: Se añade la importación del icono que faltaba
-import { ArrowUpTrayIcon } from '@heroicons/react/24/solid'; 
+import { ArrowUpTrayIcon } from '@heroicons/react/24/solid';
 import { PhotoIcon, DocumentTextIcon, UserCircleIcon } from '@heroicons/react/24/outline';
-import UploadTextStoryModal from './UploadTextStoryModal';
-import UploadMediaStoriesModal from './UploadMediaStoriesModal';
+
+// Componentes internos
+import StoriesSkeleton from '../skeletons/StoriesSkeleton.jsx';
+import StoryViewerModal from './StoryViewerModal';
+import UploadTextStoryModal from './UploadTextStoryModal.jsx';
+import UploadMediaStoriesModal from './UploadMediaStoriesModal.jsx';
 import StoryVideoPreviewModal from './StoryVideoPreviewModal';
 import StoryImageEditorModal from './StoryImageEditorModal';
-import supabase from '../services/supabaseClient';
-import { compressImage } from '../utils/compressImage';
-import { useAuth } from '../context/AuthContext.jsx';
-import { fetchUserConversations, selectFrom, uploadVideoToBucket } from '../services/db';
-import StoriesSkeleton from '../components/StoriesSkeleton.jsx';
+
+// Servicios y hooks
+import supabase from '../../services/supabaseClient.js';
+import { compressImage } from '../../utils/js/compressImage.js';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { fetchUserConversations, selectFrom, uploadVideoToBucket } from '../../services/db.js';
 
 // Utilidad para formatear la hora de una historia
 const formatStoryTime = (iso) => {

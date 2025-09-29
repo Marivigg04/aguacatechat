@@ -1,6 +1,10 @@
+
+// Externas
 import React, { useEffect, useState, useRef } from 'react';
-import { VideoModal } from './VideoPlayer.jsx';
-import EmojiPicker from './chat/EmojiPicker.jsx';
+
+// Componentes internos
+import { VideoModal } from '../utilscomponents/VideoPlayer.jsx';
+import EmojiPicker from '../chat/EmojiPicker.jsx';
 
 // Adaptador que reutiliza el mismo modal de reproducción de chat para la previsualización
 // y añade una barra de acciones (Cancelar / Subir) encima de los controles personalizados.

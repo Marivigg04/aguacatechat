@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import ChatSkeleton from './ChatSkeleton.jsx';
+import ChatSkeleton from '../skeletons/ChatSkeleton.jsx';
 
 export default function ChatShell({ children }) {
   return (
