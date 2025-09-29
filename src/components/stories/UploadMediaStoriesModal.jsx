@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const UploadMediaStoriesModal = ({ open, onClose, recentMedia = [], onAddRecentMedia, onSelectMedia }) => {
   const filePickerRef = useRef(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -20,6 +21,48 @@ const UploadMediaStoriesModal = ({ open, onClose, recentMedia = [], onAddRecentM
           <button onClick={onClose} className="p-2 rounded-lg theme-bg-chat hover:opacity-80 transition-opacity" aria-label="Cerrar modal">✕</button>
         </div>
         <div className="p-4 overflow-y-auto">
+          {/* Bloque de ayuda */}
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setShowHelp(h => !h)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl theme-border border theme-bg-chat hover:bg-teal-600/10 transition-colors group"
+              aria-expanded={showHelp}
+            >
+              <span className="flex items-center gap-2 text-sm font-medium tracking-wide theme-text-primary">
+                <svg className={`w-4 h-4 transition-transform ${showHelp ? 'rotate-90' : ''}`} stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+                Cómo usar este selector
+              </span>
+              <span className="text-[11px] uppercase tracking-wide font-semibold px-2 py-1 rounded-md bg-teal-500/15 text-teal-300 group-hover:bg-teal-500/25 transition-colors">{showHelp ? 'Ocultar' : 'Ayuda'}</span>
+            </button>
+            {showHelp && (
+              <div className="mt-3 px-4 py-4 rounded-xl bg-gradient-to-br from-slate-900/70 via-slate-900/60 to-slate-950/70 border border-white/10 shadow-inner text-[13px] leading-relaxed space-y-3 animate-[fadeIn_.35s_ease]">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">1</div>
+                  <p><strong className="text-teal-300 font-semibold">Pulsa "Ver más"</strong> para abrir el explorador de archivos y seleccionar <span className="text-teal-200">imágenes o videos</span> desde tu dispositivo.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">2</div>
+                  <p><strong className="text-teal-300 font-semibold">Haz clic</strong> sobre una miniatura reciente para <span className="text-teal-200">usarla directamente</span> en tu historia.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">3</div>
+                  <p><strong className="text-teal-300 font-semibold">Puedes seleccionar varios</strong> a la vez en el explorador: se añadirán aquí como recientes (no se suben todavía).</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">4</div>
+                  <p>Al confirmar en el paso siguiente podrás <span className="text-teal-200">editar o publicar</span> tu historia con el archivo elegido.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">?</div>
+                  <p>Si algo no carga, intenta volver a pulsar "Ver más" o refrescar la página. Formatos soportados: JPG, PNG, MP4, WebM.</p>
+                </div>
+                <div className="pt-2 text-[11px] text-white/50 border-t border-white/10">Tus archivos no se suben hasta que confirmes la creación de la historia.</div>
+              </div>
+            )}
+          </div>
           <p className="theme-text-secondary text-sm mb-3">Fotos y videos recientes de esta sesión</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
             {/* Ver más */}
