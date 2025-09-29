@@ -2649,11 +2649,12 @@ const AguacateChat = () => {
         setIsSearchingUsers(true);
         const requestId = ++searchReqIdRef.current;
         const timer = setTimeout(async () => {
-            try {
+                try {
+                // Buscar por username O email (coincidencias parciales, insensible a mayúsculas)
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('id, username, avatar_url')
-                    .ilike('username', `%${q}%`)
+                    .select('id, username, avatar_url, email')
+                    .or(`username.ilike.%${q}%,email.ilike.%${q}%`)
                     .limit(15);
                 if (requestId !== searchReqIdRef.current) return; // descartar resultados antiguos
                 if (error) {
@@ -3323,7 +3324,7 @@ const AguacateChat = () => {
                                 <div className="relative">
                                     <button
                                         id="newChatBtn"
-                                        onClick={toggleNewChatMenu}
+                                        onClick={createNewChat}
                                         className={`w-14 h-14 rounded-full shadow-xl hover:shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-105 border-2 ${isDarkMode ? 'bg-[#1a2c3a] border-[#334155]' : 'bg-white border-[#e2e8f0]'} ${!isPlusStopped ? (isDarkMode ? 'bg-[#14b8a6]/80' : 'bg-[#a7f3d0]') : ''}`}
                                         onMouseEnter={() => setPlusStopped(false)}
                                         onMouseLeave={() => setPlusStopped(true)}
@@ -3351,21 +3352,6 @@ const AguacateChat = () => {
                                                     width={28}
                                                 />
                                                 <span>Nuevo Chat</span>
-                                            </span>
-                                        </button>
-                                        <button onClick={createNewGroup} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors">
-                                            <span
-                                                onMouseEnter={() => setTeamStopped(false)}
-                                                onMouseLeave={() => setTeamStopped(true)}
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                                            >
-                                                <Lottie
-                                                    options={teamOptions}
-                                                    isStopped={isTeamStopped}
-                                                    height={28}
-                                                    width={28}
-                                                />
-                                                <span>Nuevo Grupo</span>
                                             </span>
                                         </button>
                                     </div>
@@ -4045,7 +4031,7 @@ const AguacateChat = () => {
                             <div className="flex flex-col gap-3">
                                 <input
                                     type="text"
-                                    placeholder="Buscar por nombre de usuario"
+                                    placeholder="Buscar por nombre de usuario o email"
                                     className="w-full p-3 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
                                     value={searchUserQuery}
                                     onChange={(e) => setSearchUserQuery(e.target.value)}
@@ -4080,6 +4066,9 @@ const AguacateChat = () => {
                                             )}
                                             <div className="flex flex-col">
                                                 <h4 className="font-semibold theme-text-primary">{p.username || 'Usuario'}</h4>
+                                                {p.email && (
+                                                    <span className="text-sm theme-text-secondary">{p.email}</span>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
