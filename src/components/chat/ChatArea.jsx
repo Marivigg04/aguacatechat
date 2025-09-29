@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import CenterNoticeBox from '../common/CenterNoticeBox.jsx';
 import ChatImage from './ChatImage.jsx';
 import VideoThumbnail from '../common/VideoPlayer.jsx';
@@ -59,6 +59,19 @@ const ChatArea = ({
   // usuario actual
   user,
 }) => {
+  // Cerrar menú contextual al hacer click en cualquier parte fuera del menú
+  useEffect(() => {
+    const handleGlobalClick = (e) => {
+      if (messageMenuOpenId == null) return; // nada abierto
+      if (e.target.closest('.message-menu') || e.target.closest('.menu-trigger')) return; // click dentro del menú o disparador
+      try {
+        setMessageMenuOpenId(null);
+        setMessageMenuType(null);
+      } catch {}
+    };
+    document.addEventListener('click', handleGlobalClick);
+    return () => document.removeEventListener('click', handleGlobalClick);
+  }, [messageMenuOpenId, setMessageMenuOpenId, setMessageMenuType]);
   return (
     <div
       id="chatArea"
@@ -359,9 +372,9 @@ const ChatArea = ({
                     )}
                   </div>
                   {/* Botón menú propios */}
-                  {isOwn && (
+          {isOwn && (
                     <button
-                      className="absolute -top-1 -right-0 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none"
+            className="menu-trigger absolute -top-1 -right-0 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none"
                       style={{ background: 'transparent', border: 'none', padding: 0 }}
                       title="Más opciones"
                       onClick={() => {
@@ -382,12 +395,12 @@ const ChatArea = ({
                     </button>
                   )}
                   {/* Menú contextual propios */}
-                  {isOwn && messageMenuOpenId === index && messageMenuType==='own' && (
+      {isOwn && messageMenuOpenId === index && messageMenuType==='own' && (
                     (() => {
                       const isLastOwn = index === chatMessages.length - 1; // última burbuja enviada por el usuario
                       return (
                         <div
-                          className={`absolute w-40 theme-bg-chat theme-border rounded-lg shadow-lg animate-fade-in ${isLastOwn ? 'right-5 bottom-full mb-2' : 'right-5 top-6'} `}
+        className={`message-menu absolute w-40 theme-bg-chat theme-border rounded-lg shadow-lg animate-fade-in ${isLastOwn ? 'right-5 bottom-full mb-2' : 'right-5 top-6'} `}
                           style={{ zIndex: 9999 }}
                         >
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType }); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Responder</button>
@@ -401,7 +414,7 @@ const ChatArea = ({
                   )}
                   {/* Menú contextual recibidos */}
                   {!isOwn && messageMenuOpenId === index && messageMenuType==='received' && (
-                    <div className="absolute left-5 top-6 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in">
+                    <div className="message-menu absolute left-5 top-6 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in" style={{ zIndex: 9999 }}>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType }); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Responder</button>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { try { navigator.clipboard.writeText(message.text || ''); } catch{}; setMessageMenuOpenId(null); setMessageMenuType(null); }}>Copiar</button>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Fijar</button>
