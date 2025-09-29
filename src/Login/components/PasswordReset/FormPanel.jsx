@@ -3,6 +3,7 @@ import { Mail, ChevronRight, ArrowLeft, Check } from 'lucide-react';
 import Lottie from 'react-lottie';
 import LoadingSpinner from '../common/LoadingSpinner'; // Asegúrate de que esta ruta sea correcta
 import { STEPS, CONTACT_METHODS } from '../../utils/constants'; // Asegúrate de que esta ruta sea correcta y los objetos existan
+import { isEmailRegistered, sendPasswordResetEmail } from '../../../services/email';
 import escudoGif from '../../assets/escudo.gif'; // Asegúrate de que esta ruta sea correcta
 import successAnimation from '../../animations/Success.json'; // Asegúrate de que esta ruta sea correcta
 
@@ -27,6 +28,23 @@ const FormPanel = ({
   onNavigateToAuth
 }) => {
   // Password strength states
+  // Email validation state
+  const [isEmailValid, setIsEmailValid] = useState(false);
+  // Email validation function
+  const validateEmail = (email) => {
+    // Regex for email validation with .com, .org, .net, or .ve domain only
+    return /^[^\s@]+@[^\s@]+\.(com|org|net|ve)$/.test(email);
+  };
+
+  // Estado para error de email no registrado
+  const [emailNotFound, setEmailNotFound] = useState(false);
+  // Estado para mensaje general (éxito o error)
+  const [formMessage, setFormMessage] = useState({ type: '', text: '' });
+
+  // Effect to update email validity
+  useEffect(() => {
+    setIsEmailValid(validateEmail(contactValue));
+  }, [contactValue]);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordMatchError, setPasswordMatchError] = useState(false);
@@ -215,20 +233,20 @@ const FormPanel = ({
   const getStepTitle = () => {
     switch (step) {
       case STEPS.CONTACT_METHOD:
-        return "Restablecer Contraseña";
+        return "Recuperar Cuenta";
       case STEPS.VERIFICATION:
         return "Verificar Código";
       case STEPS.NEW_PASSWORD:
         return "Nueva Contraseña";
       default:
-        return "Restablecer Contraseña";
+        return "Recuperar Cuenta";
     }
   };
 
   const getStepDescription = () => {
     switch (step) {
       case STEPS.CONTACT_METHOD:
-        return "Ingresa tu correo electrónico para restablecer tu contraseña";
+        return "Ingresa tu correo electrónico para recuperar tu cuenta";
       case STEPS.VERIFICATION:
         return `Hemos enviado un código a ${contactValue}. Ingresa el código aquí.`;
       case STEPS.NEW_PASSWORD:
@@ -253,14 +271,44 @@ const FormPanel = ({
                 type="email"
                 placeholder="Ingresa tu correo electrónico"
                 value={contactValue}
-                onChange={(e) => setContactValue(e.target.value)}
+                onChange={(e) => {
+                  setContactValue(e.target.value);
+                  setEmailNotFound(false);
+                  setFormMessage({ type: '', text: '' });
+                }}
                 className="input-field-with-icon"
                 required
               />
             </div>
             <button
-              onClick={onSendCode}
-              disabled={!contactValue || isLoading}
+              onClick={async (e) => {
+                e.preventDefault();
+                setEmailNotFound(false);
+                setFormMessage({ type: '', text: '' });
+                try {
+                  const exists = await isEmailRegistered(contactValue);
+                  if (!exists) {
+                    setEmailNotFound(true);
+                    setFormMessage({ type: 'error', text: 'Este correo no está registrado.' });
+                    return;
+                  }
+                  setFormMessage({ type: 'success', text: 'Verifica tu correo para recuperar tu cuenta.' });
+                  // Enviar email de restablecimiento usando Supabase
+                  try {
+                    // Construir redirectTo para volver a la app y abrir el paso 2
+                    const redirectTo = window.location.origin + '/password-reset?step=new-password&email=' + encodeURIComponent(contactValue);
+                    await sendPasswordResetEmail(contactValue, redirectTo);
+                    setFormMessage({ type: 'success', text: 'Correo de restablecimiento enviado. Revisa tu bandeja.' });
+                  } catch (sendErr) {
+                    console.error('Error sending reset email', sendErr);
+                    setFormMessage({ type: 'error', text: 'No se pudo enviar el correo de restablecimiento.' });
+                  }
+                } catch (err) {
+                  setEmailNotFound(true);
+                  setFormMessage({ type: 'error', text: 'Ocurrió un error al verificar el correo.' });
+                }
+              }}
+              disabled={!contactValue || !isEmailValid || isLoading}
               className="btn-primary"
             >
               {isLoading ? (
@@ -272,6 +320,30 @@ const FormPanel = ({
                 </>
               )}
             </button>
+            {/* Mensaje de éxito o error debajo del botón */}
+            {formMessage.text && (
+              <div
+                className={`form-message ${formMessage.type === 'error' ? 'form-message-error' : 'form-message-success'}`}
+                style={{
+                  marginTop: '12px',
+                  padding: '12px 18px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  textAlign: 'center',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  backgroundColor: formMessage.type === 'error' ? '#F87171' : '#4ADE80', // rojo o verde
+                  color: formMessage.type === 'error' ? '#fff' : '#064E3B', // blanco para error, verde oscuro para éxito
+                  maxWidth: '350px',
+                  marginLeft: 'auto',
+                  marginRight: 'auto',
+                  boxShadow: '0 2px 8px 0 rgba(0,0,0,0.07)'
+                }}
+              >
+                {formMessage.text}
+              </div>
+            )}
           </div>
         );
       case STEPS.NEW_PASSWORD:
@@ -325,20 +397,8 @@ const FormPanel = ({
                 className="input-field password-input"
                 required
               />
-              <span
-                className={`password-toggle-icon ${showCheckmark ? 'hidden' : ''}`}
-                onClick={toggleShowConfirmPassword}
-              >
-                <i className={showConfirmPassword ? 'fas fa-eye-slash' : 'fas fa-eye'}></i>
-              </span>
-
-              {/* Password Match Error */}
-              {showMatchErrorDiv && (
-                <p className={`password-error-message ${animateMatchError ? 'active' : ''}`}>
-                  Las contraseñas no coinciden.
-                </p>
-              )}
-
+              
+              {/* Mostrar error de email no registrado debajo del input */}
               {/* Success Checkmark (Muestra Lottie cuando las contraseñas coinciden y no hay error) */}
               {showCheckmark && (
                 <div className="checkmark-icon-container">
