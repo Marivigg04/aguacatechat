@@ -309,14 +309,9 @@ const ProfileModal = ({
                 <div className="p-6 theme-border border-b flex items-center justify-between relative">
                     <h3 className="text-xl font-bold theme-text-primary">{contactProfile ? 'Perfil del contacto' : 'Perfil'}</h3>
                     <button
+                        className="ml-4 p-2 rounded-full transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 theme-bg-chat"
                         onClick={handleCloseModal}
-                        className={`
-                            ml-4 w-10 h-10 rounded-full flex items-center justify-center
-                            transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
-                            theme-bg-chat ring-1 ring-white/10 hover:ring-white/20
-                        `}
                         title="Cerrar modal"
-                        style={{ zIndex: 10 }}
                     >
                         <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                     </button>
@@ -774,14 +769,9 @@ const ProfileModal = ({
                         <div className="p-4 theme-border border-b flex items-center justify-between">
                             <h3 className="text-lg font-bold theme-text-primary">Cambiar contraseña</h3>
                             <button
+                                className="ml-4 p-2 rounded-full transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 theme-bg-chat"
                                 onClick={() => setShowEditPasswordModal(false)}
-                                className={`
-                                    ml-4 w-10 h-10 rounded-full flex items-center justify-center
-                                    transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
-                                    theme-bg-chat ring-1 ring-white/10 hover:ring-white/20
-                                `}
                                 title="Cerrar modal"
-                                style={{ zIndex: 10 }}
                             >
                                 <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                             </button>
