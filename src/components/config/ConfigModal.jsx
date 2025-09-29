@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import ToggleSwitch from '../utilscomponents/ToggleSwitch';
+import ToggleSwitch from '../common/ToggleSwitch';
 import {
     BellIcon,
     LockClosedIcon,

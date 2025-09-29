@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 
 // Componentes internos
-import { VideoModal } from '../utilscomponents/VideoPlayer.jsx';
+import { VideoModal } from '../common/VideoPlayer.jsx';
 import EmojiPicker from '../chat/EmojiPicker.jsx';
 
 // Adaptador que reutiliza el mismo modal de reproducción de chat para la previsualización

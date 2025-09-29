@@ -15,7 +15,7 @@ import useAuthDelay from './hooks/useAuthDelay';
 
 // Lazy imports
 const AguacateChat = lazy(() => withMinDelay(import('./AguacateChat')));
-const AuthContainer = lazy(() => withMinDelay(import('./components/utilscomponents/AuthContainer.jsx')));
+const AuthContainer = lazy(() => withMinDelay(import('./components/common/AuthContainer.jsx')));
 
 // Estilos
 import './Login/styles/AuthPage.css';
