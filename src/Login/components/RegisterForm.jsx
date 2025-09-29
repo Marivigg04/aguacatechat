@@ -5,6 +5,7 @@ import registerAnimation from '../animations/Register.json'; // Asegúrate de qu
 import successAnimation from '../animations/Success.json'; // Asegúrate de que esta ruta y nombre de archivo sean correctos (case-sensitive)
 import { auth } from '../../services/db';
 import { supabase } from '../../services/supabaseClient';
+import getPasswordStrengthInfo from '../../utils/passwordStrength';
 
 const RegisterForm = () => {
   const [fullName, setFullName] = useState('');
@@ -60,37 +61,7 @@ const RegisterForm = () => {
     }
   };
 
-  const getPasswordStrengthInfo = (pwd) => {
-    let strength = 0;
-    let text = '';
-    let level = 'none';
-
-    if (pwd.length === 0) {
-      return { text: '', level: 'none' };
-    }
-
-    strength = 1;
-    if (pwd.length >= 6) strength++;
-    if (pwd.length >= 8 && /[A-Z]/.test(pwd)) strength++;
-    if (pwd.length >= 10 && /[0-9]/.test(pwd)) strength++;
-    if (pwd.length >= 12 && /[^A-Za-z0-9]/.test(pwd)) strength++;
-
-    if (strength === 1) {
-      text = 'Débil';
-      level = 'low';
-    } else if (strength === 2) {
-      text = 'Normal';
-      level = 'medium';
-    } else if (strength === 3) {
-      text = 'Fuerte';
-      level = 'strong';
-    } else if (strength >= 4) {
-      text = 'Muy Fuerte';
-      level = 'very-strong';
-    }
-
-    return { text, level };
-  };
+  // password strength logic moved to src/utils/passwordStrength.js
 
   const handlePasswordChange = (e) => {
     const newPassword = e.target.value;

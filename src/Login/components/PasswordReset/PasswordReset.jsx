@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FormPanel from './FormPanel';
 import AnimatedPanel from '../../pages/AnimatedPanel';
 import { STEPS, CONTACT_METHODS } from '../../utils/constants';
 import '../../styles/PasswordReset.css';
 
-const PasswordReset = ({ onNavigateToAuth }) => {
+const PasswordReset = ({ onNavigateToAuth, initialStepName = null, initialEmail = null }) => {
   const [step, setStep] = useState(STEPS.CONTACT_METHOD);
   const [contactMethod, setContactMethod] = useState(CONTACT_METHODS.EMAIL);
   const [contactValue, setContactValue] = useState('');
@@ -12,6 +12,28 @@ const PasswordReset = ({ onNavigateToAuth }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // If the component receives initial params (from redirect), apply them on mount
+  useEffect(() => {
+    if (initialStepName === 'new-password') {
+      setStep(STEPS.NEW_PASSWORD);
+    }
+    if (initialEmail) {
+      setContactValue(initialEmail);
+    }
+  }, [initialStepName, initialEmail]);
+
+  // Show a friendly message if the user landed here via the reset email
+  const [showCloseTabMessage, setShowCloseTabMessage] = useState(false);
+  useEffect(() => {
+    if (initialStepName === 'new-password' || initialEmail) {
+      // Show the message for the user to close the tab — keeps it visible briefly
+      setShowCloseTabMessage(true);
+      // Optionally hide after a while (e.g., 10s)
+      const t = setTimeout(() => setShowCloseTabMessage(false), 10000);
+      return () => clearTimeout(t);
+    }
+  }, [initialStepName, initialEmail]);
 
   const handleSendCode = () => {
     if (!contactValue) return;
@@ -100,6 +122,13 @@ const PasswordReset = ({ onNavigateToAuth }) => {
 
   return (
       <div className="main-card">
+        {showCloseTabMessage && (
+          <div style={{ width: '100%', display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+            <div style={{ background: '#4ADE80', color: '#064E3B', padding: '8px 12px', borderRadius: 8, fontWeight: 600 }}>
+              Ahora puede cerrar esta pestaña
+            </div>
+          </div>
+        )}
         <div className="panels-container">
           {/* Panel del Formulario - Ahora a la izquierda */}
           <FormPanel

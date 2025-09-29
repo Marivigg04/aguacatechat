@@ -4,6 +4,7 @@ import { FaEye, FaEyeSlash, FaPen } from 'react-icons/fa';
 import { supabase } from '../../services/supabaseClient.js';
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useNavigate } from 'react-router-dom'
+import getPasswordStrengthInfo from '../../utils/passwordStrength';
 
 const ProfileModal = ({
     showProfileModal,
@@ -50,6 +51,7 @@ const ProfileModal = ({
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
 
     // Estado para controlar animaciones de salida
     const [isClosing, setIsClosing] = useState(false);
@@ -307,14 +309,9 @@ const ProfileModal = ({
                 <div className="p-6 theme-border border-b flex items-center justify-between relative">
                     <h3 className="text-xl font-bold theme-text-primary">{contactProfile ? 'Perfil del contacto' : 'Perfil'}</h3>
                     <button
+                        className="ml-4 p-2 rounded-full transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 theme-bg-chat"
                         onClick={handleCloseModal}
-                        className={`
-                            ml-4 w-10 h-10 rounded-full flex items-center justify-center
-                            transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
-                            theme-bg-chat ring-1 ring-white/10 hover:ring-white/20
-                        `}
                         title="Cerrar modal"
-                        style={{ zIndex: 10 }}
                     >
                         <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                     </button>
@@ -772,22 +769,19 @@ const ProfileModal = ({
                         <div className="p-4 theme-border border-b flex items-center justify-between">
                             <h3 className="text-lg font-bold theme-text-primary">Cambiar contraseña</h3>
                             <button
+                                className="ml-4 p-2 rounded-full transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 theme-bg-chat"
                                 onClick={() => setShowEditPasswordModal(false)}
-                                className={`
-                                    ml-4 w-10 h-10 rounded-full flex items-center justify-center
-                                    transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
-                                    theme-bg-chat ring-1 ring-white/10 hover:ring-white/20
-                                `}
                                 title="Cerrar modal"
-                                style={{ zIndex: 10 }}
                             >
                                 <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                             </button>
                         </div>
                         <form
                             className="flex flex-col gap-3 p-4"
-                            onSubmit={e => {
+                            onSubmit={async e => {
                                 e.preventDefault();
+                                if (changingPassword) return;
+                                // Basic length checks
                                 if (
                                     newPassword.length < 8 ||
                                     newPassword.length > 32 ||
@@ -797,14 +791,79 @@ const ProfileModal = ({
                                     alert('La contraseña debe tener entre 8 y 32 caracteres');
                                     return;
                                 }
-                                if (newPassword && newPassword === confirmPassword) {
-                                    alert('Contraseña cambiada correctamente');
+
+                                const { level } = getPasswordStrengthInfo(newPassword);
+                                if (level !== 'very-strong') {
+                                    alert('La nueva contraseña debe ser Muy Fuerte');
+                                    return;
+                                }
+
+                                if (!currentPassword) {
+                                    alert('Introduce la contraseña actual para confirmar');
+                                    return;
+                                }
+
+                                if (newPassword !== confirmPassword) {
+                                    alert('Las contraseñas no coinciden');
+                                    return;
+                                }
+
+                                setChangingPassword(true);
+                                try {
+                                    // Obtener email del usuario (desde contexto o desde supabase)
+                                    let email = user?.email;
+                                    if (!email) {
+                                        try {
+                                            const { data: userData } = await supabase.auth.getUser();
+                                            email = userData?.user?.email;
+                                        } catch (err) {
+                                            // ignore, will fail on signIn
+                                        }
+                                    }
+
+                                    if (!email) {
+                                        alert('No se pudo obtener el correo del usuario. Vuelve a iniciar sesión.');
+                                        return;
+                                    }
+
+                                    // Re-autenticar: intentar iniciar sesión con las credenciales actuales
+                                    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                                        email,
+                                        password: currentPassword
+                                    });
+
+                                    if (signInError || !signInData?.session) {
+                                        // Contraseña actual incorrecta
+                                        if (window.toast) window.toast.error('Contraseña actual incorrecta');
+                                        else {
+                                            try { const { default: toast } = await import('react-hot-toast'); toast.error('Contraseña actual incorrecta'); } catch {}
+                                        }
+                                        return;
+                                    }
+
+                                    // Ahora actualizar la contraseña del usuario autenticado
+                                    const { data: updateData, error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+                                    if (updateError) {
+                                        console.error('Error actualizando contraseña:', updateError);
+                                        if (window.toast) window.toast.error('Error al actualizar la contraseña');
+                                        else { try { const { default: toast } = await import('react-hot-toast'); toast.error('Error al actualizar la contraseña'); } catch {} }
+                                        return;
+                                    }
+
+                                    if (window.toast) window.toast.success('Contraseña actualizada');
+                                    else { try { const { default: toast } = await import('react-hot-toast'); toast.success('Contraseña actualizada'); } catch {} }
+
+                                    // Limpiar estados y cerrar modal
                                     setCurrentPassword('');
                                     setNewPassword('');
                                     setConfirmPassword('');
                                     setShowEditPasswordModal(false);
-                                } else {
-                                    alert('Las contraseñas no coinciden');
+                                } catch (err) {
+                                    console.error('Error en proceso de cambio de contraseña:', err);
+                                    if (window.toast) window.toast.error('Ocurrió un error. Intenta de nuevo.');
+                                    else { try { const { default: toast } = await import('react-hot-toast'); toast.error('Ocurrió un error. Intenta de nuevo.'); } catch {} }
+                                } finally {
+                                    setChangingPassword(false);
                                 }
                             }}
                         >
@@ -854,6 +913,20 @@ const ProfileModal = ({
                                 >
                                     {showNewPassword ? <FaEyeSlash /> : <FaEye />}
                                 </button>
+                                {/* Mostrar feedback de fortaleza inline */}
+                                <div className="text-xs mt-1 select-none">
+                                    {(() => {
+                                        const info = getPasswordStrengthInfo(newPassword);
+                                        if (info.level === 'none') return null;
+                                        const classMap = {
+                                            'low': 'text-red-500',
+                                            'medium': 'text-yellow-500',
+                                            'strong': 'text-green-500',
+                                            'very-strong': 'text-blue-500'
+                                        };
+                                        return (<div className={`${classMap[info.level] || 'text-gray-500'} font-medium`}>{info.text}</div>);
+                                    })()}
+                                </div>
                             </div>
                             <div className="relative">
                                 <input

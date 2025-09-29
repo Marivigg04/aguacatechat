@@ -1,11 +1,11 @@
 export const ANIMATION_CONTENTS = [
   {
     title: "Seguridad Garantizada",
-    desc: "Tu información está protegida con encriptación de nivel bancario"
+    desc: "Tu información está protegida"
   },
   {
     title: "Acceso Inmediato",
-    desc: "Restablece tu contraseña sin esperar códigos de verificación"
+    desc: "Recupera tu cuenta rápidamente"
   },
   {
     title: "Recuperación por Email",
@@ -13,7 +13,7 @@ export const ANIMATION_CONTENTS = [
   },
   {
     title: "Proceso Sencillo",
-    desc: "Restablece tu contraseña en solo 2 pasos"
+    desc: "Recupera tu cuenta en solo 2 pasos"
   }
 ];
 

@@ -152,6 +152,8 @@ const AguacateChat = () => {
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     // Animación modal de adjuntos
     const [isAttachClosing, setIsAttachClosing] = useState(false);
+    // Ayuda modal adjuntos
+    const [showAttachHelp, setShowAttachHelp] = useState(false);
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     // Datos del perfil de contacto (si se abre modal desde header de chat)
@@ -490,6 +492,48 @@ const AguacateChat = () => {
 
     // --- Sonidos y Notificaciones ---
     const NOTIFICATION_SETTINGS_KEY = 'aguacatechat_notifications_v1';
+    const MUTED_CONVS_KEY = 'aguacatechat_muted_convs_v1';
+    const loadMutedConversations = () => {
+        try {
+            const raw = localStorage.getItem(MUTED_CONVS_KEY);
+            if (!raw) return new Set();
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return new Set(parsed.map(v => String(v)));
+        } catch (e) {
+            /* ignore */
+        }
+        return new Set();
+    };
+    const saveMutedConversations = (set) => {
+        try { localStorage.setItem(MUTED_CONVS_KEY, JSON.stringify(Array.from(set))); } catch {}
+    };
+    const mutedConversationsRef = useRef(loadMutedConversations());
+    // small state to force re-render if UI needs to reflect mute change
+    const [mutedRenderTick, setMutedRenderTick] = useState(0);
+    const isConversationMuted = (conversationId) => {
+        try { return !!conversationId && mutedConversationsRef.current.has(String(conversationId)); } catch { return false; }
+    };
+    const toggleMuteConversation = (conversationId) => {
+        if (!conversationId) return false;
+        try {
+            const key = String(conversationId);
+            const s = new Set(mutedConversationsRef.current);
+            let mutedNow;
+            if (s.has(key)) {
+                s.delete(key);
+                mutedNow = false;
+                toast.success('Notificaciones activadas.');
+            } else {
+                s.add(key);
+                mutedNow = true;
+                toast.success('Notificaciones silenciadas.');
+            }
+            mutedConversationsRef.current = s;
+            saveMutedConversations(s);
+            setMutedRenderTick(t => t + 1);
+            return mutedNow;
+        } catch (e) { return false; }
+    };
     const loadNotificationSettings = () => {
         try {
             const raw = localStorage.getItem(NOTIFICATION_SETTINGS_KEY);
@@ -559,7 +603,9 @@ const AguacateChat = () => {
             return audioCtxRef.current;
         } catch { return null; }
     };
-    const playNotificationSound = () => {
+    const playNotificationSound = (conversationId) => {
+        // If conversation is muted, skip sound
+        if (conversationId && isConversationMuted(conversationId)) return;
         const settings = notificationSettingsRef.current;
         if (!settings?.all) return; // notificaciones desactivadas
         if (!settings?.sound) return; // sonido desactivado
@@ -610,6 +656,8 @@ const AguacateChat = () => {
         const settings = notificationSettingsRef.current;
         if (!settings?.all) return; // no mostrar si está desactivado
         if (!('Notification' in window)) return;
+        // If conversation muted, skip browser notification
+        if (conversationId && isConversationMuted(conversationId)) return;
         // No mostrar si pestaña visible y ventana enfocada
         if (document.visibilityState === 'visible' && document.hasFocus()) return;
         const granted = await requestNotificationPermissionIfNeeded();
@@ -628,7 +676,7 @@ const AguacateChat = () => {
             n.close();
         };
         // Sonido
-    playNotificationSound();
+        playNotificationSound(conversationId);
     };
 
     // Estados para animación del pin
@@ -1149,21 +1197,41 @@ const AguacateChat = () => {
             const prevHeight = prevScrollHeightRef.current || 0;
             const prevTop = prevScrollTopRef.current || 0;
             const delta = el.scrollHeight - prevHeight;
-            el.scrollTop = delta + prevTop;
+            // Desactivar temporalmente scroll-behavior (smooth) para que el ajuste sea instantáneo
+            // y no se vea un salto o animación al insertar mensajes arriba.
+            const prevScrollBehavior = el.style.scrollBehavior;
+            try {
+                el.style.scrollBehavior = 'auto';
+                el.scrollTop = delta + prevTop;
+            } finally {
+                // Restaurar el comportamiento de scroll en el siguiente frame.
+                requestAnimationFrame(() => {
+                    try { el.style.scrollBehavior = prevScrollBehavior || ''; } catch (e) {}
+                });
+            }
             pendingPrependRef.current = false;
             prevScrollHeightRef.current = 0;
             prevScrollTopRef.current = 0;
         } else if (jumpToBottomImmediateRef.current) {
             // Si acabamos de abrir la conversación, saltar inmediatamente al fondo (sin animación)
-            try { el.scrollTop = el.scrollHeight; } catch (e) { /* fall back silencioso */ }
+            try {
+                const prevSB = el.style.scrollBehavior;
+                el.style.scrollBehavior = 'auto';
+                el.scrollTop = el.scrollHeight;
+                requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+            } catch (e) { /* fall back silencioso */ }
             jumpToBottomImmediateRef.current = false;
             shouldScrollToBottomRef.current = false;
         } else if (shouldScrollToBottomRef.current || stickToBottomRef.current) {
             try {
                 if (typeof el.scrollTo === 'function') {
+                    // prefer smooth scroll when intentionally scrolling to bottom
                     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
                 } else {
+                    const prevSB = el.style.scrollBehavior;
+                    el.style.scrollBehavior = 'auto';
                     el.scrollTop = el.scrollHeight;
+                    requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
                 }
             } catch (e) {
                 el.scrollTop = el.scrollHeight;
@@ -1292,14 +1360,14 @@ const AguacateChat = () => {
                                             didIncrementUnread = true;
                                             console.log('[unread] inc conv', m.conversation_id, 'prev', prevVal, 'now', map[m.conversation_id]);
                                             // Sonido + notificación
-                                            playNotificationSound();
+                                            playNotificationSound(m.conversation_id);
                                             let snippet = label || '';
                                             if (typeof snippet === 'string' && snippet.length > 60) snippet = snippet.slice(0,57) + '…';
                                             const contactName = c?.otherProfile?.username || 'Nuevo mensaje';
                                             showBrowserNotification({ conversationId: m.conversation_id, contactName, body: snippet, isNewChat: prevVal === 0 });
                                         } else if (isActive && !document.hasFocus()) {
                                             // Chat abierto pero ventana no enfocada -> sonido único
-                                            playNotificationSound();
+                                            playNotificationSound(m.conversation_id);
                                         }
                                     }
                                     return {
@@ -2629,11 +2697,12 @@ const AguacateChat = () => {
         setIsSearchingUsers(true);
         const requestId = ++searchReqIdRef.current;
         const timer = setTimeout(async () => {
-            try {
+                try {
+                // Buscar por username O email (coincidencias parciales, insensible a mayúsculas)
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('id, username, avatar_url')
-                    .ilike('username', `%${q}%`)
+                    .select('id, username, avatar_url, email')
+                    .or(`username.ilike.%${q}%,email.ilike.%${q}%`)
                     .limit(15);
                 if (requestId !== searchReqIdRef.current) return; // descartar resultados antiguos
                 if (error) {
@@ -2942,8 +3011,13 @@ const AguacateChat = () => {
                     }, 240);
                 };
 
-                // Scroll inmediato al fondo
-                try { el.scrollTop = el.scrollHeight; } catch (e) {}
+                // Scroll inmediato al fondo (forzar sin smooth para evitar animación inesperada)
+                try {
+                    const prevSB = el.style.scrollBehavior;
+                    el.style.scrollBehavior = 'auto';
+                    el.scrollTop = el.scrollHeight;
+                    requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+                } catch (e) {}
 
                 let lastHeight = el.scrollHeight;
                 let lastChangeAt = Date.now();
@@ -2973,7 +3047,17 @@ const AguacateChat = () => {
 
                 // Intervalo que intenta scrollear y comprueba estabilidad
                 intervalId = setInterval(() => {
-                    try { el.scrollTop = el.scrollHeight; } catch (e) {}
+                    try {
+                        // intentar mantener abajo; forzar sin smooth si no hay scrollTo
+                        if (typeof el.scrollTo === 'function') {
+                            el.scrollTo({ top: el.scrollHeight });
+                        } else {
+                            const prevSB = el.style.scrollBehavior;
+                            el.style.scrollBehavior = 'auto';
+                            el.scrollTop = el.scrollHeight;
+                            requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+                        }
+                    } catch (e) {}
                     const now = Date.now();
                     const currentHeight = el.scrollHeight;
                     const atBottom = Math.abs((el.scrollTop + el.clientHeight) - el.scrollHeight) <= 2;
@@ -3142,7 +3226,17 @@ const AguacateChat = () => {
                                                     )}
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex justify-between items-center">
-                                                            <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                                            <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'} flex items-center gap-2`}> 
+                                                                <span className="truncate">{contact.name}</span>
+                                                                {isConversationMuted(contact.conversationId) && (
+                                                                    <svg className="w-4 h-4 opacity-80 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                                        <path d="M13.73 21a2 2 0 01-3.46 0" />
+                                                                        <path d="M18.63 13A17.89 17.89 0 0118 8" />
+                                                                        <path d="M6.88 6.88A6 6 0 0112 4v0a6 6 0 016 6v3l1 1H5l1-1V12a6 6 0 01.88-2.12" />
+                                                                        <line x1="1" y1="1" x2="23" y2="23" />
+                                                                    </svg>
+                                                                )}
+                                                            </p>
                                                             <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
                                                         </div>
                                                         <div className="flex justify-between items-center mt-1">
@@ -3224,7 +3318,17 @@ const AguacateChat = () => {
                                         )}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-center">
-                                                <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                                <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'} flex items-center gap-2`}>
+                                                    <span className="truncate">{contact.name}</span>
+                                                    {isConversationMuted(contact.conversationId) && (
+                                                        <svg className="w-4 h-4 opacity-80 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                            <path d="M13.73 21a2 2 0 01-3.46 0" />
+                                                            <path d="M18.63 13A17.89 17.89 0 0118 8" />
+                                                            <path d="M6.88 6.88A6 6 0 0112 4v0a6 6 0 016 6v3l1 1H5l1-1V12a6 6 0 01.88-2.12" />
+                                                            <line x1="1" y1="1" x2="23" y2="23" />
+                                                        </svg>
+                                                    )}
+                                                </p>
                                                 <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
                                             </div>
                                             <div className="flex justify-between items-center mt-1">
@@ -3288,7 +3392,7 @@ const AguacateChat = () => {
                                 <div className="relative">
                                     <button
                                         id="newChatBtn"
-                                        onClick={toggleNewChatMenu}
+                                        onClick={createNewChat}
                                         className={`w-14 h-14 rounded-full shadow-xl hover:shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-105 border-2 ${isDarkMode ? 'bg-[#1a2c3a] border-[#334155]' : 'bg-white border-[#e2e8f0]'} ${!isPlusStopped ? (isDarkMode ? 'bg-[#14b8a6]/80' : 'bg-[#a7f3d0]') : ''}`}
                                         onMouseEnter={() => setPlusStopped(false)}
                                         onMouseLeave={() => setPlusStopped(true)}
@@ -3316,21 +3420,6 @@ const AguacateChat = () => {
                                                     width={28}
                                                 />
                                                 <span>Nuevo Chat</span>
-                                            </span>
-                                        </button>
-                                        <button onClick={createNewGroup} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors">
-                                            <span
-                                                onMouseEnter={() => setTeamStopped(false)}
-                                                onMouseLeave={() => setTeamStopped(true)}
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                                            >
-                                                <Lottie
-                                                    options={teamOptions}
-                                                    isStopped={isTeamStopped}
-                                                    height={28}
-                                                    width={28}
-                                                />
-                                                <span>Nuevo Grupo</span>
                                             </span>
                                         </button>
                                     </div>
@@ -3454,7 +3543,7 @@ const AguacateChat = () => {
                                         </div>
                                         <span>Limpiar chat</span>
                                     </button>
-                                    <button onClick={() => { toast.success('Notificaciones silenciadas.'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
+                                    <button onClick={() => { toggleMuteConversation(selectedContact?.conversationId); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setMuteStopped(true);
                                             setTimeout(() => {
@@ -3472,7 +3561,7 @@ const AguacateChat = () => {
                                                 height={24} width={24}
                                             />
                                         </div>
-                                        <span>Silenciar notificaciones</span>
+                                        <span>{isConversationMuted(selectedContact?.conversationId) ? 'Activar notificaciones' : 'Silenciar notificaciones'}</span>
                                     </button>
                                     <button
                                         onClick={async () => { await handleToggleConversationBlocked(); toggleChatOptions(); }}
@@ -3495,28 +3584,6 @@ const AguacateChat = () => {
                                             />
                                         </div>
                                         <span>Bloquear</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colores flex items-center gap-2"
-                                        onMouseEnter={() => {
-                                            setInformationStopped(true);
-                                            setTimeout(() => {
-                                                setInformationStopped(false);
-                                                setInformationPaused(false);
-                                            }, 10);
-                                        }}
-                                        onMouseLeave={() => setInformationPaused(true)}
-                                    >
-                                        <div className="w-5 h-5">
-                                            <Lottie 
-                                                options={lottieOptions.information} 
-                                                isPaused={isInformationPaused} 
-                                                isStopped={isInformationStopped} 
-                                                height={24} width={24} 
-                                            />
-                                        </div>
-                                        <span>Ver información</span>
                                     </button>
                                 </div>
                             </div>
@@ -3630,6 +3697,48 @@ const AguacateChat = () => {
                                         </button>
                                     </div>
                                     <div className="p-4 overflow-y-auto">
+                                        {/* Bloque ayuda adjuntos */}
+                                        <div className="mb-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAttachHelp(h => !h)}
+                                                className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl theme-border border theme-bg-chat hover:bg-teal-600/10 transition-colors group"
+                                                aria-expanded={showAttachHelp}
+                                            >
+                                                <span className="flex items-center gap-2 text-sm font-medium tracking-wide theme-text-primary">
+                                                    <svg className={`w-4 h-4 transition-transform ${showAttachHelp ? 'rotate-90' : ''}`} stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                                                        <path d="M9 18l6-6-6-6" />
+                                                    </svg>
+                                                    Cómo usar este selector
+                                                </span>
+                                                <span className="text-[11px] uppercase tracking-wide font-semibold px-2 py-1 rounded-md bg-teal-500/15 text-teal-300 group-hover:bg-teal-500/25 transition-colors">{showAttachHelp ? 'Ocultar' : 'Ayuda'}</span>
+                                            </button>
+                                            {showAttachHelp && (
+                                                <div className="mt-3 px-4 py-4 rounded-xl bg-gradient-to-br from-slate-900/70 via-slate-900/60 to-slate-950/70 border border-white/10 shadow-inner text-[13px] leading-relaxed space-y-3 animate-[fadeIn_.35s_ease]">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">1</div>
+                                                        <p><strong className="text-teal-300 font-semibold">Pulsa "Ver más"</strong> para abrir tu explorador y elegir <span className="text-teal-200">imágenes o videos</span>.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">2</div>
+                                                        <p><strong className="text-teal-300 font-semibold">Haz clic</strong> en una miniatura reciente para <span className="text-teal-200">enviarla directamente</span> al chat.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">3</div>
+                                                        <p><strong className="text-teal-300 font-semibold">Selecciona varios archivos</strong> en el cuadro de diálogo (se irán agregando como recientes).</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">4</div>
+                                                        <p>Si es un <span className="text-teal-200">video grande</span>, espera a que se procese; se enviará tras subirse.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">?</div>
+                                                        <p>Formatos recomendados: JPG, PNG, MP4, WebM. Si algo no aparece, vuelve a pulsar "Ver más".</p>
+                                                    </div>
+                                                    <div className="pt-2 text-[11px] text-white/50 border-t border-white/10">Los elementos recientes viven sólo esta sesión.</div>
+                                                </div>
+                                            )}
+                                        </div>
                                         <p className="theme-text-secondary text-sm mb-3">Fotos y videos recientes de esta sesión</p>
                                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                                             {/* Ver más (siempre a la izquierda) */}
@@ -4010,7 +4119,7 @@ const AguacateChat = () => {
                             <div className="flex flex-col gap-3">
                                 <input
                                     type="text"
-                                    placeholder="Buscar por nombre de usuario"
+                                    placeholder="Buscar por nombre de usuario o email"
                                     className="w-full p-3 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
                                     value={searchUserQuery}
                                     onChange={(e) => setSearchUserQuery(e.target.value)}
@@ -4045,6 +4154,9 @@ const AguacateChat = () => {
                                             )}
                                             <div className="flex flex-col">
                                                 <h4 className="font-semibold theme-text-primary">{p.username || 'Usuario'}</h4>
+                                                {p.email && (
+                                                    <span className="text-sm theme-text-secondary">{p.email}</span>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -4065,7 +4177,17 @@ const AguacateChat = () => {
                                         <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
                                             {contact.initials}
                                         </div>
-                                        <h4 className="font-semibold theme-text-primary">{contact.name}</h4>
+                                        <h4 className="font-semibold theme-text-primary flex items-center gap-2">
+                                            <span className="truncate">{contact.name}</span>
+                                            {isConversationMuted(contact.conversationId) && (
+                                                <svg className="w-4 h-4 opacity-80 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                    <path d="M13.73 21a2 2 0 01-3.46 0" />
+                                                    <path d="M18.63 13A17.89 17.89 0 0118 8" />
+                                                    <path d="M6.88 6.88A6 6 0 0112 4v0a6 6 0 016 6v3l1 1H5l1-1V12a6 6 0 01.88-2.12" />
+                                                    <line x1="1" y1="1" x2="23" y2="23" />
+                                                </svg>
+                                            )}
+                                        </h4>
                                     </div>
                                 ))}
                             </div>
