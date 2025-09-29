@@ -2947,310 +2947,333 @@ const AguacateChat = () => {
 
     // Nota: en vez de hacer early return, mostraremos un overlay mientras carga para permitir el fade-out sobre el contenido ya montado.
 
+    // --- UX móvil: si estamos en móvil y NO hay contacto seleccionado, asegurar que la barra de contactos esté visible ---
+    useEffect(() => {
+        if (isMobile && !selectedContact) {
+            // Garantizar que la barra (lista de chats) no esté cerrada manualmente
+            setIsSidebarOpen(true);
+        }
+    }, [isMobile, selectedContact]);
+
+    const isFullScreenContacts = isMobile && !selectedContact; // estado full screen para móvil sin chat
+
     return (
         <div className="flex h-screen overflow-hidden">
             {/* Componente para mostrar las notificaciones */}
             <Toaster position="top-center" reverseOrder={false} />
 
-            {/* Sidebar */}
-            <Sidebar
-                showSideMenu={showSideMenu}
-                setShowSideMenu={setShowSideMenu}
-                setShowProfileModal={setShowProfileModal}
-                setShowConfigModal={setShowConfigModal}
-                setShowPersonalizationModal={setShowPersonalizationModal}
-                lottieOptions={lottieOptions}
-                isProfilePaused={isProfilePaused}
-                setProfilePaused={setProfilePaused}
-                isProfileStopped={isProfileStopped}
-                setProfileStopped={setProfileStopped}
-                isConfigPaused={isConfigPaused}
-                setConfigPaused={setConfigPaused}
-                isConfigStopped={isConfigStopped}
-                setConfigStopped={setConfigStopped}
-                currentView={currentView}
-                onViewChange={handleViewChange}
-            />
-            {/* Sidebar de contactos e Historias */}
-            {currentView === 'chats' ? (
-                loadingChatsSidebar ? (
-                    <SidebarSkeleton />
-                ) : (
-                <div id="sidebar" className={`sidebar w-80 theme-bg-secondary theme-border border-r flex flex-col md:relative absolute z-20 h-full ${isSidebarOpen ? 'open' : ''}`}>
-                    <div className="p-4 theme-border border-b">
-                        <div className="flex items-center justify-between mb-4">
-                            <h1 className="text-xl font-bold theme-text-primary">AguacaChat</h1>
-                            <div className="flex items-center gap-2">
-                                <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
-                                    ✕
-                                </button>
+            {/* Sidebar de navegación vertical: se oculta en móvil cuando la lista de contactos está full screen */}
+            {!isFullScreenContacts && (
+                <Sidebar
+                    showSideMenu={showSideMenu}
+                    setShowSideMenu={setShowSideMenu}
+                    setShowProfileModal={setShowProfileModal}
+                    setShowConfigModal={setShowConfigModal}
+                    setShowPersonalizationModal={setShowPersonalizationModal}
+                    lottieOptions={lottieOptions}
+                    isProfilePaused={isProfilePaused}
+                    setProfilePaused={setProfilePaused}
+                    isProfileStopped={isProfileStopped}
+                    setProfileStopped={setProfileStopped}
+                    isConfigPaused={isConfigPaused}
+                    setConfigPaused={setConfigPaused}
+                    isConfigStopped={isConfigStopped}
+                    setConfigStopped={setConfigStopped}
+                    currentView={currentView}
+                    onViewChange={handleViewChange}
+                />
+            )}
+            {/* Sidebar de contactos e Historias: se oculta en móvil si hay un chat seleccionado */}
+            {!(isMobile && selectedContact) && (
+                currentView === 'chats' ? (
+                    loadingChatsSidebar ? (
+                        <SidebarSkeleton />
+                    ) : (
+                    <div
+                        id="sidebar"
+                        className={`sidebar theme-bg-secondary theme-border flex flex-col h-full 
+                            ${isFullScreenContacts
+                                ? 'w-full inset-0 absolute z-30 border-0'
+                                : 'w-80 md:relative absolute z-20 border-r'}
+                            ${isSidebarOpen ? 'open' : ''}`}
+                    >
+                        <div className="p-4 theme-border border-b">
+                            <div className="flex items-center justify-between mb-4">
+                                <h1 className="text-xl font-bold theme-text-primary">AguacaChat</h1>
+                                <div className="flex items-center gap-2">
+                                    {!isFullScreenContacts && (
+                                        <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
+                                        ✕
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="relative">
+                                <input
+                                    id="searchInput"
+                                    type="text"
+                                    placeholder="Buscar conversaciones..."
+                                    className="w-full p-3 pl-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                                {/* 4. REEMPLAZO DEL ICONO DE BÚSQUEDA */}
+                                <div className="absolute left-2 top-1/2 transform -translate-y-1/2 pointer-events-none w-6 h-6">
+                                    <Lottie options={lottieOptions.search} isPaused={isSearchPaused} isStopped={isSearchStopped} />
+                                </div>
                             </div>
                         </div>
-                        <div className="relative">
-                            <input
-                                id="searchInput"
-                                type="text"
-                                placeholder="Buscar conversaciones..."
-                                className="w-full p-3 pl-10 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                            {/* 4. REEMPLAZO DEL ICONO DE BÚSQUEDA */}
-                            <div className="absolute left-2 top-1/2 transform -translate-y-1/2 pointer-events-none w-6 h-6">
-                                <Lottie options={lottieOptions.search} isPaused={isSearchPaused} isStopped={isSearchStopped} />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto relative" style={{ backgroundColor: 'var(--bg-contacts)' }}>
-                        {/* Sección plegable de Solicitudes de chat */}
-                        {filteredChatRequestContacts.length > 0 && (
-                            <div className="theme-border border-b">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowChatRequests(v => !v)}
-                                    className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium theme-text-primary hover:theme-bg-chat transition-colors"
-                                    aria-expanded={showChatRequests}
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <span className="inline-block px-2 py-0.5 text-[11px] rounded bg-teal-600/20 text-teal-400 font-semibold tracking-wide">Solicitudes de chat</span>
-                                        <span className="text-xs theme-text-secondary">{filteredChatRequestContacts.length}</span>
-                                    </span>
-                                    <svg
-                                        className={`w-4 h-4 transition-transform duration-200 ${showChatRequests ? 'rotate-180' : ''}`}
-                                        fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"
+                        <div className="flex-1 overflow-y-auto relative" style={{ backgroundColor: 'var(--bg-contacts)' }}>
+                            {/* Sección plegable de Solicitudes de chat */}
+                            {filteredChatRequestContacts.length > 0 && (
+                                <div className="theme-border border-b">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowChatRequests(v => !v)}
+                                        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium theme-text-primary hover:theme-bg-chat transition-colors"
+                                        aria-expanded={showChatRequests}
                                     >
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-                                <div className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${showChatRequests ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                    {showChatRequests && filteredChatRequestContacts.map((contact, index) => (
-                                        <div
-                                            key={`req-${index}`}
-                                            className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-t theme-border ${selectedContact?.conversationId === contact.conversationId ? 'theme-bg-chat pointer-events-none' : ''}`}
-                                            onClick={() => handleSelectContact(contact)}
-                                            aria-current={selectedContact?.conversationId === contact.conversationId ? 'true' : undefined}
-                                            role="button"
+                                        <span className="flex items-center gap-2">
+                                            <span className="inline-block px-2 py-0.5 text-[11px] rounded bg-teal-600/20 text-teal-400 font-semibold tracking-wide">Solicitudes de chat</span>
+                                            <span className="text-xs theme-text-secondary">{filteredChatRequestContacts.length}</span>
+                                        </span>
+                                        <svg
+                                            className={`w-4 h-4 transition-transform duration-200 ${showChatRequests ? 'rotate-180' : ''}`}
+                                            fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"
                                         >
-                                            <div className="flex items-center gap-3">
-                                                {contact?.avatar_url ? (
-                                                    <img src={contact.avatar_url} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
-                                                ) : (
-                                                    <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
-                                                        <svg className="w-12 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
-                                                        </svg>
-                                                    </div>
-                                                )}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex justify-between items-center">
-                                                        <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
-                                                        <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
-                                                    </div>
-                                                    <div className="flex justify-between items-center mt-1">
-                                                        <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
-                                                            {contact.lastMessageType === 'image' ? (
-                                                                <>
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
-                                                                        <path d="M4 5a2 2 0 012-2h2.172a2 2 0 001.414-.586l.828-.828A2 2 0 0111.828 1h.344a2 2 0 011.414.586l.828.828A2 2 0 0015.828 3H18a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v12h12V5H6zm6 3a4 4 0 110 8 4 4 0 010-8z" />
-                                                                    </svg>
-                                                                    <span>Foto</span>
-                                                                </>
-                                                            ) : contact.lastMessageType === 'audio' ? (
-                                                                <>
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
-                                                                        <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zM11 19.93V22h2v-2.07A8.001 8.001 0 0020 12h-2a6 6 0 11-12 0H4a8.001 8.001 0 007 7.93z" />
-                                                                    </svg>
-                                                                    <span>
-                                                                        {(() => {
-                                                                            const secs = audioPreviewDurations[contact.lastMessageId];
-                                                                            return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
-                                                                        })()}
-                                                                    </span>
-                                                                </>
-                                                            ) : contact.lastMessageType === 'video' ? (
-                                                                <>
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4 opacity-70">
-                                                                        <path d="M17 10.5V6a2 2 0 00-2-2H5C3.895 4 3 4.895 3 6v12c0 1.105.895 2 2 2h10a2 2 0 002-2v-4.5l4 4v-11l-4 4z" />
-                                                                    </svg>
-                                                                    <span>Video</span>
-                                                                </>
-                                                            ) : (
-                                                                        <>
-                                                                            {contact.lastMessage}
-                                                                            {contact.lastMessageSeen && (
-                                                                                <span className="ml-2 inline-flex items-center flex-shrink-0" title="Visto">
-                                                                                    {contact.avatar_url ? (
-                                                                                        <img src={contact.avatar_url} alt="Visto" className="w-4 h-4 rounded-full object-cover" onError={(e)=>{ e.currentTarget.style.display = 'none'; }} />
-                                                                                    ) : (
-                                                                                        <div className="w-4 h-4 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary flex items-center justify-center text-white text-[10px] font-bold">
-                                                                                            {String(contact.initials || '').slice(0,2) || '•'}
-                                                                                        </div>
-                                                                                    )}
-                                                                                </span>
-                                                                            )}
-                                                                        </>
-                                                            )}
-                                                        </p>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+                                    <div className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${showChatRequests ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                        {showChatRequests && filteredChatRequestContacts.map((contact, index) => (
+                                            <div
+                                                key={`req-${index}`}
+                                                className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-t theme-border ${selectedContact?.conversationId === contact.conversationId ? 'theme-bg-chat pointer-events-none' : ''}`}
+                                                onClick={() => handleSelectContact(contact)}
+                                                aria-current={selectedContact?.conversationId === contact.conversationId ? 'true' : undefined}
+                                                role="button"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    {contact?.avatar_url ? (
+                                                        <img src={contact.avatar_url} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
+                                                    ) : (
+                                                        <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
+                                                            <svg className="w-12 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                                            </svg>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-center">
+                                                            <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                                            <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
+                                                        </div>
+                                                        <div className="flex justify-between items-center mt-1">
+                                                            <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
+                                                                {contact.lastMessageType === 'image' ? (
+                                                                    <>
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                                            <path d="M4 5a2 2 0 012-2h2.172a2 2 0 001.414-.586l.828-.828A2 2 0 0111.828 1h.344a2 2 0 011.414.586l.828.828A2 2 0 0015.828 3H18a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v12h12V5H6zm6 3a4 4 0 110 8 4 4 0 010-8z" />
+                                                                        </svg>
+                                                                        <span>Foto</span>
+                                                                    </>
+                                                                ) : contact.lastMessageType === 'audio' ? (
+                                                                    <>
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                                            <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zM11 19.93V22h2v-2.07A8.001 8.001 0 0020 12h-2a6 6 0 11-12 0H4a8.001 8.001 0 007 7.93z" />
+                                                                        </svg>
+                                                                        <span>
+                                                                            {(() => {
+                                                                                const secs = audioPreviewDurations[contact.lastMessageId];
+                                                                                return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
+                                                                            })()}
+                                                                        </span>
+                                                                    </>
+                                                                ) : contact.lastMessageType === 'video' ? (
+                                                                    <>
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4 opacity-70">
+                                                                            <path d="M17 10.5V6a2 2 0 00-2-2H5C3.895 4 3 4.895 3 6v12c0 1.105.895 2 2 2h10a2 2 0 002-2v-4.5l4 4v-11l-4 4z" />
+                                                                        </svg>
+                                                                        <span>Video</span>
+                                                                    </>
+                                                                ) : (
+                                                                            <>
+                                                                                {contact.lastMessage}
+                                                                                {contact.lastMessageSeen && (
+                                                                                    <span className="ml-2 inline-flex items-center flex-shrink-0" title="Visto">
+                                                                                        {contact.avatar_url ? (
+                                                                                            <img src={contact.avatar_url} alt="Visto" className="w-4 h-4 rounded-full object-cover" onError={(e)=>{ e.currentTarget.style.display = 'none'; }} />
+                                                                                        ) : (
+                                                                                            <div className="w-4 h-4 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary flex items-center justify-center text-white text-[10px] font-bold">
+                                                                                                {String(contact.initials || '').slice(0,2) || '•'}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </span>
+                                                                                )}
+                                                                            </>
+                                                                )}
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        {contacts.length === 0 && !loadingConversations && (
-                            <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-4">
-                                <p className="theme-text-secondary">No tienes conversaciones todavía.</p>
-                                <button onClick={createNewChat} className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white hover:opacity-90 transition-opacity">Crear nueva conversación</button>
-                            </div>
-                        )}
-                        {filteredContacts.map((contact, index) => (
-                            <div
-                                key={index}
-                                className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact?.conversationId === contact.conversationId || (selectedContact?.name === contact.name && !contact.conversationId) ? 'theme-bg-chat pointer-events-none' : ''}`}
-                                onClick={() => handleSelectContact(contact)}
-                                aria-current={selectedContact?.conversationId === contact.conversationId ? 'true' : undefined}
-                                role="button"
-                            >
-                                <div className="flex items-center gap-3">
-                                    {contact?.avatar_url ? (
-                                        <img src={contact.avatar_url} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
-                                    ) : (
-                                        <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
-                                            <svg className="w-12 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
-                                            </svg>
-                                        </div>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-center">
-                                            <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
-                                            <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
-                                        </div>
-                                        <div className="flex justify-between items-center mt-1">
-                                            <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
-                                                {contact.lastMessageType === 'image' ? (
-                                                    <>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
-                                                            <path d="M4 5a2 2 0 012-2h2.172a2 2 0 001.414-.586l.828-.828A2 2 0 0111.828 1h.344a2 2 0 011.414.586l.828.828A2 2 0 0015.828 3H18a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v12h12V5H6zm6 3a4 4 0 110 8 4 4 0 010-8z" />
-                                                        </svg>
-                                                        <span>Foto</span>
-                                                    </>
-                                                ) : contact.lastMessageType === 'audio' ? (
-                                                    <>
-                                                        {/* Icono de micrófono */}
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
-                                                            <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zM11 19.93V22h2v-2.07A8.001 8.001 0 0020 12h-2a6 6 0 11-12 0H4a8.001 8.001 0 007 7.93z" />
-                                                        </svg>
-                                                        <span>
-                                                            {(() => {
-                                                                const secs = audioPreviewDurations[contact.lastMessageId];
-                                                                return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
-                                                            })()}
-                                                        </span>
-                                                    </>
-                                                ) : contact.lastMessageType === 'video' ? (
-                                                    <>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4 opacity-70">
-                                                            <path d="M17 10.5V6a2 2 0 00-2-2H5C3.895 4 3 4.895 3 6v12c0 1.105.895 2 2 2h10a2 2 0 002-2v-4.5l4 4v-11l-4 4z" />
-                                                        </svg>
-                                                        <span>Video</span>
-                                                    </>
-                                                ) : (
+                            )}
+                            {contacts.length === 0 && !loadingConversations && (
+                                <div className="h-full flex flex-col items-center justify-center text-center px-6 gap-4">
+                                    <p className="theme-text-secondary">No tienes conversaciones todavía.</p>
+                                    <button onClick={createNewChat} className="px-4 py-2 rounded-lg bg-gradient-to-r from-teal-primary to-teal-secondary text-white hover:opacity-90 transition-opacity">Crear nueva conversación</button>
+                                </div>
+                            )}
+                            {filteredContacts.map((contact, index) => (
+                                <div
+                                    key={index}
+                                    className={`contact-item p-4 hover:theme-bg-chat cursor-pointer transition-colors border-b theme-border ${selectedContact?.conversationId === contact.conversationId || (selectedContact?.name === contact.name && !contact.conversationId) ? 'theme-bg-chat pointer-events-none' : ''}`}
+                                    onClick={() => handleSelectContact(contact)}
+                                    aria-current={selectedContact?.conversationId === contact.conversationId ? 'true' : undefined}
+                                    role="button"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        {contact?.avatar_url ? (
+                                            <img src={contact.avatar_url} alt={contact.name} className="w-12 h-12 rounded-full object-cover" />
+                                        ) : (
+                                            <div className="w-12 h-12 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center">
+                                                <svg className="w-12 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                                                </svg>
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-center">
+                                                <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                                <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
+                                            </div>
+                                            <div className="flex justify-between items-center mt-1">
+                                                <p className={`text-sm truncate ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} flex items-center gap-1`}>
+                                                    {contact.lastMessageType === 'image' ? (
                                                         <>
-                                                            {contact.lastMessage}
-                                                            {contact.lastMessageSeen && (
-                                                                <span className="ml-2 inline-flex items-center flex-shrink-0" title="Visto">
-                                                                    {contact.avatar_url ? (
-                                                                        <img src={contact.avatar_url} alt="Visto" className="w-4 h-4 rounded-full object-cover" onError={(e)=>{ e.currentTarget.style.display = 'none'; }} />
-                                                                    ) : (
-                                                                        <div className="w-4 h-4 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary flex items-center justify-center text-white text-[10px] font-bold">
-                                                                            {String(contact.initials || '').slice(0,2) || '•'}
-                                                                        </div>
-                                                                    )}
-                                                                </span>
-                                                            )}
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                                <path d="M4 5a2 2 0 012-2h2.172a2 2 0 001.414-.586l.828-.828A2 2 0 0111.828 1h.344a2 2 0 011.414.586l.828.828A2 2 0 0015.828 3H18a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2 0v12h12V5H6zm6 3a4 4 0 110 8 4 4 0 010-8z" />
+                                                            </svg>
+                                                            <span>Foto</span>
                                                         </>
+                                                    ) : contact.lastMessageType === 'audio' ? (
+                                                        <>
+                                                            {/* Icono de micrófono */}
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 opacity-70">
+                                                                <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zM11 19.93V22h2v-2.07A8.001 8.001 0 0020 12h-2a6 6 0 11-12 0H4a8.001 8.001 0 007 7.93z" />
+                                                            </svg>
+                                                            <span>
+                                                                {(() => {
+                                                                    const secs = audioPreviewDurations[contact.lastMessageId];
+                                                                    return typeof secs === 'number' ? formatSeconds(secs) : 'Audio';
+                                                                })()}
+                                                            </span>
+                                                        </>
+                                                    ) : contact.lastMessageType === 'video' ? (
+                                                        <>
+                                                            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" className="w-4 h-4 opacity-70">
+                                                                <path d="M17 10.5V6a2 2 0 00-2-2H5C3.895 4 3 4.895 3 6v12c0 1.105.895 2 2 2h10a2 2 0 002-2v-4.5l4 4v-11l-4 4z" />
+                                                            </svg>
+                                                            <span>Video</span>
+                                                        </>
+                                                    ) : (
+                                                            <>
+                                                                {contact.lastMessage}
+                                                                {contact.lastMessageSeen && (
+                                                                    <span className="ml-2 inline-flex items-center flex-shrink-0" title="Visto">
+                                                                        {contact.avatar_url ? (
+                                                                            <img src={contact.avatar_url} alt="Visto" className="w-4 h-4 rounded-full object-cover" onError={(e)=>{ e.currentTarget.style.display = 'none'; }} />
+                                                                        ) : (
+                                                                            <div className="w-4 h-4 rounded-full bg-gradient-to-br from-teal-primary to-teal-secondary flex items-center justify-center text-white text-[10px] font-bold">
+                                                                                {String(contact.initials || '').slice(0,2) || '•'}
+                                                                            </div>
+                                                                        )}
+                                                                    </span>
+                                                                )}
+                                                            </>
+                                                    )}
+                                                </p>
+                                                {contact.unread > 0 && (
+                                                    <span className="bg-teal-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                                        {contact.unread}
+                                                    </span>
                                                 )}
-                                            </p>
-                                            {contact.unread > 0 && (
-                                                <span className="bg-teal-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                                                    {contact.unread}
-                                                </span>
-                                            )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
 
-                        <div className="absolute bottom-6 right-6">
-                            <div className="relative">
-                                <button
-                                    id="newChatBtn"
-                                    onClick={toggleNewChatMenu}
-                                    className={`w-14 h-14 rounded-full shadow-xl hover:shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-105 border-2 ${isDarkMode ? 'bg-[#1a2c3a] border-[#334155]' : 'bg-white border-[#e2e8f0]'} ${!isPlusStopped ? (isDarkMode ? 'bg-[#14b8a6]/80' : 'bg-[#a7f3d0]') : ''}`}
-                                    onMouseEnter={() => setPlusStopped(false)}
-                                    onMouseLeave={() => setPlusStopped(true)}
-                                    aria-label="Nuevo chat"
-                                    style={{ boxShadow: isDarkMode ? '0 6px 24px 0 rgba(20,184,166,0.25), 0 1.5px 6px 0 rgba(0,0,0,0.18)' : '0 6px 24px 0 rgba(20,184,166,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' }}
-                                >
-                                    <Lottie
-                                        options={plusOptions}
-                                        isStopped={isPlusStopped}
-                                        height={44}
-                                        width={44}
-                                    />
-                                </button>
-                                <div id="newChatMenu" className={`absolute right-0 bottom-16 w-48 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showNewChatMenu ? '' : 'hidden'}`}>
-                                    <button onClick={createNewChat} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors">
-                                        <span
-                                            onMouseEnter={() => setIndividualStopped(false)}
-                                            onMouseLeave={() => setIndividualStopped(true)}
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                                        >
-                                            <Lottie
-                                                options={individualOptions}
-                                                isStopped={isIndividualStopped}
-                                                height={28}
-                                                width={28}
-                                            />
-                                            <span>Nuevo Chat</span>
-                                        </span>
+                            <div className="absolute bottom-6 right-6">
+                                <div className="relative">
+                                    <button
+                                        id="newChatBtn"
+                                        onClick={toggleNewChatMenu}
+                                        className={`w-14 h-14 rounded-full shadow-xl hover:shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-105 border-2 ${isDarkMode ? 'bg-[#1a2c3a] border-[#334155]' : 'bg-white border-[#e2e8f0]'} ${!isPlusStopped ? (isDarkMode ? 'bg-[#14b8a6]/80' : 'bg-[#a7f3d0]') : ''}`}
+                                        onMouseEnter={() => setPlusStopped(false)}
+                                        onMouseLeave={() => setPlusStopped(true)}
+                                        aria-label="Nuevo chat"
+                                        style={{ boxShadow: isDarkMode ? '0 6px 24px 0 rgba(20,184,166,0.25), 0 1.5px 6px 0 rgba(0,0,0,0.18)' : '0 6px 24px 0 rgba(20,184,166,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10)' }}
+                                    >
+                                        <Lottie
+                                            options={plusOptions}
+                                            isStopped={isPlusStopped}
+                                            height={44}
+                                            width={44}
+                                        />
                                     </button>
-                                    <button onClick={createNewGroup} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors">
-                                        <span
-                                            onMouseEnter={() => setTeamStopped(false)}
-                                            onMouseLeave={() => setTeamStopped(true)}
-                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                                        >
-                                            <Lottie
-                                                options={teamOptions}
-                                                isStopped={isTeamStopped}
-                                                height={28}
-                                                width={28}
-                                            />
-                                            <span>Nuevo Grupo</span>
-                                        </span>
-                                    </button>
+                                    <div id="newChatMenu" className={`absolute right-0 bottom-16 w-48 theme-bg-chat rounded-lg shadow-2xl border theme-border z-30 ${showNewChatMenu ? '' : 'hidden'}`}>
+                                        <button onClick={createNewChat} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors">
+                                            <span
+                                                onMouseEnter={() => setIndividualStopped(false)}
+                                                onMouseLeave={() => setIndividualStopped(true)}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                                            >
+                                                <Lottie
+                                                    options={individualOptions}
+                                                    isStopped={isIndividualStopped}
+                                                    height={28}
+                                                    width={28}
+                                                />
+                                                <span>Nuevo Chat</span>
+                                            </span>
+                                        </button>
+                                        <button onClick={createNewGroup} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors">
+                                            <span
+                                                onMouseEnter={() => setTeamStopped(false)}
+                                                onMouseLeave={() => setTeamStopped(true)}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+                                            >
+                                                <Lottie
+                                                    options={teamOptions}
+                                                    isStopped={isTeamStopped}
+                                                    height={28}
+                                                    width={28}
+                                                />
+                                                <span>Nuevo Grupo</span>
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
+                            {showNewChatMenu && (
+                                <div className="fixed inset-0 z-20" onClick={() => setShowNewChatMenu(false)} />
+                            )}
                         </div>
-                        {showNewChatMenu && (
-                            <div className="fixed inset-0 z-20" onClick={() => setShowNewChatMenu(false)} />
-                        )}
                     </div>
-                </div>
+                    )
+                ) : (
+                    <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
+                        {loadingStories ? <StoriesSkeleton /> : <StoriesView ref={storiesViewRef} />}
+                    </div>
                 )
-            ) : (
-                <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
-                    {loadingStories ? <StoriesSkeleton /> : <StoriesView ref={storiesViewRef} />}
-                </div>
             )}
 
-            {/* Área principal del chat. En móvil, se oculta si no hay un chat seleccionado. */}
-            <div className={`flex-1 flex-col relative ${isMobile && !selectedContact ? 'hidden' : 'flex'}`}>
+            {/* Área principal del chat. En móvil, ocupa toda la pantalla si hay un chat seleccionado. */}
+            <div className={`flex-1 flex-col relative ${isMobile && selectedContact ? 'w-full h-full' : (isMobile ? 'hidden' : 'flex')}`}>
                 {/* Header del área principal: solo cuando hay chat seleccionado */}
                 {selectedContact && (
                         <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
