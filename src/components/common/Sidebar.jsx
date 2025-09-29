@@ -143,6 +143,7 @@ const Sidebar = ({
         } else {
             // Abrir menú
             setShowSideMenu(true);
+            try { console.log('[AguacateChat] Menú extendido abierto (toggle)'); } catch {}
         }
     };
 
@@ -153,6 +154,25 @@ const Sidebar = ({
             setIsAnimating(false);
         }, 300);
     };
+
+    // Permitir que otros componentes (ej: botón móvil en la lista de contactos) abran el menú extendido vía evento
+    useEffect(() => {
+        const openHandler = () => {
+            setShowSideMenu(true);
+            setIsAnimating(false);
+            try { console.log('[AguacateChat] Menú extendido abierto (evento global)'); } catch {}
+        };
+        const toggleHandler = () => {
+            try { console.log('[AguacateChat] Toggle menú extendido (evento global)'); } catch {}
+            handleMenuToggle();
+        };
+        window.addEventListener('aguacatechat:open-menu', openHandler);
+        window.addEventListener('aguacatechat:toggle-menu', toggleHandler);
+        return () => {
+            window.removeEventListener('aguacatechat:open-menu', openHandler);
+            window.removeEventListener('aguacatechat:toggle-menu', toggleHandler);
+        };
+    }, [setShowSideMenu]);
 
     // Evita re-disparar un cambio si la vista ya está seleccionada
     const handleViewChange = (view, options = { closeMenuIfOpen: false }) => {

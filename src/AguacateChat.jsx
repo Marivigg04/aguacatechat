@@ -2962,27 +2962,25 @@ const AguacateChat = () => {
             {/* Componente para mostrar las notificaciones */}
             <Toaster position="top-center" reverseOrder={false} />
 
-            {/* Sidebar de navegación vertical: se oculta en móvil cuando la lista de contactos está full screen */}
-            {!isFullScreenContacts && (
-                <Sidebar
-                    showSideMenu={showSideMenu}
-                    setShowSideMenu={setShowSideMenu}
-                    setShowProfileModal={setShowProfileModal}
-                    setShowConfigModal={setShowConfigModal}
-                    setShowPersonalizationModal={setShowPersonalizationModal}
-                    lottieOptions={lottieOptions}
-                    isProfilePaused={isProfilePaused}
-                    setProfilePaused={setProfilePaused}
-                    isProfileStopped={isProfileStopped}
-                    setProfileStopped={setProfileStopped}
-                    isConfigPaused={isConfigPaused}
-                    setConfigPaused={setConfigPaused}
-                    isConfigStopped={isConfigStopped}
-                    setConfigStopped={setConfigStopped}
-                    currentView={currentView}
-                    onViewChange={handleViewChange}
-                />
-            )}
+            {/* Sidebar siempre montada para garantizar listeners y poder abrir menú extendido */}
+            <Sidebar
+                showSideMenu={showSideMenu}
+                setShowSideMenu={setShowSideMenu}
+                setShowProfileModal={setShowProfileModal}
+                setShowConfigModal={setShowConfigModal}
+                setShowPersonalizationModal={setShowPersonalizationModal}
+                lottieOptions={lottieOptions}
+                isProfilePaused={isProfilePaused}
+                setProfilePaused={setProfilePaused}
+                isProfileStopped={isProfileStopped}
+                setProfileStopped={setProfileStopped}
+                isConfigPaused={isConfigPaused}
+                setConfigPaused={setConfigPaused}
+                isConfigStopped={isConfigStopped}
+                setConfigStopped={setConfigStopped}
+                currentView={currentView}
+                onViewChange={handleViewChange}
+            />
             {/* Sidebar de contactos e Historias: se oculta en móvil si hay un chat seleccionado */}
             {!(isMobile && selectedContact) && (
                 currentView === 'chats' ? (
@@ -3001,6 +2999,25 @@ const AguacateChat = () => {
                             <div className="flex items-center justify-between mb-4">
                                 <h1 className="text-xl font-bold theme-text-primary">AguacaChat</h1>
                                 <div className="flex items-center gap-2">
+                                    {/* Botón móvil para abrir el menú extendido (misma función que el primer botón de la barra lateral) */}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            try { console.log('[AguacateChat] Click botón móvil menú'); } catch {}
+                                            window.dispatchEvent(new Event('aguacatechat:toggle-menu'));
+                                        }}
+                                        className="md:hidden p-2 rounded-lg theme-bg-chat hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-teal-primary flex items-center justify-center"
+                                        aria-label="Abrir menú"
+                                        title="Abrir menú"
+                                    >
+                                        <svg viewBox="0 0 48 48" width="24" height="24" className="stroke-current" preserveAspectRatio="xMidYMid slice">
+                                            <g transform="translate(9,12.5)">
+                                                <path d="M1 1 H29" strokeWidth="2" strokeLinecap="round" className="theme-text-primary" />
+                                                <path d="M1 11.5 H29" strokeWidth="2" strokeLinecap="round" className="theme-text-primary" />
+                                                <path d="M1 22 H29" strokeWidth="2" strokeLinecap="round" className="theme-text-primary" />
+                                            </g>
+                                        </svg>
+                                    </button>
                                     {!isFullScreenContacts && (
                                         <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
                                         ✕
