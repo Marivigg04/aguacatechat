@@ -2962,26 +2962,28 @@ const AguacateChat = () => {
             {/* Componente para mostrar las notificaciones */}
             <Toaster position="top-center" reverseOrder={false} />
 
-            {/* Sidebar siempre montada para garantizar listeners y poder abrir menú extendido */}
-            <Sidebar
-                showSideMenu={showSideMenu}
-                setShowSideMenu={setShowSideMenu}
-                setShowProfileModal={setShowProfileModal}
-                setShowConfigModal={setShowConfigModal}
-                setShowPersonalizationModal={setShowPersonalizationModal}
-                lottieOptions={lottieOptions}
-                isProfilePaused={isProfilePaused}
-                setProfilePaused={setProfilePaused}
-                isProfileStopped={isProfileStopped}
-                setProfileStopped={setProfileStopped}
-                isConfigPaused={isConfigPaused}
-                setConfigPaused={setConfigPaused}
-                isConfigStopped={isConfigStopped}
-                setConfigStopped={setConfigStopped}
-                currentView={currentView}
-                onViewChange={handleViewChange}
-                compactInvisible={isMobile}
-            />
+            {/* Sidebar compacto (iconos verticales). En móvil se oculta totalmente cuando hay un chat seleccionado */}
+            {!(isMobile && selectedContact) && (
+                <Sidebar
+                    showSideMenu={showSideMenu}
+                    setShowSideMenu={setShowSideMenu}
+                    setShowProfileModal={setShowProfileModal}
+                    setShowConfigModal={setShowConfigModal}
+                    setShowPersonalizationModal={setShowPersonalizationModal}
+                    lottieOptions={lottieOptions}
+                    isProfilePaused={isProfilePaused}
+                    setProfilePaused={setProfilePaused}
+                    isProfileStopped={isProfileStopped}
+                    setProfileStopped={setProfileStopped}
+                    isConfigPaused={isConfigPaused}
+                    setConfigPaused={setConfigPaused}
+                    isConfigStopped={isConfigStopped}
+                    setConfigStopped={setConfigStopped}
+                    currentView={currentView}
+                    onViewChange={handleViewChange}
+                    compactInvisible={isMobile && !selectedContact}
+                />
+            )}
             {/* Sidebar de contactos e Historias: se oculta en móvil si hay un chat seleccionado */}
             {!(isMobile && selectedContact) && (
                 currentView === 'chats' ? (
