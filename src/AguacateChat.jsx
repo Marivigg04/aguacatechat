@@ -492,6 +492,48 @@ const AguacateChat = () => {
 
     // --- Sonidos y Notificaciones ---
     const NOTIFICATION_SETTINGS_KEY = 'aguacatechat_notifications_v1';
+    const MUTED_CONVS_KEY = 'aguacatechat_muted_convs_v1';
+    const loadMutedConversations = () => {
+        try {
+            const raw = localStorage.getItem(MUTED_CONVS_KEY);
+            if (!raw) return new Set();
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return new Set(parsed.map(v => String(v)));
+        } catch (e) {
+            /* ignore */
+        }
+        return new Set();
+    };
+    const saveMutedConversations = (set) => {
+        try { localStorage.setItem(MUTED_CONVS_KEY, JSON.stringify(Array.from(set))); } catch {}
+    };
+    const mutedConversationsRef = useRef(loadMutedConversations());
+    // small state to force re-render if UI needs to reflect mute change
+    const [mutedRenderTick, setMutedRenderTick] = useState(0);
+    const isConversationMuted = (conversationId) => {
+        try { return !!conversationId && mutedConversationsRef.current.has(String(conversationId)); } catch { return false; }
+    };
+    const toggleMuteConversation = (conversationId) => {
+        if (!conversationId) return false;
+        try {
+            const key = String(conversationId);
+            const s = new Set(mutedConversationsRef.current);
+            let mutedNow;
+            if (s.has(key)) {
+                s.delete(key);
+                mutedNow = false;
+                toast.success('Notificaciones activadas.');
+            } else {
+                s.add(key);
+                mutedNow = true;
+                toast.success('Notificaciones silenciadas.');
+            }
+            mutedConversationsRef.current = s;
+            saveMutedConversations(s);
+            setMutedRenderTick(t => t + 1);
+            return mutedNow;
+        } catch (e) { return false; }
+    };
     const loadNotificationSettings = () => {
         try {
             const raw = localStorage.getItem(NOTIFICATION_SETTINGS_KEY);
@@ -561,7 +603,9 @@ const AguacateChat = () => {
             return audioCtxRef.current;
         } catch { return null; }
     };
-    const playNotificationSound = () => {
+    const playNotificationSound = (conversationId) => {
+        // If conversation is muted, skip sound
+        if (conversationId && isConversationMuted(conversationId)) return;
         const settings = notificationSettingsRef.current;
         if (!settings?.all) return; // notificaciones desactivadas
         if (!settings?.sound) return; // sonido desactivado
@@ -612,6 +656,8 @@ const AguacateChat = () => {
         const settings = notificationSettingsRef.current;
         if (!settings?.all) return; // no mostrar si está desactivado
         if (!('Notification' in window)) return;
+        // If conversation muted, skip browser notification
+        if (conversationId && isConversationMuted(conversationId)) return;
         // No mostrar si pestaña visible y ventana enfocada
         if (document.visibilityState === 'visible' && document.hasFocus()) return;
         const granted = await requestNotificationPermissionIfNeeded();
@@ -630,7 +676,7 @@ const AguacateChat = () => {
             n.close();
         };
         // Sonido
-    playNotificationSound();
+        playNotificationSound(conversationId);
     };
 
     // Estados para animación del pin
@@ -1314,14 +1360,14 @@ const AguacateChat = () => {
                                             didIncrementUnread = true;
                                             console.log('[unread] inc conv', m.conversation_id, 'prev', prevVal, 'now', map[m.conversation_id]);
                                             // Sonido + notificación
-                                            playNotificationSound();
+                                            playNotificationSound(m.conversation_id);
                                             let snippet = label || '';
                                             if (typeof snippet === 'string' && snippet.length > 60) snippet = snippet.slice(0,57) + '…';
                                             const contactName = c?.otherProfile?.username || 'Nuevo mensaje';
                                             showBrowserNotification({ conversationId: m.conversation_id, contactName, body: snippet, isNewChat: prevVal === 0 });
                                         } else if (isActive && !document.hasFocus()) {
                                             // Chat abierto pero ventana no enfocada -> sonido único
-                                            playNotificationSound();
+                                            playNotificationSound(m.conversation_id);
                                         }
                                     }
                                     return {
@@ -3180,7 +3226,17 @@ const AguacateChat = () => {
                                                     )}
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex justify-between items-center">
-                                                            <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                                            <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'} flex items-center gap-2`}> 
+                                                                <span className="truncate">{contact.name}</span>
+                                                                {isConversationMuted(contact.conversationId) && (
+                                                                    <svg className="w-4 h-4 opacity-80 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                                        <path d="M13.73 21a2 2 0 01-3.46 0" />
+                                                                        <path d="M18.63 13A17.89 17.89 0 0118 8" />
+                                                                        <path d="M6.88 6.88A6 6 0 0112 4v0a6 6 0 016 6v3l1 1H5l1-1V12a6 6 0 01.88-2.12" />
+                                                                        <line x1="1" y1="1" x2="23" y2="23" />
+                                                                    </svg>
+                                                                )}
+                                                            </p>
                                                             <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
                                                         </div>
                                                         <div className="flex justify-between items-center mt-1">
@@ -3262,7 +3318,17 @@ const AguacateChat = () => {
                                         )}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-center">
-                                                <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>{contact.name}</p>
+                                                <p className={`font-semibold truncate ${isDarkMode ? 'text-white' : 'text-gray-800'} flex items-center gap-2`}>
+                                                    <span className="truncate">{contact.name}</span>
+                                                    {isConversationMuted(contact.conversationId) && (
+                                                        <svg className="w-4 h-4 opacity-80 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                            <path d="M13.73 21a2 2 0 01-3.46 0" />
+                                                            <path d="M18.63 13A17.89 17.89 0 0118 8" />
+                                                            <path d="M6.88 6.88A6 6 0 0112 4v0a6 6 0 016 6v3l1 1H5l1-1V12a6 6 0 01.88-2.12" />
+                                                            <line x1="1" y1="1" x2="23" y2="23" />
+                                                        </svg>
+                                                    )}
+                                                </p>
                                                 <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{contact.time}</p>
                                             </div>
                                             <div className="flex justify-between items-center mt-1">
@@ -3477,7 +3543,7 @@ const AguacateChat = () => {
                                         </div>
                                         <span>Limpiar chat</span>
                                     </button>
-                                    <button onClick={() => { toast.success('Notificaciones silenciadas.'); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
+                                    <button onClick={() => { toggleMuteConversation(selectedContact?.conversationId); toggleChatOptions(); }} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-t-lg transition-colors flex items-center gap-2"
                                         onMouseEnter={() => {
                                             setMuteStopped(true);
                                             setTimeout(() => {
@@ -3495,7 +3561,7 @@ const AguacateChat = () => {
                                                 height={24} width={24}
                                             />
                                         </div>
-                                        <span>Silenciar notificaciones</span>
+                                        <span>{isConversationMuted(selectedContact?.conversationId) ? 'Activar notificaciones' : 'Silenciar notificaciones'}</span>
                                     </button>
                                     <button
                                         onClick={async () => { await handleToggleConversationBlocked(); toggleChatOptions(); }}
@@ -3518,28 +3584,6 @@ const AguacateChat = () => {
                                             />
                                         </div>
                                         <span>Bloquear</span>
-                                    </button>
-                                    <button 
-                                        onClick={() => { alert('Ver información'); toggleChatOptions(); }} 
-                                        className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colores flex items-center gap-2"
-                                        onMouseEnter={() => {
-                                            setInformationStopped(true);
-                                            setTimeout(() => {
-                                                setInformationStopped(false);
-                                                setInformationPaused(false);
-                                            }, 10);
-                                        }}
-                                        onMouseLeave={() => setInformationPaused(true)}
-                                    >
-                                        <div className="w-5 h-5">
-                                            <Lottie 
-                                                options={lottieOptions.information} 
-                                                isPaused={isInformationPaused} 
-                                                isStopped={isInformationStopped} 
-                                                height={24} width={24} 
-                                            />
-                                        </div>
-                                        <span>Ver información</span>
                                     </button>
                                 </div>
                             </div>
@@ -4133,7 +4177,17 @@ const AguacateChat = () => {
                                         <div className="w-10 h-10 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white font-bold">
                                             {contact.initials}
                                         </div>
-                                        <h4 className="font-semibold theme-text-primary">{contact.name}</h4>
+                                        <h4 className="font-semibold theme-text-primary flex items-center gap-2">
+                                            <span className="truncate">{contact.name}</span>
+                                            {isConversationMuted(contact.conversationId) && (
+                                                <svg className="w-4 h-4 opacity-80 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                                    <path d="M13.73 21a2 2 0 01-3.46 0" />
+                                                    <path d="M18.63 13A17.89 17.89 0 0118 8" />
+                                                    <path d="M6.88 6.88A6 6 0 0112 4v0a6 6 0 016 6v3l1 1H5l1-1V12a6 6 0 01.88-2.12" />
+                                                    <line x1="1" y1="1" x2="23" y2="23" />
+                                                </svg>
+                                            )}
+                                        </h4>
                                     </div>
                                 ))}
                             </div>
