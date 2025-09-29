@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 // Usamos únicamente la versión "emoji-mart" clásica para evitar conflictos con React 19
 // La versión 5.x exporta Picker directamente.
-import { Picker } from 'emoji-mart';
-import 'emoji-mart/css/emoji-mart.css';
+// Implementación usando emoji-picker-react (compatible con React 19)
+import EmojiPickerLib from 'emoji-picker-react';
 
 /**
  * EmojiPicker
@@ -282,19 +282,21 @@ const EmojiPicker = ({ onSelect, onClose, dark, anchorRef }) => {
               <div className="h-1.5 w-14 rounded-full bg-gray-400/40" />
             </div>
           )}
-          <Picker
+          <EmojiPickerLib
             theme={dark ? 'dark' : 'light'}
-            showPreview={false}
-            showSkinTones={false}
-            set={'apple'}
-            perLine={isMobile ? 8 : 12}
-            emojiSize={isMobile ? 28 : 32}
-            sheetSize={64}
-            onSelect={(emoji) => {
-              if (emoji?.native) onSelect?.(emoji.native);
+            width={isMobile ? '100%' : 340}
+            height={isMobile ? 420 : (coords.effectiveHeight || 420)}
+            emojiStyle="native"
+            searchDisabled={false}
+            skinTonesDisabled={true}
+            lazyLoadEmojis={true}
+            previewConfig={{ showPreview: false }}
+            suggestedEmojisMode="recent"
+            onEmojiClick={(emojiData) => {
+              const native = emojiData?.emoji || emojiData?.unicode || emojiData?.names?.[0];
+              if (native) onSelect?.(native);
               if (isMobile) initiateClose();
             }}
-            style={isMobile ? { width: '100%', maxWidth: '100%' } : undefined}
           />
           {/* Flecha (solo desktop) */}
           {!isMobile && (

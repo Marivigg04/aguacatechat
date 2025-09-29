@@ -1149,21 +1149,41 @@ const AguacateChat = () => {
             const prevHeight = prevScrollHeightRef.current || 0;
             const prevTop = prevScrollTopRef.current || 0;
             const delta = el.scrollHeight - prevHeight;
-            el.scrollTop = delta + prevTop;
+            // Desactivar temporalmente scroll-behavior (smooth) para que el ajuste sea instantáneo
+            // y no se vea un salto o animación al insertar mensajes arriba.
+            const prevScrollBehavior = el.style.scrollBehavior;
+            try {
+                el.style.scrollBehavior = 'auto';
+                el.scrollTop = delta + prevTop;
+            } finally {
+                // Restaurar el comportamiento de scroll en el siguiente frame.
+                requestAnimationFrame(() => {
+                    try { el.style.scrollBehavior = prevScrollBehavior || ''; } catch (e) {}
+                });
+            }
             pendingPrependRef.current = false;
             prevScrollHeightRef.current = 0;
             prevScrollTopRef.current = 0;
         } else if (jumpToBottomImmediateRef.current) {
             // Si acabamos de abrir la conversación, saltar inmediatamente al fondo (sin animación)
-            try { el.scrollTop = el.scrollHeight; } catch (e) { /* fall back silencioso */ }
+            try {
+                const prevSB = el.style.scrollBehavior;
+                el.style.scrollBehavior = 'auto';
+                el.scrollTop = el.scrollHeight;
+                requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+            } catch (e) { /* fall back silencioso */ }
             jumpToBottomImmediateRef.current = false;
             shouldScrollToBottomRef.current = false;
         } else if (shouldScrollToBottomRef.current || stickToBottomRef.current) {
             try {
                 if (typeof el.scrollTo === 'function') {
+                    // prefer smooth scroll when intentionally scrolling to bottom
                     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
                 } else {
+                    const prevSB = el.style.scrollBehavior;
+                    el.style.scrollBehavior = 'auto';
                     el.scrollTop = el.scrollHeight;
+                    requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
                 }
             } catch (e) {
                 el.scrollTop = el.scrollHeight;
@@ -2629,11 +2649,12 @@ const AguacateChat = () => {
         setIsSearchingUsers(true);
         const requestId = ++searchReqIdRef.current;
         const timer = setTimeout(async () => {
-            try {
+                try {
+                // Buscar por username O email (coincidencias parciales, insensible a mayúsculas)
                 const { data, error } = await supabase
                     .from('profiles')
-                    .select('id, username, avatar_url')
-                    .ilike('username', `%${q}%`)
+                    .select('id, username, avatar_url, email')
+                    .or(`username.ilike.%${q}%,email.ilike.%${q}%`)
                     .limit(15);
                 if (requestId !== searchReqIdRef.current) return; // descartar resultados antiguos
                 if (error) {
@@ -2942,8 +2963,13 @@ const AguacateChat = () => {
                     }, 240);
                 };
 
-                // Scroll inmediato al fondo
-                try { el.scrollTop = el.scrollHeight; } catch (e) {}
+                // Scroll inmediato al fondo (forzar sin smooth para evitar animación inesperada)
+                try {
+                    const prevSB = el.style.scrollBehavior;
+                    el.style.scrollBehavior = 'auto';
+                    el.scrollTop = el.scrollHeight;
+                    requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+                } catch (e) {}
 
                 let lastHeight = el.scrollHeight;
                 let lastChangeAt = Date.now();
@@ -2973,7 +2999,17 @@ const AguacateChat = () => {
 
                 // Intervalo que intenta scrollear y comprueba estabilidad
                 intervalId = setInterval(() => {
-                    try { el.scrollTop = el.scrollHeight; } catch (e) {}
+                    try {
+                        // intentar mantener abajo; forzar sin smooth si no hay scrollTo
+                        if (typeof el.scrollTo === 'function') {
+                            el.scrollTo({ top: el.scrollHeight });
+                        } else {
+                            const prevSB = el.style.scrollBehavior;
+                            el.style.scrollBehavior = 'auto';
+                            el.scrollTop = el.scrollHeight;
+                            requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+                        }
+                    } catch (e) {}
                     const now = Date.now();
                     const currentHeight = el.scrollHeight;
                     const atBottom = Math.abs((el.scrollTop + el.clientHeight) - el.scrollHeight) <= 2;
@@ -3288,7 +3324,7 @@ const AguacateChat = () => {
                                 <div className="relative">
                                     <button
                                         id="newChatBtn"
-                                        onClick={toggleNewChatMenu}
+                                        onClick={createNewChat}
                                         className={`w-14 h-14 rounded-full shadow-xl hover:shadow-2xl flex items-center justify-center transition-all duration-300 transform hover:scale-105 border-2 ${isDarkMode ? 'bg-[#1a2c3a] border-[#334155]' : 'bg-white border-[#e2e8f0]'} ${!isPlusStopped ? (isDarkMode ? 'bg-[#14b8a6]/80' : 'bg-[#a7f3d0]') : ''}`}
                                         onMouseEnter={() => setPlusStopped(false)}
                                         onMouseLeave={() => setPlusStopped(true)}
@@ -3316,21 +3352,6 @@ const AguacateChat = () => {
                                                     width={28}
                                                 />
                                                 <span>Nuevo Chat</span>
-                                            </span>
-                                        </button>
-                                        <button onClick={createNewGroup} className="w-full text-left p-3 hover:theme-bg-secondary theme-text-primary rounded-b-lg transition-colors">
-                                            <span
-                                                onMouseEnter={() => setTeamStopped(false)}
-                                                onMouseLeave={() => setTeamStopped(true)}
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
-                                            >
-                                                <Lottie
-                                                    options={teamOptions}
-                                                    isStopped={isTeamStopped}
-                                                    height={28}
-                                                    width={28}
-                                                />
-                                                <span>Nuevo Grupo</span>
                                             </span>
                                         </button>
                                     </div>
@@ -4010,7 +4031,7 @@ const AguacateChat = () => {
                             <div className="flex flex-col gap-3">
                                 <input
                                     type="text"
-                                    placeholder="Buscar por nombre de usuario"
+                                    placeholder="Buscar por nombre de usuario o email"
                                     className="w-full p-3 rounded-lg theme-bg-chat theme-text-primary theme-border border focus:outline-none focus:ring-2 focus:ring-teal-primary"
                                     value={searchUserQuery}
                                     onChange={(e) => setSearchUserQuery(e.target.value)}
@@ -4045,6 +4066,9 @@ const AguacateChat = () => {
                                             )}
                                             <div className="flex flex-col">
                                                 <h4 className="font-semibold theme-text-primary">{p.username || 'Usuario'}</h4>
+                                                {p.email && (
+                                                    <span className="text-sm theme-text-secondary">{p.email}</span>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
