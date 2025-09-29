@@ -38,7 +38,9 @@ const Sidebar = ({
     isConfigStopped,
     setConfigStopped,
     currentView,
-    onViewChange
+    onViewChange,
+    // Nueva prop: si true hace invisible la barra compacta (pero mantiene tamaño para que el overlay siga funcionando)
+    compactInvisible = false,
 }) => {
     // Custom hook local (definido dentro para cumplir Reglas de Hooks)
     const useLottieAnimation = () => {
@@ -143,6 +145,7 @@ const Sidebar = ({
         } else {
             // Abrir menú
             setShowSideMenu(true);
+            try { console.log('[AguacateChat] Menú extendido abierto (toggle)'); } catch {}
         }
     };
 
@@ -154,6 +157,25 @@ const Sidebar = ({
         }, 300);
     };
 
+    // Permitir que otros componentes (ej: botón móvil en la lista de contactos) abran el menú extendido vía evento
+    useEffect(() => {
+        const openHandler = () => {
+            setShowSideMenu(true);
+            setIsAnimating(false);
+            try { console.log('[AguacateChat] Menú extendido abierto (evento global)'); } catch {}
+        };
+        const toggleHandler = () => {
+            try { console.log('[AguacateChat] Toggle menú extendido (evento global)'); } catch {}
+            handleMenuToggle();
+        };
+        window.addEventListener('aguacatechat:open-menu', openHandler);
+        window.addEventListener('aguacatechat:toggle-menu', toggleHandler);
+        return () => {
+            window.removeEventListener('aguacatechat:open-menu', openHandler);
+            window.removeEventListener('aguacatechat:toggle-menu', toggleHandler);
+        };
+    }, [setShowSideMenu]);
+
     // Evita re-disparar un cambio si la vista ya está seleccionada
     const handleViewChange = (view, options = { closeMenuIfOpen: false }) => {
         if (view === currentView) return; // No hacer nada si es la misma vista
@@ -163,8 +185,13 @@ const Sidebar = ({
         }
     };
 
+    // Clases para invisibilidad suave: mantenemos ancho para evitar saltos de layout.
+    // pointer-events-none evita que se cliquee algo invisible; se reactiva cuando el menú extendido abre (overlay propio gestiona interacciones).
+    const compactBaseClasses = "relative z-40 w-16 h-full theme-bg-secondary theme-border border-r transition-opacity duration-300";
+    const compactVisibilityClasses = compactInvisible && !showSideMenu ? 'opacity-0 pointer-events-none select-none' : 'opacity-100';
+
     return (
-        <div className="relative z-40 w-16 h-full theme-bg-secondary theme-border border-r">
+        <div className={`${compactBaseClasses} ${compactVisibilityClasses}`}> 
             {/* Icono animado de las tres rayas SIEMPRE visible arriba */}
             <div className="flex flex-col items-center pt-6">
                 <button
@@ -319,7 +346,7 @@ const Sidebar = ({
                 </div>
             )}
 
-            {/* Menú lateral expandido */}
+            {/* Menú lateral extendido (restaurado) */}
             {showSideMenu && (
                 <div
                     className="fixed inset-0 z-50"
@@ -331,43 +358,22 @@ const Sidebar = ({
                     }}
                 >
                     <div
-                        className={`
-                            fixed top-0 left-0 h-full w-64
-                            theme-bg-secondary theme-border border-r
-                            flex flex-col pt-8
-                            transition-all duration-300 ease-out transform
-                            ${showSideMenu && !isAnimating
-                                ? 'translate-x-0 opacity-100 scale-100'
-                                : '-translate-x-full opacity-0 scale-95'
-                            }
-                        `}
-                        style={{
-                            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-                        }}
+                        className={`fixed top-0 left-0 h-full w-64 theme-bg-secondary theme-border border-r flex flex-col pt-8 transition-all duration-300 ease-out transform ${showSideMenu && !isAnimating ? 'translate-x-0 opacity-100 scale-100' : '-translate-x-full opacity-0 scale-95'}`}
+                        style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25), 0 10px 10px -5px rgba(0,0,0,0.04)' }}
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Botón cerrar menú */}
                         <button
-                            className={`
-                                absolute top-3 right-3 p-2 rounded-full
-                                transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90
-                                theme-bg-chat
-                            `}
+                            className="absolute top-3 right-3 p-2 rounded-full transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 theme-bg-chat"
                             onClick={handleCloseMenu}
                             title="Cerrar menú"
                         >
                             <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>
                         </button>
-
-                        {/* Contenido del menú con animación staggered */}
                         <div className="flex-1 px-4 pt-8">
                             <div
                                 className="space-y-2 theme-text-secondary"
-                                style={{
-                                    animation: showSideMenu && !isAnimating ? 'slideInLeft 0.4s ease-out 0.1s both' : 'slideOutLeft 0.3s ease-in both'
-                                }}
+                                style={{ animation: showSideMenu && !isAnimating ? 'slideInLeft 0.4s ease-out 0.1s both' : 'slideOutLeft 0.3s ease-in both' }}
                             >
-                                {/* Navegación principal dentro del menú expandido */}
                                 <div className="flex flex-col gap-2">
                                     <button
                                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat ${currentView === 'chats' ? 'theme-bg-accent' : ''}`}
@@ -379,12 +385,7 @@ const Sidebar = ({
                                     >
                                         <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                                             <Lottie
-                                                options={{
-                                                    loop: false,
-                                                    autoplay: false,
-                                                    animationData: paperPlaneAnimation,
-                                                    rendererSettings: { preserveAspectRatio: 'xMidYMid slice' }
-                                                }}
+                                                options={{ loop: false, autoplay: false, animationData: paperPlaneAnimation, rendererSettings: { preserveAspectRatio: 'xMidYMid slice' } }}
                                                 isPaused={chatsAnimation.isPaused}
                                                 isStopped={chatsAnimation.isStopped}
                                                 eventListeners={chatsAnimation.eventListeners}
@@ -394,7 +395,6 @@ const Sidebar = ({
                                         </div>
                                         <span className="font-medium transition-all duration-300 group-hover:translate-x-1">Chats</span>
                                     </button>
-
                                     <button
                                         className={`w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-[1.02] hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat ${currentView === 'stories' ? 'theme-bg-accent' : ''}`}
                                         onClick={() => handleViewChange('stories', { closeMenuIfOpen: true })}
@@ -405,12 +405,7 @@ const Sidebar = ({
                                     >
                                         <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                                             <Lottie
-                                                options={{
-                                                    loop: false,
-                                                    autoplay: false,
-                                                    animationData: storiesAnimationData,
-                                                    rendererSettings: { preserveAspectRatio: 'xMidYMid slice' }
-                                                }}
+                                                options={{ loop: false, autoplay: false, animationData: storiesAnimationData, rendererSettings: { preserveAspectRatio: 'xMidYMid slice' } }}
                                                 isPaused={storiesAnimation.isPaused}
                                                 isStopped={storiesAnimation.isStopped}
                                                 eventListeners={storiesAnimation.eventListeners}
@@ -423,34 +418,17 @@ const Sidebar = ({
                                 </div>
                             </div>
                         </div>
-
-                        {/* Opciones Perfil, Personalización y Configuración en la parte inferior */}
-                        <div
-                            className="px-4 pb-6 space-y-2"
-                            style={{
-                                animation: showSideMenu && !isAnimating ? 'slideInLeft 0.4s ease-out 0.2s both' : 'slideOutLeft 0.3s ease-in both'
-                            }}
-                        >
+                        <div className="px-4 pb-6 space-y-2" style={{ animation: showSideMenu && !isAnimating ? 'slideInLeft 0.4s ease-out 0.2s both' : 'slideOutLeft 0.3s ease-in both' }}>
                             <button
-                                className={`
-                                    w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group
-                                    theme-text-primary hover:theme-bg-chat
-                                `}
-                                onClick={() => {
-                                    setShowProfileModal(true);
-                                    handleCloseMenu();
-                                }}
+                                className="w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat"
+                                onClick={() => { setShowProfileModal(true); handleCloseMenu(); }}
                                 onMouseEnter={menuProfileAnimation.onMouseEnter}
                                 onMouseLeave={menuProfileAnimation.onMouseLeave}
                             >
                                 <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                                     {avatarUrl ? (
                                         <div className="w-full h-full rounded-full overflow-hidden border border-white/10 shadow-md">
-                                            <img
-                                                src={avatarUrl}
-                                                alt="Avatar"
-                                                className="w-full h-full object-cover scale-150 transition-transform duration-300 group-hover:scale-[1.7]"
-                                            />
+                                            <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover scale-150 transition-transform duration-300 group-hover:scale-[1.7]" />
                                         </div>
                                     ) : (
                                         <Lottie options={lottieOptions.profile} isPaused={menuProfileAnimation.isPaused} isStopped={menuProfileAnimation.isStopped} eventListeners={menuProfileAnimation.eventListeners} />
@@ -458,31 +436,15 @@ const Sidebar = ({
                                 </div>
                                 <span className="font-medium transition-all duration-300 group-hover:translate-x-1 theme-text-primary">Perfil</span>
                             </button>
-                            
-                            {/* Botón Personalización */}
                             <button
-                                className={`
-                                    w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group
-                                    theme-text-primary hover:theme-bg-chat
-                                `}
-                                onClick={() => {
-                                    setShowPersonalizationModal(true);
-                                    handleCloseMenu();
-                                }}
+                                className="w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat"
+                                onClick={() => { setShowPersonalizationModal(true); handleCloseMenu(); }}
+                                onMouseEnter={menuPersonalizationAnimation.onMouseEnter}
+                                onMouseLeave={menuPersonalizationAnimation.onMouseLeave}
                             >
-                                <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110"
-                                    onMouseEnter={menuPersonalizationAnimation.onMouseEnter}
-                                    onMouseLeave={menuPersonalizationAnimation.onMouseLeave}
-                                >
+                                <div className="w-8 h-8 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                                     <Lottie
-                                        options={{
-                                            loop: false,
-                                            autoplay: false,
-                                            animationData: wiredPhotoAnimation,
-                                            rendererSettings: {
-                                                preserveAspectRatio: 'xMidYMid slice'
-                                            }
-                                        }}
+                                        options={{ loop: false, autoplay: false, animationData: wiredPhotoAnimation, rendererSettings: { preserveAspectRatio: 'xMidYMid slice' } }}
                                         isPaused={menuPersonalizationAnimation.isPaused}
                                         isStopped={menuPersonalizationAnimation.isStopped}
                                         eventListeners={menuPersonalizationAnimation.eventListeners}
@@ -492,16 +454,9 @@ const Sidebar = ({
                                 </div>
                                 <span className="font-medium transition-all duration-300 group-hover:translate-x-1 theme-text-primary">Personalización</span>
                             </button>
-
                             <button
-                                className={`
-                                    w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group
-                                    theme-text-primary hover:theme-bg-chat
-                                `}
-                                onClick={() => { 
-                                    setShowConfigModal(true); 
-                                    handleCloseMenu(); 
-                                }}
+                                className="w-full text-left p-4 rounded-xl transition-all duration-300 ease-out transform hover:scale-105 hover:shadow-lg flex items-center gap-3 group theme-text-primary hover:theme-bg-chat"
+                                onClick={() => { setShowConfigModal(true); handleCloseMenu(); }}
                                 onMouseLeave={() => setConfigPaused(true)}
                             >
                                 <div className="w-8 h-8 transition-transform duration-300 group-hover:scale-110">
