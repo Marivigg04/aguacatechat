@@ -166,6 +166,8 @@ const AguacateChat = () => {
     const [recentMedia, setRecentMedia] = useState([]);
     const filePickerRef = useRef(null);
     // Personalización: función central de defaults
+    // Clave para almacenar la imagen de fondo (DataURL) en localStorage
+    const PERSONAL_BG_IMAGE_KEY = 'aguacatechat_bg_image_v1';
     const getDefaultPersonalization = (isDark) => {
         if (isDark) {
             return {
@@ -198,10 +200,16 @@ const AguacateChat = () => {
             const received = decodeURIComponent(getCookie('personal_bubbleReceived') || '') || base.bubbleColors.received;
             const fontSizeRaw = parseInt(getCookie('personal_fontSize'), 10);
             const fontSize = !isNaN(fontSizeRaw) && fontSizeRaw >= 10 && fontSizeRaw <= 26 ? fontSizeRaw : base.fontSize;
+            // Intentar restaurar imagen desde localStorage (no se guarda en cookies por tamaño)
+            let storedBgImage = '';
+            try {
+                storedBgImage = localStorage.getItem(PERSONAL_BG_IMAGE_KEY) || '';
+            } catch {}
             return {
                 backgroundType: bgType || base.backgroundType,
                 backgroundColor: bgColor,
-                backgroundImage: base.backgroundImage,
+                // Si hay una imagen almacenada úsala (aunque el tipo actual no sea 'image', se conservará para cuando se seleccione de nuevo)
+                backgroundImage: storedBgImage || base.backgroundImage,
                 bubbleColors: { sent, received },
                 accentColor: base.accentColor,
                 fontSize,
@@ -222,7 +230,16 @@ const AguacateChat = () => {
             setCookie('personal_bubbleSent', encodeURIComponent(personalization.bubbleColors.sent));
             setCookie('personal_bubbleReceived', encodeURIComponent(personalization.bubbleColors.received));
             setCookie('personal_fontSize', String(personalization.fontSize));
-            // Imagen omitida por tamaño potencial
+            // Guardar / limpiar imagen de fondo en localStorage
+            try {
+                if (personalization.backgroundImage && personalization.backgroundImage.startsWith('data:image')) {
+                    localStorage.setItem(PERSONAL_BG_IMAGE_KEY, personalization.backgroundImage);
+                } else if (!personalization.backgroundImage) {
+                    localStorage.removeItem(PERSONAL_BG_IMAGE_KEY);
+                }
+            } catch (e2) {
+                console.warn('No se pudo persistir imagen de fondo en localStorage', e2);
+            }
         } catch (e) {
             console.warn('No se pudo escribir cookies de personalización', e);
         }
