@@ -2980,6 +2980,7 @@ const AguacateChat = () => {
                 setConfigStopped={setConfigStopped}
                 currentView={currentView}
                 onViewChange={handleViewChange}
+                compactInvisible={isMobile}
             />
             {/* Sidebar de contactos e Historias: se oculta en móvil si hay un chat seleccionado */}
             {!(isMobile && selectedContact) && (
@@ -3003,8 +3004,8 @@ const AguacateChat = () => {
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            try { console.log('[AguacateChat] Click botón móvil menú'); } catch {}
-                                            window.dispatchEvent(new Event('aguacatechat:toggle-menu'));
+                                            try { console.log('[AguacateChat] Click botón móvil menú (abrir ExtendedMenu)'); } catch {}
+                                            setShowSideMenu(true);
                                         }}
                                         className="md:hidden p-2 rounded-lg theme-bg-chat hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-teal-primary flex items-center justify-center"
                                         aria-label="Abrir menú"
