@@ -3507,7 +3507,7 @@ const AguacateChat = () => {
 
                 {selectedContact && !isConvBlocked && (
                 <div className="theme-bg-secondary theme-border border-t p-3 sm:p-4">
-                    <div className="flex items-center gap-2 sm:gap-3 w-full">
+                    <div className="flex items-center gap-2 sm:gap-3 w-full mx-auto px-1 sm:px-0">
                         {/* 4. REEMPLAZO DEL ICONO DE ADJUNTAR */}
                         <button 
                             onClick={() => {
