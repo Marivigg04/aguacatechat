@@ -1149,21 +1149,41 @@ const AguacateChat = () => {
             const prevHeight = prevScrollHeightRef.current || 0;
             const prevTop = prevScrollTopRef.current || 0;
             const delta = el.scrollHeight - prevHeight;
-            el.scrollTop = delta + prevTop;
+            // Desactivar temporalmente scroll-behavior (smooth) para que el ajuste sea instantáneo
+            // y no se vea un salto o animación al insertar mensajes arriba.
+            const prevScrollBehavior = el.style.scrollBehavior;
+            try {
+                el.style.scrollBehavior = 'auto';
+                el.scrollTop = delta + prevTop;
+            } finally {
+                // Restaurar el comportamiento de scroll en el siguiente frame.
+                requestAnimationFrame(() => {
+                    try { el.style.scrollBehavior = prevScrollBehavior || ''; } catch (e) {}
+                });
+            }
             pendingPrependRef.current = false;
             prevScrollHeightRef.current = 0;
             prevScrollTopRef.current = 0;
         } else if (jumpToBottomImmediateRef.current) {
             // Si acabamos de abrir la conversación, saltar inmediatamente al fondo (sin animación)
-            try { el.scrollTop = el.scrollHeight; } catch (e) { /* fall back silencioso */ }
+            try {
+                const prevSB = el.style.scrollBehavior;
+                el.style.scrollBehavior = 'auto';
+                el.scrollTop = el.scrollHeight;
+                requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+            } catch (e) { /* fall back silencioso */ }
             jumpToBottomImmediateRef.current = false;
             shouldScrollToBottomRef.current = false;
         } else if (shouldScrollToBottomRef.current || stickToBottomRef.current) {
             try {
                 if (typeof el.scrollTo === 'function') {
+                    // prefer smooth scroll when intentionally scrolling to bottom
                     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
                 } else {
+                    const prevSB = el.style.scrollBehavior;
+                    el.style.scrollBehavior = 'auto';
                     el.scrollTop = el.scrollHeight;
+                    requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
                 }
             } catch (e) {
                 el.scrollTop = el.scrollHeight;
@@ -2942,8 +2962,13 @@ const AguacateChat = () => {
                     }, 240);
                 };
 
-                // Scroll inmediato al fondo
-                try { el.scrollTop = el.scrollHeight; } catch (e) {}
+                // Scroll inmediato al fondo (forzar sin smooth para evitar animación inesperada)
+                try {
+                    const prevSB = el.style.scrollBehavior;
+                    el.style.scrollBehavior = 'auto';
+                    el.scrollTop = el.scrollHeight;
+                    requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+                } catch (e) {}
 
                 let lastHeight = el.scrollHeight;
                 let lastChangeAt = Date.now();
@@ -2973,7 +2998,17 @@ const AguacateChat = () => {
 
                 // Intervalo que intenta scrollear y comprueba estabilidad
                 intervalId = setInterval(() => {
-                    try { el.scrollTop = el.scrollHeight; } catch (e) {}
+                    try {
+                        // intentar mantener abajo; forzar sin smooth si no hay scrollTo
+                        if (typeof el.scrollTo === 'function') {
+                            el.scrollTo({ top: el.scrollHeight });
+                        } else {
+                            const prevSB = el.style.scrollBehavior;
+                            el.style.scrollBehavior = 'auto';
+                            el.scrollTop = el.scrollHeight;
+                            requestAnimationFrame(() => { try { el.style.scrollBehavior = prevSB || ''; } catch(e){} });
+                        }
+                    } catch (e) {}
                     const now = Date.now();
                     const currentHeight = el.scrollHeight;
                     const atBottom = Math.abs((el.scrollTop + el.clientHeight) - el.scrollHeight) <= 2;
