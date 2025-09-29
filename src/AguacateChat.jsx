@@ -1,4 +1,3 @@
-
 // Externas
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import Lottie from 'react-lottie';
@@ -26,6 +25,7 @@ import PersonalizationModal from './components/config/PersonalizationModal';
 
 // Contextos y hooks
 import { useAuth } from './context/AuthContext.jsx';
+import useIsMobile from './hooks/useIsMobile.js';
 
 // Servicios
 import supabase from './services/supabaseClient';
@@ -86,6 +86,7 @@ const setCookie = (name, value, days = 365) => {
 };
 
 const AguacateChat = () => {
+    const isMobile = useIsMobile();
     // Estado para animación del icono de Nuevo Grupo
     const [isTeamStopped, setTeamStopped] = useState(true);
     // --- Configuración de Video (Fase 1) ---
@@ -1220,7 +1221,7 @@ const AguacateChat = () => {
                                                 const sepIdx = rest.indexOf('::');
                                                 if (sepIdx > -1) {
                                                     const metaStr = rest.slice(0, sepIdx);
-                                                    const storyMeta = JSON.parse(metaStr);
+                                                    storyMeta = JSON.parse(metaStr);
                                                     const replyType = storyMeta.replyContentType || 'text';
                                                     if (replyType === 'image') label = 'Respuesta (imagen) a historia';
                                                     else if (replyType === 'video') label = 'Respuesta (video) a historia';
@@ -1849,7 +1850,9 @@ const AguacateChat = () => {
                             replyTo: replyNormalized,
                             storyReply,
                         };
-                        if (effectiveInner === 'audio') return { ...base, audioUrl: cleanContent, text: '(Audio)' };
+                        if (m.type === 'audio') return { ...base, audioUrl: cleanContent, text: '(Audio)' };
+                        if (m.type === 'image') return { ...base, text: cleanContent };
+                        if (m.type === 'video') return { ...base, text: cleanContent };
                         return { ...base, text: cleanContent };
                     });
                     setChatMessages(mapped.filter(m => !hiddenIdsRef.current.has(m.id)));
@@ -1903,7 +1906,7 @@ const AguacateChat = () => {
                     replyTo: replyNormalized,
                     storyReply,
                 };
-                if (effectiveInner === 'audio') return { ...base, audioUrl: cleanContent, text: '(Audio)' };
+                if (m.type === 'audio') return { ...base, audioUrl: cleanContent, text: '(Audio)' };
                 return { ...base, text: cleanContent };
             });
             setChatMessages(prev => [...mapped.filter(m => !hiddenIdsRef.current.has(m.id)), ...prev]);
@@ -2753,7 +2756,7 @@ const AguacateChat = () => {
             toast.success('Mensaje eliminado para todos');
         } catch (e) {
             console.error('Error al eliminar para todos:', e);
-            toast.error(e?.message || 'No se pudo eliminar');
+            toast.error('No se pudo eliminar');
         }
     };
 
@@ -2939,10 +2942,7 @@ const AguacateChat = () => {
             setShowChatSkeleton(true);
             setChatSkeletonExiting(false);
         }
-        return () => {
-            if (t) clearTimeout(t);
-            if (raf) cancelAnimationFrame(raf);
-        };
+        return () => {};
     }, [loadingChatArea, showChatSkeleton, chatSkeletonExiting]);
 
     // Nota: en vez de hacer early return, mostraremos un overlay mientras carga para permitir el fade-out sobre el contenido ya montado.
@@ -3249,8 +3249,8 @@ const AguacateChat = () => {
                 </div>
             )}
 
-            {/* Área principal del chat */}
-            <div className="flex-1 flex flex-col relative">
+            {/* Área principal del chat. En móvil, se oculta si no hay un chat seleccionado. */}
+            <div className={`flex-1 flex-col relative ${isMobile && !selectedContact ? 'hidden' : 'flex'}`}>
                 {/* Header del área principal: solo cuando hay chat seleccionado */}
                 {selectedContact && (
                         <div className="theme-bg-secondary theme-border border-b p-4 flex items-center justify-between">
