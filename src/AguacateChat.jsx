@@ -166,6 +166,8 @@ const AguacateChat = () => {
     const [recentMedia, setRecentMedia] = useState([]);
     const filePickerRef = useRef(null);
     // Personalización: función central de defaults
+    // Clave para almacenar la imagen de fondo (DataURL) en localStorage
+    const PERSONAL_BG_IMAGE_KEY = 'aguacatechat_bg_image_v1';
     const getDefaultPersonalization = (isDark) => {
         if (isDark) {
             return {
@@ -198,10 +200,16 @@ const AguacateChat = () => {
             const received = decodeURIComponent(getCookie('personal_bubbleReceived') || '') || base.bubbleColors.received;
             const fontSizeRaw = parseInt(getCookie('personal_fontSize'), 10);
             const fontSize = !isNaN(fontSizeRaw) && fontSizeRaw >= 10 && fontSizeRaw <= 26 ? fontSizeRaw : base.fontSize;
+            // Intentar restaurar imagen desde localStorage (no se guarda en cookies por tamaño)
+            let storedBgImage = '';
+            try {
+                storedBgImage = localStorage.getItem(PERSONAL_BG_IMAGE_KEY) || '';
+            } catch {}
             return {
                 backgroundType: bgType || base.backgroundType,
                 backgroundColor: bgColor,
-                backgroundImage: base.backgroundImage,
+                // Si hay una imagen almacenada úsala (aunque el tipo actual no sea 'image', se conservará para cuando se seleccione de nuevo)
+                backgroundImage: storedBgImage || base.backgroundImage,
                 bubbleColors: { sent, received },
                 accentColor: base.accentColor,
                 fontSize,
@@ -222,7 +230,16 @@ const AguacateChat = () => {
             setCookie('personal_bubbleSent', encodeURIComponent(personalization.bubbleColors.sent));
             setCookie('personal_bubbleReceived', encodeURIComponent(personalization.bubbleColors.received));
             setCookie('personal_fontSize', String(personalization.fontSize));
-            // Imagen omitida por tamaño potencial
+            // Guardar / limpiar imagen de fondo en localStorage
+            try {
+                if (personalization.backgroundImage && personalization.backgroundImage.startsWith('data:image')) {
+                    localStorage.setItem(PERSONAL_BG_IMAGE_KEY, personalization.backgroundImage);
+                } else if (!personalization.backgroundImage) {
+                    localStorage.removeItem(PERSONAL_BG_IMAGE_KEY);
+                }
+            } catch (e2) {
+                console.warn('No se pudo persistir imagen de fondo en localStorage', e2);
+            }
         } catch (e) {
             console.warn('No se pudo escribir cookies de personalización', e);
         }
@@ -1096,6 +1113,33 @@ const AguacateChat = () => {
     // Fuerza un salto inmediato al fondo (sin animación) cuando se abre una conversación
     const jumpToBottomImmediateRef = useRef(false);
     const chatMessagesRef = useRef([]);
+
+    // Listener para gestionar auto-scroll inteligente: si el usuario se aleja del fondo, dejar de seguir hasta que vuelva.
+    useEffect(() => {
+        const el = chatAreaRef.current;
+        if (!el) return;
+        const handleScroll = () => {
+            // Distancia desde el fondo
+            const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+            // Si el usuario está a menos de 60px del fondo, activamos seguir al fondo
+            if (distanceFromBottom < 60) {
+                if (!stickToBottomRef.current) {
+                    stickToBottomRef.current = true;
+                }
+            } else {
+                // Usuario se alejó: desactivar seguimiento
+                if (stickToBottomRef.current) {
+                    stickToBottomRef.current = false;
+                }
+            }
+        };
+        el.addEventListener('scroll', handleScroll, { passive: true });
+        // Ejecutar una vez para estado inicial
+        handleScroll();
+        return () => {
+            try { el.removeEventListener('scroll', handleScroll); } catch {}
+        };
+    }, [selectedContact]);
 
     useLayoutEffect(() => {
         if (!selectedContact) return; // sin chat seleccionado, no movemos scroll
@@ -2065,9 +2109,22 @@ const AguacateChat = () => {
             toast.info('Espera a que el otro usuario responda para continuar la conversación.');
             return;
         }
+        // Detectar si el usuario estaba al fondo antes de agregar el mensaje para decidir auto-scroll
+        let wasAtBottom = false;
+        try {
+            const el = chatAreaRef.current;
+            if (el) {
+                const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+                wasAtBottom = distance < 60; // tolerancia
+            }
+        } catch {}
         const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text', replyTo: replyToMessage ? replyToMessage.id : null };
         setChatMessages(prev => [...prev, optimistic]);
+        if (wasAtBottom) {
+            shouldScrollToBottomRef.current = true;
+            stickToBottomRef.current = true; // continuar siguiendo
+        }
         setMessageInput('');
         setReplyToMessage(null);
         // Al enviar mensaje, marcar typing false inmediatamente
@@ -3802,10 +3859,10 @@ const AguacateChat = () => {
                                             <div className="flex items-center px-1">
                                                 <button
                                                     onClick={() => setReplyToMessage(null)}
-                                                    className="p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                                                    className="p-1 rounded-md hover:bg-teal-500/10 dark:hover:bg-teal-400/10 transition-colors focus:outline-none focus:ring-2 focus:ring-teal-500/40"
                                                     title="Cancelar respuesta"
                                                 >
-                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                    <svg className="w-4 h-4 text-teal-600 dark:text-teal-400 hover:text-teal-500 dark:hover:text-teal-300 transition-colors" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                                                 </button>
                                             </div>
                                         </div>

@@ -31,12 +31,57 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
 
   const [isClosing, setIsClosing] = useState(false);
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
+  // Compresión ligera (canvas) para reducir base64 y evitar saturar localStorage
+  const processImageFile = (file) => new Promise((resolve) => {
+    try {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const MAX_W = 1920;
+            const MAX_H = 1920;
+            let { width, height } = img;
+            const ratio = Math.min(1, MAX_W / width, MAX_H / height);
+            if (ratio < 1) {
+              width = Math.round(width * ratio);
+              height = Math.round(height * ratio);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            // Exportar con calidad 0.85 (jpeg si es muy grande, png si transparencia)
+            const mime = /png|webp|gif/i.test(file.type) ? 'image/png' : 'image/jpeg';
+            const dataUrl = canvas.toDataURL(mime, 0.85);
+            resolve(dataUrl);
+          } catch (err) {
+            console.warn('Fallo comprimendo imagen, usando original', err);
+            resolve(ev.target.result);
+          }
+        };
+        img.onerror = () => resolve(ev.target.result);
+        img.src = ev.target.result;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    } catch {
+      resolve('');
+    }
+  });
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setPersonalization(prev => ({ ...prev, backgroundImage: ev.target.result }));
-    reader.readAsDataURL(file);
+    const dataUrl = await processImageFile(file);
+    if (dataUrl) {
+      setPersonalization(prev => ({ ...prev, backgroundImage: dataUrl, backgroundType: 'image' }));
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setPersonalization(prev => ({ ...prev, backgroundImage: '' }));
   };
 
   const handleApply = () => {
@@ -152,8 +197,37 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
                 )}
                 {backgroundType === 'image' && (
                   <div className="flex flex-col gap-2 mt-1">
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="rounded border p-1 text-sm" />
-                    {backgroundImage && <img src={backgroundImage} alt="Fondo" className="mt-1 w-full h-24 object-cover rounded-lg border" />}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="rounded border p-1 text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-teal-primary file:text-white hover:file:opacity-80"
+                      />
+                      {backgroundImage && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveImage}
+                          className="px-2 py-1 rounded-md text-xs font-medium bg-rose-600 text-white hover:bg-rose-500 transition-colors"
+                          title="Quitar imagen de fondo"
+                        >
+                          Quitar
+                        </button>
+                      )}
+                    </div>
+                    {backgroundImage && (
+                      <div className="relative group">
+                        <img
+                          src={backgroundImage}
+                          alt="Fondo"
+                          className="mt-1 w-full h-24 object-cover rounded-lg border shadow-sm"
+                        />
+                        <span className="absolute bottom-1 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Preview</span>
+                      </div>
+                    )}
+                    {!backgroundImage && (
+                      <p className="text-[11px] opacity-60">Sube una imagen (se guarda localmente, no se envía al servidor).</p>
+                    )}
                   </div>
                 )}
               </div>

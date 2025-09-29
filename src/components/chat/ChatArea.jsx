@@ -214,7 +214,7 @@ const ChatArea = ({
                   </div>
                 )}
                 <div
-                  className={`flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}
+                  className={`group flex ${isOwn ? 'justify-end' : 'justify-start'} items-center relative`}
                   data-message-id={message.id}
                   data-message-own={isOwn ? '1' : '0'}
                   onContextMenu={(e) => {
@@ -371,28 +371,55 @@ const ChatArea = ({
                       </>
                     )}
                   </div>
-                  {/* Botón menú propios */}
-          {isOwn && (
-                    <button
-            className="menu-trigger absolute -top-1 -right-0 w-7 h-7 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none"
-                      style={{ background: 'transparent', border: 'none', padding: 0 }}
-                      title="Más opciones"
-                      onClick={() => {
-                        if (messageMenuOpenId === index && messageMenuType==='own') {
-                          setMessageMenuOpenId(null);
-                          setMessageMenuType(null);
-                        } else {
-                          setMessageMenuOpenId(index);
-                          setMessageMenuType('own');
-                        }
-                      }}
-                    >
-                      <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
-                        <circle cx="4" cy="10" r="1.5" />
-                        <circle cx="10" cy="10" r="1.5" />
-                        <circle cx="16" cy="10" r="1.5" />
-                      </svg>
-                    </button>
+                  {/* Botón menú (propios) ahora al lado izquierdo de la burbuja */}
+                  {isOwn && (
+                    <div className="flex items-center mr-2 select-none order-first">
+                      <button
+                        className={`menu-trigger w-8 h-8 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none rounded-full transition-all duration-150 opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 ${(messageMenuOpenId === index && messageMenuType==='own') ? 'opacity-100 bg-black/5 dark:bg-white/10' : ''}`}
+                        aria-label="Más opciones"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (messageMenuOpenId === index && messageMenuType==='own') {
+                            setMessageMenuOpenId(null);
+                            setMessageMenuType(null);
+                          } else {
+                            setMessageMenuOpenId(index);
+                            setMessageMenuType('own');
+                          }
+                        }}
+                      >
+                        <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                          <circle cx="4" cy="10" r="1.7" />
+                          <circle cx="10" cy="10" r="1.7" />
+                          <circle cx="16" cy="10" r="1.7" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                  {/* Botón menú (recibidos) ahora al lado derecho de la burbuja */}
+                  {!isOwn && (
+                    <div className="flex items-center ml-2 select-none">
+                      <button
+                        className={`menu-trigger w-8 h-8 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none rounded-full transition-all duration-150 opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 ${(messageMenuOpenId === index && messageMenuType==='received') ? 'opacity-100 bg-black/5 dark:bg-white/10' : ''}`}
+                        aria-label="Más opciones"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (messageMenuOpenId === index && messageMenuType==='received') {
+                            setMessageMenuOpenId(null);
+                            setMessageMenuType(null);
+                          } else {
+                            setMessageMenuOpenId(index);
+                            setMessageMenuType('received');
+                          }
+                        }}
+                      >
+                        <svg width="18" height="18" fill="currentColor" viewBox="0 0 20 20">
+                          <circle cx="4" cy="10" r="1.7" />
+                          <circle cx="10" cy="10" r="1.7" />
+                          <circle cx="16" cy="10" r="1.7" />
+                        </svg>
+                      </button>
+                    </div>
                   )}
                   {/* Menú contextual propios */}
       {isOwn && messageMenuOpenId === index && messageMenuType==='own' && (
