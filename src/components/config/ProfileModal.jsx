@@ -127,6 +127,9 @@ const ProfileModal = ({
         }, 400);
     };
 
+    // Estado local para mostrar el nombre en el modal (se inicializa temprano para poder sincronizar newProfileName)
+    const [profileName, setProfileName] = useState('Cargando...');
+
     React.useEffect(() => {
         // Si es perfil de contacto (modo lectura) intentar usar datos proporcionados y si faltan, consultar DB
         if (contactProfile) {
@@ -170,7 +173,8 @@ const ProfileModal = ({
                             setProfileInfoDb(data.profileInformation || '');
                             if (data.avatar_url) setAvatarUrl(data.avatar_url);
                             // Usar username de profiles
-                            setProfileName(data.username || 'Contacto');
+                            const fetchedName = data.username || 'Contacto';
+                            setProfileName(fetchedName);
                         }
                     } catch (err) {
                         // Silencioso, se mostrará fallback
@@ -196,21 +200,35 @@ const ProfileModal = ({
                 }
                 setProfileInfoDb(data?.profileInformation ?? null);
                 setAvatarUrl(data?.avatar_url || null);
-                setProfileName(data?.username || myProfile.name);
+                const fetchedName = data?.username || myProfile.name;
+                setProfileName(fetchedName);
+                // Si no se está editando el nombre desde el componente padre, sincronizar newProfileName
+                if (!isEditingName && typeof setNewProfileName === 'function') {
+                    try { setNewProfileName(fetchedName); } catch {}
+                }
             } catch (err) {
                 if (import.meta.env?.DEV) {
                     console.warn('[ProfileModal] Error fetch propio perfil', err);
                 }
                 setProfileInfoDb(null);
                 setAvatarUrl(null);
-                setProfileName(myProfile.name);
+                const fallback = myProfile.name;
+                setProfileName(fallback);
+                if (!isEditingName && typeof setNewProfileName === 'function') {
+                    try { setNewProfileName(fallback); } catch {}
+                }
             }
         }
         fetchProfileInfo();
     }, [user?.id, showProfileModal, contactProfile]);
 
-    // Estado local para mostrar el nombre en el modal
-    const [profileName, setProfileName] = useState('Cargando...');
+    // Efecto adicional: si cambia profileName (por fetch) y no se está editando, sincronizar newProfileName
+    React.useEffect(() => {
+        if (!isEditingName && profileName && typeof setNewProfileName === 'function') {
+            setNewProfileName(profileName);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [profileName]);
 
     React.useEffect(() => {
         if (contactProfile) {
@@ -539,6 +557,10 @@ const ProfileModal = ({
                                             <div
                                                 className="w-7 h-7"
                                                 onClick={() => {
+                                                    // Prellenar el input con el nombre actual proveniente de la base de datos
+                                                    if (typeof setNewProfileName === 'function') {
+                                                        setNewProfileName(profileName || '');
+                                                    }
                                                     setIsEditingName(true);
                                                     setTimeout(() => {
                                                         document.getElementById('profileNameInput')?.focus();
