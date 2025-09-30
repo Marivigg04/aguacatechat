@@ -255,6 +255,23 @@ body {
 /* Sombra suave utilitaria */
 .shadow-soft { box-shadow: 0 8px 40px -10px rgba(0,0,0,0.45); }
 
+/* Animación al deseleccionar un chat: ligera escala y fade-out del área de chat */
+@keyframes chat-deselect {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  40% { opacity: 0.9; transform: translateY(4px) scale(0.995); }
+  100% { opacity: 0.0; transform: translateY(12px) scale(0.99); }
+}
+.chat-deselect-animate {
+  animation: chat-deselect 480ms cubic-bezier(.2,.8,.2,1) both;
+  pointer-events: none; /* evitar interacciones durante la animación */
+}
+
+/* Clase auxiliar para un fade rápido del contenido interno */
+.chat-deselect-animate .chat-container > * {
+  transition: opacity 240ms ease-in-out;
+  opacity: 0.98;
+}
+
 /* Mejor enfoque accesible */
 .focus-ring-custom:focus { outline: 2px solid rgba(45,212,191,0.5); outline-offset: 2px; }
 
