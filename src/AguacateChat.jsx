@@ -783,13 +783,13 @@ const AguacateChat = () => {
             // Derivados del último mensaje
             const lastId = c?.last_message?.id ?? null;
             const lastAudioUrl = lastType === 'audio' ? c?.last_message?.content : undefined;
-            // Asegurar que pasamos el array de 'seen' del último mensaje cuando exista
-            const lastMessageSeenArr = Array.isArray(c?.last_message?.seen) ? c.last_message.seen : [];
+            // `seen` is stored as a single user id (string) or null for direct conversations
+            const lastMessageSeenId = (c?.last_message?.seen && typeof c.last_message.seen === 'string') ? c.last_message.seen : null;
             // Determinar si la otra persona (otherProfile.id) vio el último mensaje (solo aplica si el último mensaje lo enviaste tú)
             let lastMessageSeen = false;
             try {
                 if (c?.last_message?.sender_id && user?.id && String(c.last_message.sender_id) === String(user.id) && c?.otherProfile?.id) {
-                    lastMessageSeen = lastMessageSeenArr.includes(c.otherProfile.id);
+                    lastMessageSeen = lastMessageSeenId === c.otherProfile.id;
                 }
             } catch (e) { /* ignore */ }
             // Debug: loguear el estado de visto para ayudar a depuración
@@ -826,9 +826,9 @@ const AguacateChat = () => {
                 last_message_at: lastAt,
                 lastConex: c?.otherProfile?.lastConex,
                 last_message: c?.last_message ? { ...c.last_message, type: lastType } : null,
-                // Exponer 'seen' y un booleano útil para la UI
+                // Exponer 'seen' (single id) y un booleano útil para la UI
                 lastMessageSeen: privacy?.readReceipts ? lastMessageSeen : false,
-                lastMessageSeenArr: privacy?.readReceipts ? lastMessageSeenArr : [],
+                lastMessageSeenId: privacy?.readReceipts ? lastMessageSeenId : null,
                 unread,
             };
         });
@@ -1372,7 +1372,7 @@ const AguacateChat = () => {
                                     }
                                     return {
                                         ...c,
-                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t, seen: Array.isArray(m.seen) ? m.seen : [] },
+                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t, seen: (typeof m.seen === 'string' ? m.seen : null) },
                                         last_message_at: m.created_at,
                                         lastMessage: label,
                                         lastMessageType: t,
@@ -1455,7 +1455,7 @@ const AguacateChat = () => {
                                             type: 'sent',
                                             created_at: m.created_at,
                                             messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'),
-                                            seen: Array.isArray(m.seen) ? m.seen : [],
+                                            seen: (typeof m.seen === 'string' ? m.seen : null),
                                             replyTo: msg.replyTo || m.replyng_to || m.reply_to || m.replyTo || null,
                                             storyReply,
                                         };
@@ -1513,7 +1513,7 @@ const AguacateChat = () => {
                                             }
                                         }
                                     } catch {}
-                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'), seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
+                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'), seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
                                     if (m.type === 'audio') mapped.push({ ...base, audioUrl: cleanContent, text: '(Audio)' });
                                     else mapped.push({ ...base, text: cleanContent });
                                 }
@@ -1567,7 +1567,7 @@ const AguacateChat = () => {
                                 }
                             } catch {}
                             const effectiveType = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
-                            const receivedBase = { id: m.id, type: 'received', created_at: m.created_at, messageType: effectiveType, seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
+                            const receivedBase = { id: m.id, type: 'received', created_at: m.created_at, messageType: effectiveType, seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
                             if (effectiveType === 'audio') {
                                 return [...prev, { ...receivedBase, audioUrl: cleanContent, text: '(Audio)' }];
                             }
@@ -1588,7 +1588,8 @@ const AguacateChat = () => {
                                             // Solo actualizamos campos que puedan haber cambiado
                                             type: row.type || c.last_message.type || 'text',
                                             content: row.content != null ? row.content : c.last_message.content,
-                                            seen: Array.isArray(row.seen) ? row.seen : c.last_message.seen,
+                                            // `seen` is single user id or null
+                                            seen: (typeof row.seen === 'string' ? row.seen : c.last_message.seen),
                                         }
                                     };
                                 }
@@ -1618,7 +1619,8 @@ const AguacateChat = () => {
                                     }
                                 }
                                 if (row.created_at) next.created_at = row.created_at;
-                                if (Array.isArray(row.seen)) next.seen = row.seen;
+                                // `seen` is a single user id or null
+                                if (typeof row.seen === 'string' || row.seen === null) next.seen = (typeof row.seen === 'string' ? row.seen : null);
                                 if (row.reply_to != null && typeof next.replyTo === 'undefined') next.replyTo = row.reply_to;
                                 return next;
                             }));
@@ -1673,7 +1675,7 @@ const AguacateChat = () => {
                     // Solo nos interesa cuando cambie 'seen'
                     if (typeof row.seen === 'undefined') return;
                     // Debug toast eliminado
-                    setChatMessages(prev => prev.map(m => m.id === row.id ? { ...m, seen: Array.isArray(row.seen) ? row.seen : m.seen } : m));
+                    setChatMessages(prev => prev.map(m => m.id === row.id ? { ...m, seen: (typeof row.seen === 'string' ? row.seen : m.seen) } : m));
                 }
             )
             .subscribe();
@@ -1964,7 +1966,7 @@ const AguacateChat = () => {
                             type: m.sender_id === user?.id ? 'sent' : 'received',
                             created_at: m.created_at,
                             messageType: effectiveInner,
-                            seen: Array.isArray(m.seen) ? m.seen : [],
+                            seen: (typeof m.seen === 'string' ? m.seen : null),
                             replyTo: replyNormalized,
                             storyReply,
                         };
@@ -2020,7 +2022,7 @@ const AguacateChat = () => {
                     type: m.sender_id === user?.id ? 'sent' : 'received',
                     created_at: m.created_at,
                     messageType: effectiveInner,
-                    seen: Array.isArray(m.seen) ? m.seen : [],
+                    seen: (typeof m.seen === 'string' ? m.seen : null),
                     replyTo: replyNormalized,
                     storyReply,
                 };
@@ -2123,7 +2125,8 @@ const AguacateChat = () => {
                 // find message in state
                 const msg = chatMessages.find(m => String(m.id) === String(id))
                 if (!msg) return
-                const alreadySeen = Array.isArray(msg.seen) && msg.seen.includes(user.id)
+                // `seen` is single user id or null
+                const alreadySeen = (typeof msg.seen === 'string' && String(msg.seen) === String(user.id));
                 if (alreadySeen) return
                 if (!isMessageVisible(node)) return
                 const key = `${id}:${user.id}`
@@ -2133,10 +2136,11 @@ const AguacateChat = () => {
             })
             // Apply updates sequentially to avoid RLS/race issues
             for (const u of updates) {
-                try {
+                    try {
                     const res = await appendUserToMessageSeen(u.id, user.id)
                     if (res?.updated) {
-                        setChatMessages(prev => prev.map(m => m.id === u.id ? { ...m, seen: Array.isArray(m.seen) ? [...m.seen, user.id] : [user.id] } : m))
+                        // Set seen to the single user id
+                        setChatMessages(prev => prev.map(m => m.id === u.id ? { ...m, seen: user.id } : m))
                     }
                 } catch (err) {
                     // allow retry in future
@@ -2414,8 +2418,8 @@ const AguacateChat = () => {
         for (let i = chatMessages.length - 1; i >= 0; i--) {
             const m = chatMessages[i];
             if (m?.type === 'sent') {
-                const seenArr = Array.isArray(m?.seen) ? m.seen : [];
-                if (seenArr.includes(otherUserId)) return i;
+                const seenId = (typeof m?.seen === 'string') ? m.seen : null;
+                if (seenId && String(seenId) === String(otherUserId)) return i;
             }
         }
         return -1;
@@ -2541,7 +2545,7 @@ const AguacateChat = () => {
                     const r = map.get(m.id);
                     if (!r) return m;
                     // Si hay novedad en 'seen', aplícala
-                    const incomingSeen = Array.isArray(r.seen) ? r.seen : m.seen;
+                    const incomingSeen = (typeof r.seen === 'string' ? r.seen : m.seen);
                     if (JSON.stringify(incomingSeen) !== JSON.stringify(m.seen)) {
                         return { ...m, seen: incomingSeen };
                     }
@@ -2591,7 +2595,7 @@ const AguacateChat = () => {
                     const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, afterMessageId: afterMessageId2, afterTimestamp: afterTimestamp2 });
                     const mapped = messages.map(m => {
                         const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
-                        const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: replyNormalized };
+                        const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: replyNormalized };
                         if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
                         if (m.type === 'video') return { ...base, text: m.content };
                         if (m.type === 'image') return { ...base, text: m.content };
