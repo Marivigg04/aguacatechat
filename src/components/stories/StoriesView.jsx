@@ -759,8 +759,7 @@ const StoriesView = forwardRef((props, ref) => {
         // On md+ screens keep original flex-1 behavior.
         <div className="min-h-screen md:min-h-0 md:flex-1 overflow-y-auto p-2">
             <div className="px-1 pt-1 pb-2 theme-border border-b">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-xl md:text-2xl font-bold theme-text-primary">Historias</h1>
+                <div className="flex items-center gap-2">
                     {/* Mobile menu button: replica del botón en la lista de chats */}
                     <button
                         type="button"
@@ -777,6 +776,7 @@ const StoriesView = forwardRef((props, ref) => {
                             </g>
                         </svg>
                     </button>
+                    <h1 className="text-xl md:text-2xl font-bold theme-text-primary">Historias</h1>
                 </div>
             </div>
             <div className="mt-2 md:mt-3 px-1 pt-2 pb-2">

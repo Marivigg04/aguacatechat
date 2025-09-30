@@ -3303,7 +3303,6 @@ const AguacateChat = () => {
                     >
                         <div className="p-4 theme-border border-b">
                             <div className="flex items-center justify-between mb-4">
-                                <h1 className="text-xl font-bold theme-text-primary">AguacaChat</h1>
                                 <div className="flex items-center gap-2">
                                     {/* Botón móvil para abrir el menú extendido (misma función que el primer botón de la barra lateral) */}
                                     <button
@@ -3324,6 +3323,7 @@ const AguacateChat = () => {
                                             </g>
                                         </svg>
                                     </button>
+                                    <h1 className="text-xl font-bold theme-text-primary">AguacaChat</h1>
                                     {!isFullScreenContacts && (
                                         <button className="md:hidden p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
                                         ✕

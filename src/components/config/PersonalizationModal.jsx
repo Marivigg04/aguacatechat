@@ -314,7 +314,7 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
               <p className="mt-3 text-[11px] opacity-60 theme-text-secondary leading-snug">Pequeña corresponde al tamaño actual de referencia. Cambiarlo afecta sólo a los mensajes, no a la interfaz.</p>
             </div>
           </div>
-          {/* Right column - preview (hidden on extra-small mobile screens) */}
+          
           <div className="sm:flex sm:w-1/2 w-full flex-col gap-3 h-full">
             <div className="px-6 py-4 rounded-xl theme-bg-chat theme-border border flex flex-col flex-1 min-h-0">
               <p className="text-sm font-semibold theme-text-secondary mb-3">Vista previa</p>
