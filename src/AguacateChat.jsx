@@ -100,6 +100,15 @@ const AguacateChat = () => {
             preserveAspectRatio: 'xMidYMid slice'
         }
     };
+    // Evitar múltiples toasts al pausar/reanudar: mantenemos un único toast para 'Grabación en pausa'
+    const pauseToastIdRef = useRef(null);
+    const pauseToastPendingRef = useRef(false);
+    const pauseToastTsRef = useRef(0);
+    // Refs análogos para el toast de reanudar
+    const resumeToastIdRef = useRef(null);
+    const resumeToastPendingRef = useRef(false);
+    const resumeToastTsRef = useRef(0);
+    const resumeToastClearTimerRef = useRef(null);
     // Estado para animación del icono de Nuevo Chat
     const [isIndividualStopped, setIndividualStopped] = useState(true);
     const individualOptions = {
@@ -1117,6 +1126,11 @@ const AguacateChat = () => {
             setIsRecording(false);
             clearRecordingTimer();
             setIsRecordingPaused(false);
+            // Dismiss any lingering pause toast
+            try { if (pauseToastIdRef.current) { toast.dismiss(pauseToastIdRef.current); pauseToastIdRef.current = null; } } catch(e){}
+            // Dismiss any lingering resume toast and clear its cleanup timer
+            try { if (resumeToastIdRef.current) { toast.dismiss(resumeToastIdRef.current); resumeToastIdRef.current = null; } } catch(e){}
+            try { if (resumeToastClearTimerRef.current) { clearTimeout(resumeToastClearTimerRef.current); resumeToastClearTimerRef.current = null; } } catch(e){}
         }
     };
 
@@ -1139,7 +1153,12 @@ const AguacateChat = () => {
                 accumulatedElapsedRef.current += (Date.now() - recordingStartRef.current) / 1000;
                 clearRecordingTimer();
                 setIsRecordingPaused(true);
-                toast('Grabación en pausa', { icon: '⏸️' });
+                // Solo crear un toast de pausa si no existe ya uno activo
+                try {
+                    if (!pauseToastIdRef.current) {
+                        pauseToastIdRef.current = toast('Grabación en pausa', { icon: '⏸️' });
+                    }
+                } catch(e) { /* ignore toast errors */ }
             }
         } catch (err) {
             console.error(err);
@@ -1158,7 +1177,30 @@ const AguacateChat = () => {
                 recordingStartRef.current = Date.now();
                 setIsRecordingPaused(false);
                 startRecordingTimer();
-                toast('Reanudando grabación', { icon: '▶️' });
+                // Dismiss pause toast if present before showing resume toast
+                try { if (pauseToastIdRef.current) { toast.dismiss(pauseToastIdRef.current); pauseToastIdRef.current = null; } } catch(e){}
+                try { pauseToastPendingRef.current = false; pauseToastTsRef.current = 0; } catch(e){}
+                // Crear toast de reanudación con deduplicado similar al de pausa
+                try {
+                    const now = Date.now();
+                    if (resumeToastIdRef.current || resumeToastPendingRef.current) {
+                        resumeToastTsRef.current = now;
+                    } else if (now - (resumeToastTsRef.current || 0) > 400) {
+                        resumeToastPendingRef.current = true;
+                        try {
+                            // limpiar cualquier toast de pausa existente por si acaso
+                            try { if (pauseToastIdRef.current) { toast.dismiss(pauseToastIdRef.current); pauseToastIdRef.current = null; } } catch(e){}
+                            // crear toast de reanudación
+                            resumeToastIdRef.current = toast('Reanudando grabación', { icon: '▶️' });
+                            resumeToastTsRef.current = Date.now();
+                            // programar limpieza del id para permitir futuros toasts
+                            if (resumeToastClearTimerRef.current) clearTimeout(resumeToastClearTimerRef.current);
+                            resumeToastClearTimerRef.current = setTimeout(() => { resumeToastIdRef.current = null; resumeToastClearTimerRef.current = null; }, 4500);
+                        } finally {
+                            resumeToastPendingRef.current = false;
+                        }
+                    }
+                } catch (e) { /* ignore */ }
             }
         } catch (err) {
             console.error(err);
@@ -3133,7 +3175,7 @@ const AguacateChat = () => {
     return (
         <div className="flex h-screen overflow-hidden">
             {/* Componente para mostrar las notificaciones */}
-            <Toaster position="top-center" reverseOrder={false} />
+            <Toaster position="top-center" reverseOrder={false} limit={3} />
 
             {/* Sidebar compacto (iconos verticales). En móvil se oculta totalmente cuando hay un chat seleccionado */}
             {!(isMobile && selectedContact) && (
