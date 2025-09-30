@@ -12,8 +12,9 @@ import EmojiPickerLib from 'emoji-picker-react';
  *  - onClose(): void (cuando se debe cerrar por click externo / ESC)
  *  - dark: boolean (tema oscuro)
  *  - anchorRef: ref del botón (para posicionar si se requiere)
+ *  - keepOpenOnMobile: boolean (si true, al seleccionar un emoji en móvil el picker NO se cierra)
  */
-const EmojiPicker = ({ onSelect, onClose, dark, anchorRef }) => {
+const EmojiPicker = ({ onSelect, onClose, dark, anchorRef, keepOpenOnMobile = true }) => {
   const wrapperRef = useRef(null);
   const cacheRef = useRef({ width: 0, left: 0, top: 0 });
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 640 : false));
@@ -295,7 +296,10 @@ const EmojiPicker = ({ onSelect, onClose, dark, anchorRef }) => {
             onEmojiClick={(emojiData) => {
               const native = emojiData?.emoji || emojiData?.unicode || emojiData?.names?.[0];
               if (native) onSelect?.(native);
-              if (isMobile) initiateClose();
+              // Si estamos en móvil y se ha pedido mantener abierto, no cerramos.
+              // Por defecto `keepOpenOnMobile` es true para evitar cerrar el picker
+              // al seleccionar un emoji en vista móvil.
+              if (!(isMobile && keepOpenOnMobile)) initiateClose();
             }}
           />
           {/* Flecha (solo desktop) */}

@@ -2294,21 +2294,30 @@ const AguacateChat = () => {
             toast.info('Espera a que el otro usuario responda para continuar la conversación.');
             return;
         }
-        // Detectar si el usuario estaba al fondo antes de agregar el mensaje para decidir auto-scroll
+        // Detectar la posición del scroll para decidir comportamiento al enviar
         let wasAtBottom = false;
+        let wasFarFromBottom = false;
         try {
             const el = chatAreaRef.current;
             if (el) {
                 const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-                wasAtBottom = distance < 60; // tolerancia
+                wasAtBottom = distance < 60; // tolerancia para considerar "al fondo"
+                // Si el usuario está muy arriba (ej. >300px del fondo) forzamos transporte al final
+                wasFarFromBottom = distance > 300;
             }
         } catch {}
         const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text', replyTo: replyToMessage ? replyToMessage.id : null };
         setChatMessages(prev => [...prev, optimistic]);
+        // Si estaba al fondo, seguir con scroll suave. Si estaba muy arriba, forzar salto inmediato
         if (wasAtBottom) {
             shouldScrollToBottomRef.current = true;
             stickToBottomRef.current = true; // continuar siguiendo
+        } else if (wasFarFromBottom) {
+            // Forzar salto inmediato al final para que el autor vea su propio mensaje
+            shouldScrollToBottomRef.current = true;
+            jumpToBottomImmediateRef.current = true;
+            stickToBottomRef.current = true;
         }
         setMessageInput('');
         setReplyToMessage(null);
@@ -2374,6 +2383,21 @@ const AguacateChat = () => {
             const tempId = `tmp-img-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const localPreviewUrl = URL.createObjectURL(fileToUpload);
             setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localPreviewUrl, created_at: new Date().toISOString(), messageType: 'image', replyTo: replyToMessage ? replyToMessage.id : null }]);
+            // Comportamiento de scroll al enviar desde posición alta
+            try {
+                const el = chatAreaRef.current;
+                if (el) {
+                    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+                    if (distance > 300) {
+                        shouldScrollToBottomRef.current = true;
+                        jumpToBottomImmediateRef.current = true;
+                        stickToBottomRef.current = true;
+                    } else if (distance < 60) {
+                        shouldScrollToBottomRef.current = true;
+                        stickToBottomRef.current = true;
+                    }
+                }
+            } catch {}
 
             const { error: uploadError } = await supabase.storage
                 .from('chatphotos')
@@ -2451,6 +2475,21 @@ const AguacateChat = () => {
             const localUrl = URL.createObjectURL(file);
             // Mensaje optimista
             setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localUrl, created_at: new Date().toISOString(), messageType: 'video', uploading: true, replyTo: replyToMessage ? replyToMessage.id : null }]);
+            // Comportamiento de scroll al enviar desde posición alta
+            try {
+                const el = chatAreaRef.current;
+                if (el) {
+                    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+                    if (distance > 300) {
+                        shouldScrollToBottomRef.current = true;
+                        jumpToBottomImmediateRef.current = true;
+                        stickToBottomRef.current = true;
+                    } else if (distance < 60) {
+                        shouldScrollToBottomRef.current = true;
+                        stickToBottomRef.current = true;
+                    }
+                }
+            } catch {}
 
             // Subir al bucket
             const { uploadVideoToBucket } = await import('./services/db');
@@ -3222,7 +3261,9 @@ const AguacateChat = () => {
             {/* Componente para mostrar las notificaciones */}
             <Toaster position="top-center" reverseOrder={false} limit={3} />
 
-            {/* Sidebar compacto (iconos verticales). En móvil se oculta totalmente cuando hay un chat seleccionado */}
+            {/* Sidebar compacto (iconos verticales). En móvil se oculta visualmente cuando hay un chat seleccionado
+                o cuando la vista actual es 'stories' (usando compactInvisible). Importante: siempre montamos el componente
+                para que su menú extendido (overlay) pueda mostrarse desde cualquier vista cuando showSideMenu === true. */}
             {!(isMobile && selectedContact) && (
                 <Sidebar
                     showSideMenu={showSideMenu}
@@ -3241,7 +3282,9 @@ const AguacateChat = () => {
                     setConfigStopped={setConfigStopped}
                     currentView={currentView}
                     onViewChange={handleViewChange}
-                    compactInvisible={isMobile && !selectedContact}
+                    // Cuando estamos en mobile y la vista es stories, hacemos invisible la barra compacta
+                    // pero dejamos montado el componente para permitir abrir el overlay desde Stories
+                    compactInvisible={isMobile && (currentView === 'stories' || !selectedContact)}
                 />
             )}
             {/* Sidebar de contactos e Historias: se oculta en móvil si hay un chat seleccionado */}
@@ -3551,8 +3594,8 @@ const AguacateChat = () => {
                     </div>
                     )
                 ) : (
-                    <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
-                        {loadingStories ? <StoriesSkeleton /> : <StoriesView ref={storiesViewRef} />}
+                    <div className="w-full md:w-80 theme-bg-secondary theme-border md:border-r flex flex-col h-full">
+                        {loadingStories ? <StoriesSkeleton /> : <StoriesView ref={storiesViewRef} onOpenSidebar={() => setShowSideMenu(true)} />}
                     </div>
                 )
             )}
@@ -4079,6 +4122,7 @@ const AguacateChat = () => {
                                         });
                                     }}
                                     onClose={() => setShowEmojiPicker(false)}
+                                    keepOpenOnMobile={true}
                                 />
                             )}
                         </div>

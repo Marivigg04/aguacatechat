@@ -755,9 +755,29 @@ const StoriesView = forwardRef((props, ref) => {
     };
 
     return (
-        <div className="flex-1 overflow-y-auto p-2">
+        // Small screens: ensure stories view fills the viewport height so it appears as a full screen section.
+        // On md+ screens keep original flex-1 behavior.
+        <div className="min-h-screen md:min-h-0 md:flex-1 overflow-y-auto p-2">
             <div className="px-1 pt-1 pb-2 theme-border border-b">
-                <h1 className="text-xl md:text-2xl font-bold theme-text-primary">Historias</h1>
+                <div className="flex items-center justify-between">
+                    <h1 className="text-xl md:text-2xl font-bold theme-text-primary">Historias</h1>
+                    {/* Mobile menu button: replica del botón en la lista de chats */}
+                    <button
+                        type="button"
+                        onClick={() => { try { props.onOpenSidebar && props.onOpenSidebar(); } catch {} }}
+                        className="md:hidden p-2 rounded-lg theme-bg-chat hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-teal-primary flex items-center justify-center"
+                        aria-label="Abrir menú"
+                        title="Abrir menú"
+                    >
+                        <svg viewBox="0 0 48 48" width="24" height="24" className="stroke-current" preserveAspectRatio="xMidYMid slice">
+                            <g transform="translate(9,12.5)">
+                                <path d="M1 1 H29" strokeWidth="2" strokeLinecap="round" className="theme-text-primary" />
+                                <path d="M1 11.5 H29" strokeWidth="2" strokeLinecap="round" className="theme-text-primary" />
+                                <path d="M1 22 H29" strokeWidth="2" strokeLinecap="round" className="theme-text-primary" />
+                            </g>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div className="mt-2 md:mt-3 px-1 pt-2 pb-2">
                 <h3 className="text-sm md:text-base font-semibold theme-text-secondary uppercase tracking-wider">RECIENTES</h3>
