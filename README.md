@@ -86,3 +86,30 @@ Futuras mejoras sugeridas:
 - Sincronizar estado de "unread" con el backend para mantener continuidad entre dispositivos.
 - Mostrar lista agrupada de notificaciones acumuladas en un panel central.
 - Preferencias de usuario para desactivar sonidos o elegir un tema de tonos.
+
+## Generar icon y splash (assets)
+
+Hay un pequeño script que usa `sharp` para generar `resources/icon.png` y `resources/splash.png` a partir de `public/aguacachat_logo.svg` o `public/aguacachat_logo.png`.
+
+Pasos:
+
+1. Instala dependencias de desarrollo:
+
+```bash
+npm install
+```
+
+2. Ejecuta el script para generar los PNGs:
+
+```bash
+npm run generate:assets
+```
+
+3. Luego genera y copia los recursos nativos (Android):
+
+```bash
+npx cordova-res android --skip-config --copy
+npx cap sync android
+```
+
+Si prefieres usar ImageMagick en vez de `sharp`, puedes seguir los comandos en la sección anterior del README.

@@ -976,10 +976,55 @@ const AguacateChat = () => {
         }
     };
 
+    // Helper: asegurar permiso de micrófono antes de iniciar grabación
+    const ensureMicrophonePermission = async () => {
+        try {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                toast.error('Acceso a micrófono no soportado en este entorno');
+                return false;
+            }
+            // Si la API de permisos está disponible, comprobar el estado primero
+            if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+                try {
+                    // Nota: algunos navegadores pueden no soportar 'microphone' en permissions
+                    const status = await navigator.permissions.query({ name: 'microphone' });
+                    if (status.state === 'granted') return true;
+                    if (status.state === 'denied') {
+                        toast.error('Permiso de micrófono denegado. Activa el permiso en la configuración del navegador.');
+                        return false;
+                    }
+                    // Si es 'prompt', caemos al flujo de getUserMedia para forzar el prompt
+                } catch (e) {
+                    // Algunos navegadores (o contextos) lanzan al preguntar; ignorar y seguir
+                    console.warn('navigator.permissions.query falló:', e);
+                }
+            }
+
+            // Intentar obtener un stream breve sólo para forzar el prompt
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Liberar inmediatamente las pistas si se obtuvo el stream
+            try { stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+            return true;
+        } catch (err) {
+            console.error('Error comprobando/solicitando permiso de micrófono', err);
+            if (err?.name === 'NotAllowedError' || err?.name === 'SecurityError') {
+                toast.error('Permiso de micrófono denegado');
+            } else if (err?.name === 'NotFoundError') {
+                toast.error('No se encontró un micrófono');
+            } else {
+                toast.error('No se pudo acceder al micrófono');
+            }
+            return false;
+        }
+    };
+
     // Comenzar grabación de audio
     const startRecording = async () => {
         if (!selectedContact) return;
         if (isRecording) return;
+        // Verificar/solicitar permiso de micrófono antes de proceder
+        const ok = await ensureMicrophonePermission();
+        if (!ok) return;
         try {
             // Reset limit when starting a fresh recording
             limitReachedRef.current = false;
