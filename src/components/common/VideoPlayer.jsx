@@ -58,6 +58,8 @@ export const VideoModal = ({ open, src, onClose, forceVertical = false }) => {
 		const [isFullscreen, setIsFullscreen] = useState(false);
 	const [isSeeking, setIsSeeking] = useState(false);
 		const [isClosing, setIsClosing] = useState(false);
+		const [controlsVisible, setControlsVisible] = useState(true);
+		const hideControlsTimeout = useRef(null);
 
 	// Reset al cerrar
 	useEffect(() => {
@@ -95,6 +97,22 @@ export const VideoModal = ({ open, src, onClose, forceVertical = false }) => {
 			vid.pause();
 			setPlaying(false);
 		}
+	}, []);
+
+	const showControls = useCallback(() => {
+		setControlsVisible(true);
+		if (hideControlsTimeout.current) clearTimeout(hideControlsTimeout.current);
+		// Ocultar controles automáticamente después de 2.5s si está reproduciendo
+		if (playing) {
+			hideControlsTimeout.current = setTimeout(() => setControlsVisible(false), 2500);
+		}
+	}, [playing]);
+
+	useEffect(() => {
+		// Limpiar timeout al desmontar
+		return () => {
+			if (hideControlsTimeout.current) clearTimeout(hideControlsTimeout.current);
+		};
 	}, []);
 
 	const handleProgressPointer = useCallback((clientX) => {
@@ -232,11 +250,15 @@ export const VideoModal = ({ open, src, onClose, forceVertical = false }) => {
 					</div>
 
 				{/* Controles personalizados */}
-				<div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/60 to-transparent p-4 space-y-2 text-white text-sm">
+				<div
+					className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-4 space-y-2 text-white text-sm transition-opacity duration-300 ${controlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+					onMouseMove={showControls}
+					onClick={(e) => { e.stopPropagation(); showControls(); }}
+				>
 					{/* Barra de progreso */}
 					<div
 						ref={progressRef}
-						className="group relative w-full h-3 cursor-pointer select-none"
+						className={`group relative w-full h-3 cursor-pointer select-none ${playing ? 'opacity-90 group-hover:opacity-100' : ''}`}
 						role="slider"
 						aria-valuemin={0}
 						aria-valuemax={duration || 0}
@@ -244,13 +266,13 @@ export const VideoModal = ({ open, src, onClose, forceVertical = false }) => {
 						aria-label="Barra de progreso"
 									onPointerDown={(e) => { e.stopPropagation(); handlePointerDown(e); }}
 					>
-						<div className="absolute inset-0 rounded-full bg-white/15 backdrop-blur-[2px]" />
+						<div className="absolute inset-0 rounded-full bg-white/8 backdrop-blur-sm" />
 						<div
-							className="absolute inset-y-0 left-0 rounded-full bg-teal-primary transition-[width] duration-75"
+							className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-teal-primary to-teal-secondary transition-[width] duration-75"
 							style={{ width: `${progressPercent}%` }}
 						/>
 						<div
-							className="absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-teal-primary shadow ring-2 ring-white/70 opacity-0 group-hover:opacity-100 transition-opacity"
+							className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-white shadow-md ring-2 ring-white/20 transition-all ${controlsVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
 							style={{ left: `calc(${progressPercent}% - 8px)` }}
 						/>
 					</div>
@@ -258,7 +280,7 @@ export const VideoModal = ({ open, src, onClose, forceVertical = false }) => {
 					<div className="flex items-center gap-4">
 						<button
 							onClick={togglePlay}
-							className="w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition focus:outline-none focus:ring-2 focus:ring-teal-primary"
+							className={`w-11 h-11 flex items-center justify-center rounded-full bg-white/12 hover:bg-white/20 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-teal-primary ${controlsVisible ? 'scale-100' : 'scale-90'}`}
 							aria-label={playing ? 'Pausar' : 'Reproducir'}
 						>
 							{playing ? (
@@ -279,7 +301,7 @@ export const VideoModal = ({ open, src, onClose, forceVertical = false }) => {
 						<div className="ml-auto flex items-center gap-2">
 							<button
 								onClick={toggleFullscreen}
-								className="w-10 h-10 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 active:scale-95 transition focus:outline-none focus:ring-2 focus:ring-teal-primary"
+								className="w-10 h-10 flex items-center justify-center rounded-md bg-white/6 hover:bg-white/12 active:scale-95 transition-transform focus:outline-none focus:ring-2 focus:ring-teal-primary"
 								aria-label={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
 							>
 								{isFullscreen ? (
