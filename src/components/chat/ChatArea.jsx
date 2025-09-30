@@ -1,5 +1,6 @@
 import { isColorLight } from '../../utils/colorUtils';
 import React, { useEffect } from 'react';
+import useIsMobile from '../../hooks/useIsMobile';
 import CenterNoticeBox from '../common/CenterNoticeBox.jsx';
 import ChatImage from './ChatImage.jsx';
 import VideoThumbnail from '../common/VideoPlayer.jsx';
@@ -60,6 +61,7 @@ const ChatArea = ({
   // usuario actual
   user,
 }) => {
+  const isMobile = useIsMobile();
   // Cerrar menú contextual al hacer click en cualquier parte fuera del menú
   useEffect(() => {
     const handleGlobalClick = (e) => {
@@ -235,7 +237,7 @@ const ChatArea = ({
                   }}
                 >
                   {/* Avatar recibidos */}
-                  {!isOwn && (
+                  {!isOwn && !isMobile && (
                     selectedContact?.avatar_url ? (
                       <img src={selectedContact.avatar_url} alt={selectedContact.name} className="w-10 h-10 rounded-full object-cover mr-2" />
                     ) : (
@@ -453,13 +455,13 @@ const ChatArea = ({
           {/* Indicador escribiendo */}
           {selectedContact && isTyping && (
             <div className="flex justify-start">
-              {selectedContact?.avatar_url ? (
+              {!isMobile && (selectedContact?.avatar_url ? (
                 <img src={selectedContact.avatar_url} alt={selectedContact.name} className="w-8 h-8 rounded-full object-cover mr-2" />
               ) : (
                 <div className="w-8 h-8 bg-gradient-to-br from-teal-primary to-teal-secondary rounded-full flex items-center justify-center text-white text-xs font-bold mr-2">
                   {selectedContact?.initials}
                 </div>
-              )}
+              ))}
               <div className="message-received max-w-xs lg:max-w-md px-4 py-2 rounded-2xl rounded-bl-md">
                 <div className="flex items-center gap-1">
                   <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{animationDelay: '0s'}}></span>
