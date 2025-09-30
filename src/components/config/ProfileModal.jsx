@@ -45,6 +45,7 @@ const ProfileModal = ({
     
     // Estados locales para la ventana de cambiar contraseña
     const [showEditPasswordModal, setShowEditPasswordModal] = useState(false);
+    const [isEditPasswordClosing, setIsEditPasswordClosing] = useState(false);
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -785,14 +786,17 @@ const ProfileModal = ({
                 </div>
             </div>
             {/* Modal cambiar contraseña */}
-            {showEditPasswordModal && !contactProfile && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                    <div className="theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+            { (showEditPasswordModal || isEditPasswordClosing) && !contactProfile && (
+                <div className={`fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 ${isEditPasswordClosing ? 'anim-fade-out-fast' : 'anim-fade-in'}`}>
+                    <div className={`theme-bg-secondary rounded-2xl w-full max-w-xs flex flex-col shadow-2xl modal-transition ${isEditPasswordClosing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`} onClick={e => e.stopPropagation()}>
                         <div className="p-4 theme-border border-b flex items-center justify-between">
                             <h3 className="text-lg font-bold theme-text-primary">Cambiar contraseña</h3>
                             <button
                                 className="ml-4 p-2 rounded-full transition-all duration-300 ease-out transform hover:scale-110 hover:rotate-90 theme-bg-chat"
-                                onClick={() => setShowEditPasswordModal(false)}
+                                onClick={() => {
+                                    setIsEditPasswordClosing(true);
+                                    setTimeout(() => { setShowEditPasswordModal(false); setIsEditPasswordClosing(false); }, 320);
+                                }}
                                 title="Cerrar modal"
                             >
                                 <span className="text-lg font-light transition-colors duration-300 theme-text-primary">✕</span>

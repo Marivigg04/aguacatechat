@@ -156,6 +156,7 @@ const AguacateChat = () => {
     const [showConfirmClearChat, setShowConfirmClearChat] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [showContactModal, setShowContactModal] = useState(false);
+    const [isContactModalClosing, setIsContactModalClosing] = useState(false);
     const [modalType, setModalType] = useState('chat');
     const [selectedGroupContacts, setSelectedGroupContacts] = useState([]);
     const [showAttachMenu, setShowAttachMenu] = useState(false);
@@ -2826,7 +2827,12 @@ const AguacateChat = () => {
     };
 
     const closeContactModal = () => {
-        setShowContactModal(false);
+        // trigger fade-out then unmount
+        setIsContactModalClosing(true);
+        setTimeout(() => {
+            setShowContactModal(false);
+            setIsContactModalClosing(false);
+        }, 320);
     };
 
     const toggleContactSelection = (contact) => {
@@ -4338,8 +4344,8 @@ const AguacateChat = () => {
             </div>
 
             {/* Modal de selección de contactos */}
-            <div id="contactModal" className={`fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 ${showContactModal ? '' : 'hidden'}`}>
-                <div className="theme-bg-secondary rounded-2xl w-full max-w-md max-h-96 flex flex-col">
+            <div id="contactModal" className={`fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 ${showContactModal || isContactModalClosing ? '' : 'hidden'}`} onClick={closeContactModal}>
+                <div className={`theme-bg-secondary rounded-2xl w-full max-w-md max-h-96 flex flex-col modal-transition ${isContactModalClosing ? 'anim-fade-out-fast opacity-0 scale-95' : 'anim-fade-in opacity-100 scale-100'}`} onClick={e => e.stopPropagation()}>
                     <div className="p-6 theme-border border-b">
                         <div className="flex items-center justify-between">
                             <h3 id="modalTitle" className="text-lg font-bold theme-text-primary">{modalType === 'chat' ? 'Nuevo Chat' : 'Nuevo Grupo'}</h3>
