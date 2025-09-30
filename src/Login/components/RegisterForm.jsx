@@ -127,15 +127,15 @@ const RegisterForm = () => {
 
       // Registro exitoso
       // Actualizar el perfil en la tabla profiles con el nombre completo
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ username: fullName })
-        .eq('id', data.user.id);
-      if (profileError) {
-        console.error('Error actualizando perfil:', profileError);
-        alert('Registro exitoso, pero error al actualizar el nombre. Contacta soporte.');
-      } else {
-        alert('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
+        const { data: profData, error: profileError } = await supabase
+          .from('profiles')
+          .upsert({ id: data.user.id, username: fullName })
+          .select();
+        if (profileError) {
+          console.error('Error al insertar/actualizar perfil:', profileError);
+          alert('Registro exitoso, pero error al guardar el nombre en el perfil. Contacta soporte.');
+        } else {
+          alert('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
       }
       // Opcional: limpiar campos o redirigir
       setFullName('');
