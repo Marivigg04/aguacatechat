@@ -349,11 +349,14 @@ const AguacateChat = () => {
             storiesLoadingTimerRef.current = null;
         }
         if (view === 'stories') {
-            // Deseleccionar chat activo y limpiar menús contextuales
-            setSelectedContact(null);
-            setShowChatOptionsMenu(false);
-            setShowAttachMenu(false);
-            setShowNewChatMenu(false);
+            // Deseleccionar chat activo con animación y limpiar menús contextuales
+            deselectWithAnimation(() => {
+                setSelectedContact(null);
+                setChatMessages([]);
+                setShowChatOptionsMenu(false);
+                setShowAttachMenu(false);
+                setShowNewChatMenu(false);
+            });
             // Mostrar skeleton brevemente al entrar a Historias
             setLoadingStories(true);
             // Mostrar skeleton del área de chat también
@@ -1242,6 +1245,35 @@ const AguacateChat = () => {
     // Fuerza un salto inmediato al fondo (sin animación) cuando se abre una conversación
     const jumpToBottomImmediateRef = useRef(false);
     const chatMessagesRef = useRef([]);
+
+    // Helper para deseleccionar con animación: agrega una clase al contenedor del área de chat
+    // y espera al evento animationend o un timeout para limpiar y llamar a la callback (deseleccionar)
+    const deselectWithAnimation = (cleanupCallback) => {
+        const el = chatAreaRef.current;
+        if (!el) {
+            try { cleanupCallback && cleanupCallback(); } catch{}
+            return;
+        }
+        // Añadir clase que dispara la animación CSS
+        el.classList.add('chat-deselect-animate');
+        // Escuchar fin de animación
+        const onEnd = (e) => {
+            // Ignorar si el evento viene de un elemento hijo
+            if (e.target !== el) return;
+            el.classList.remove('chat-deselect-animate');
+            el.removeEventListener('animationend', onEnd);
+            try { cleanupCallback && cleanupCallback(); } catch{}
+        };
+        el.addEventListener('animationend', onEnd);
+        // Fallback: después de 500ms forzamos la limpieza
+        setTimeout(() => {
+            if (el.classList.contains('chat-deselect-animate')) {
+                el.classList.remove('chat-deselect-animate');
+                try { el.removeEventListener('animationend', onEnd); } catch {}
+                try { cleanupCallback && cleanupCallback(); } catch{}
+            }
+        }, 520);
+    };
 
     // Listener para gestionar auto-scroll inteligente: si el usuario se aleja del fondo, dejar de seguir hasta que vuelva.
     useEffect(() => {
@@ -3028,11 +3060,13 @@ const AguacateChat = () => {
         const handleEsc = (e) => {
             if (e.key === 'Escape' || e.key === 'Esc') {
                 if (selectedContact) {
-                    // Deseleccionar chat y limpiar UI relacionada
-                    setSelectedContact(null);
-                    setChatMessages([]);
-                    setShowChatOptionsMenu(false);
-                    setShowAttachMenu(false);
+                    // Deseleccionar chat con animación y limpiar UI relacionada
+                    deselectWithAnimation(() => {
+                        setSelectedContact(null);
+                        setChatMessages([]);
+                        setShowChatOptionsMenu(false);
+                        setShowAttachMenu(false);
+                    });
                 }
                 if (replyToMessage) setReplyToMessage(null);
             }
@@ -3566,9 +3600,22 @@ const AguacateChat = () => {
             <div className={`flex-1 flex-col relative ${isMobile && selectedContact ? 'w-full h-full' : (isMobile ? 'hidden' : 'flex')}`}>
                 {/* Header del área principal: solo cuando hay chat seleccionado */}
                 {selectedContact && (
-                        <div className="theme-bg-secondary theme-border border-b p-3 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 min-h-[64px] sm:min-h-[72px]">
+                        <div className="theme-bg-secondary theme-border border-b p-3 sm:p-4 flex items-center gap-2 sm:gap-4 min-h-[64px] sm:min-h-[72px]">
+                            {/* Botón hamburguesa movido al extremo izquierdo */}
+                            <div className="flex items-center -ml-2 sm:-ml-1">
+                                <button
+                                    className="md:hidden p-1 sm:p-1.8 rounded-lg theme-bg-chat h-10 w-10 flex items-center justify-center"
+                                    onClick={() => { toggleSidebar(); deselectWithAnimation(() => { setSelectedContact(null); setChatMessages([]); }); }}
+                                    aria-label="Volver atrás"
+                                >
+                                    {/* Arrow back SVG - reducido ligeramente */}
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                        <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-5-5a1 1 0 010-1.414l5-5a1 1 0 111.414 1.414L6.414 9H17a1 1 0 110 2H6.414l3.293 3.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
                             <div
-                                className="flex items-center gap-2 sm:gap-3 cursor-pointer group rounded-lg px-1 -mx-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-primary/60 transition-colors"
+                                className="flex items-center gap-2 sm:gap-3 cursor-pointer group rounded-lg px-1 -mx-1 ml-0 sm:ml-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-primary/60 transition-colors"
                                 onClick={() => {
                                     setShowProfileModal(true);
                                     if (import.meta.env?.DEV) {
@@ -3590,9 +3637,6 @@ const AguacateChat = () => {
                                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
                                 title="Ver perfil del contacto"
                             >
-                            <button className="md:hidden p-1.5 sm:p-2 rounded-lg theme-bg-chat" onClick={toggleSidebar}>
-                                ☰
-                            </button>
                                 <div className="relative">
                                     {selectedContact?.avatar_url ? (
                                         <img
@@ -3630,7 +3674,7 @@ const AguacateChat = () => {
                                     </p>
                                 </div>
                         </div>
-                        <div className="flex items-center gap-1.5 sm:gap-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
                             <div className="relative">
                                 <button
                                     onClick={toggleChatOptions}
@@ -3711,6 +3755,7 @@ const AguacateChat = () => {
                                     </button>
                                 </div>
                             </div>
+                            
                         </div>
                     </div>
                 )}
