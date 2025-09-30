@@ -3991,10 +3991,8 @@ const AguacateChat = () => {
                                             <div className="flex-1 min-w-0">
                                                 <div className="reply-label text-[11px] uppercase tracking-wide font-semibold opacity-70 mb-0.5">Respondiendo a</div>
                                                 <div className="text-xs truncate" title={replyToMessage.text || ''}>
-                                                    {replyToMessage.messageType === 'image' && 'Imagen'}
-                                                    {replyToMessage.messageType === 'video' && 'Video'}
-                                                    {replyToMessage.messageType === 'audio' && 'Audio'}
-                                                    {['text', undefined, null].includes(replyToMessage.messageType) && (replyToMessage.text || '(sin contenido)')}
+                                                    {/* Mostrar el contenido real del mensaje referenciado cuando sea texto; para multimedia mostrar etiqueta */}
+                                                    {replyToMessage.messageType === 'image' ? 'Imagen' : replyToMessage.messageType === 'video' ? 'Video' : replyToMessage.messageType === 'audio' ? 'Audio' : (replyToMessage.text && String(replyToMessage.text).trim() ? String(replyToMessage.text).slice(0,240) : '(sin contenido)')}
                                                 </div>
                                             </div>
                                             <div className="flex items-center px-1">
