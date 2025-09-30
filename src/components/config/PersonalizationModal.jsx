@@ -3,7 +3,6 @@ import React, { useState, useMemo } from 'react';
 // Configuración de opciones disponibles
 const backgrounds = [
   { label: 'Color sólido', value: 'solid', color: '#f8fafc' },
-  { label: 'Gradiente', value: 'gradient', gradient: 'linear-gradient(135deg, #10b981, #14b8a6)' },
   { label: 'Imagen', value: 'image', url: '' }
 ];
 
@@ -197,35 +196,43 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
                 )}
                 {backgroundType === 'image' && (
                   <div className="flex flex-col gap-2 mt-1">
-                    <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-medium theme-text-secondary">Imagen de fondo</label>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                       <input
                         type="file"
                         accept="image/*"
                         onChange={handleImageUpload}
-                        className="rounded border p-1 text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-teal-primary file:text-white hover:file:opacity-80"
+                        className="w-full sm:w-auto rounded border p-2 text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-teal-primary file:text-white hover:file:opacity-80"
                       />
                       {backgroundImage && (
                         <button
                           type="button"
                           onClick={handleRemoveImage}
-                          className="px-2 py-1 rounded-md text-xs font-medium bg-rose-600 text-white hover:bg-rose-500 transition-colors"
+                          className="px-2 py-1 rounded-md text-xs font-medium bg-rose-600 text-white hover:bg-rose-500 transition-colors hidden sm:inline-block"
                           title="Quitar imagen de fondo"
                         >
                           Quitar
                         </button>
                       )}
                     </div>
-                    {backgroundImage && (
-                      <div className="relative group">
+                    {backgroundImage ? (
+                      <div className="relative mt-2 w-full rounded-lg overflow-hidden">
                         <img
                           src={backgroundImage}
                           alt="Fondo"
-                          className="mt-1 w-full h-24 object-cover rounded-lg border shadow-sm"
+                          className="w-full h-40 sm:h-24 object-cover rounded-lg border shadow-sm"
                         />
-                        <span className="absolute bottom-1 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Preview</span>
+                        {/* Overlay remove button for mobile and desktop */}
+                        <button
+                          aria-label="Quitar imagen de fondo"
+                          onClick={handleRemoveImage}
+                          className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full hover:bg-black/70"
+                        >
+                          ✕
+                        </button>
+                        <span className="absolute bottom-2 left-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded">Preview</span>
                       </div>
-                    )}
-                    {!backgroundImage && (
+                    ) : (
                       <p className="text-[11px] opacity-60">Sube una imagen (se guarda localmente, no se envía al servidor).</p>
                     )}
                   </div>
@@ -307,8 +314,8 @@ function PersonalizationModal({ isOpen, onClose, onApply, personalization, setPe
               <p className="mt-3 text-[11px] opacity-60 theme-text-secondary leading-snug">Pequeña corresponde al tamaño actual de referencia. Cambiarlo afecta sólo a los mensajes, no a la interfaz.</p>
             </div>
           </div>
-          {/* Right column - preview */}
-          <div className="md:w-1/2 w-full flex flex-col gap-3 h-full">
+          {/* Right column - preview (hidden on extra-small mobile screens) */}
+          <div className="sm:flex sm:w-1/2 w-full flex-col gap-3 h-full">
             <div className="px-6 py-4 rounded-xl theme-bg-chat theme-border border flex flex-col flex-1 min-h-0">
               <p className="text-sm font-semibold theme-text-secondary mb-3">Vista previa</p>
               <div className="rounded-xl border theme-border overflow-hidden shadow-inner flex-1 flex flex-col min-h-0">
