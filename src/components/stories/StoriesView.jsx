@@ -159,12 +159,13 @@ const StoriesView = forwardRef((props, ref) => {
     const [editorFile, setEditorFile] = useState(null); // imagen a editar
     const [videoFile, setVideoFile] = useState(null); // video a previsualizar
     const [uploading, setUploading] = useState(false);
+    // Set de historias vistas (persistidas en BD)
+    const [viewedFromDB, setViewedFromDB] = useState(() => new Set());
 
     const openViewerById = (id) => {
         const idx = stories.findIndex(s => s.id === id);
         if (idx >= 0) {
             setSelectedStoryIndex(idx);
-            // Calcular primer no visto interno
             const group = stories[idx];
             const userStories = Array.isArray(group.userStories) ? group.userStories : [];
             let firstUnseen = 0;
@@ -172,15 +173,14 @@ const StoriesView = forwardRef((props, ref) => {
                 let allSeen = true;
                 for (let i = 0; i < userStories.length; i++) {
                     const h = userStories[i];
-                    const arr = Array.isArray(h.views) ? h.views : [];
-                    const locally = locallyViewed.has(h.id);
-                    if (!locally && !arr.includes(user.id)) {
+                    const seen = locallyViewed.has(h.id) || viewedFromDB.has(h.id);
+                    if (!seen) {
                         firstUnseen = i;
                         allSeen = false;
                         break;
                     }
                 }
-                if (allSeen) firstUnseen = 0; // todas vistas -> abrir primera
+                if (allSeen) firstUnseen = 0; // todas vistas
             }
             setInitialInnerIndex(firstUnseen);
             setViewerOpen(true);
@@ -228,7 +228,7 @@ const StoriesView = forwardRef((props, ref) => {
                 const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
                 const { data: rows, error } = await supabase
                     .from('histories')
-                    .select('id, user_id, content_url, content_type, caption, created_at, bg_color, font_color, views')
+                    .select('id, user_id, content_url, content_type, caption, created_at, bg_color, font_color')
                     .in('user_id', idsArr)
                     .gt('created_at', cutoff)
                     .order('created_at', { ascending: true }); // más vieja -> más nueva
@@ -709,16 +709,35 @@ const StoriesView = forwardRef((props, ref) => {
         }
     };
 
-    // Derivar listas: no vistos y vistos
-    // Determinar si un grupo de historias (un usuario) fue visto: si TODAS las historias incluyen al user.id en views
+    // Cargar vistas persistidas de la tabla history_views para las historias actuales
+    useEffect(() => {
+        if (!user || !user.id) return;
+        if (!stories || stories.length === 0) return;
+        const allIds = stories.flatMap(g => (g.userStories || []).map(h => h.id)).filter(Boolean);
+        if (allIds.length === 0) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('history_views')
+                    .select('history_id')
+                    .eq('user_id', user.id)
+                    .in('history_id', allIds);
+                if (error) throw error;
+                if (cancelled) return;
+                setViewedFromDB(new Set((data || []).map(r => r.history_id)));
+            } catch (e) {
+                console.warn('Error cargando history_views:', e?.message || e);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [user, stories]);
+
+    // Determinar si un grupo está completamente visto (todas sus historias aparecen en local o BD)
     const computeSeen = (storyGroup) => {
         if (!user || !user.id) return false;
         if (!Array.isArray(storyGroup.userStories)) return false;
-        return storyGroup.userStories.every(h => {
-            if (locallyViewed.has(h.id)) return true; // forzado local
-            const arr = Array.isArray(h.views) ? h.views : [];
-            return arr.includes(user.id);
-        });
+        return storyGroup.userStories.every(h => (locallyViewed.has(h.id) || viewedFromDB.has(h.id)));
     };
     const unseenStories = stories.filter(s => !computeSeen(s));
     const seenStories = stories.filter(s => computeSeen(s));
@@ -726,9 +745,12 @@ const StoriesView = forwardRef((props, ref) => {
     const handleStoryViewed = (storyId) => {
         setLocallyViewed(prev => {
             if (prev.has(storyId)) return prev;
-            const next = new Set(prev);
-            next.add(storyId);
-            return next;
+            const next = new Set(prev); next.add(storyId); return next;
+        });
+        // Reflejar inmediatamente en la colección de vistas persistidas para mover a VISTOS sin esperar re-fetch
+        setViewedFromDB(prev => {
+            if (prev.has(storyId)) return prev;
+            const next = new Set(prev); next.add(storyId); return next;
         });
     };
 

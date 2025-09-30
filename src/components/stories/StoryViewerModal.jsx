@@ -243,86 +243,133 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
     const activeType = normalized?.type || 'image';
     const activeStoryId = rawStory && typeof rawStory === 'object' ? rawStory.id : null;
     const isOwnStory = rawStory && typeof rawStory === 'object' && (rawStory.user_id === user?.id);
-    const viewsArray = rawStory && Array.isArray(rawStory.views) ? rawStory.views : [];
-    const totalExternalViews = viewsArray.filter(v => v && v !== user?.id).length;
+    // Soporte retrocompatibilidad: si aún viene rawStory.views (array) se usa como valor inicial.
+    const ownerId = (rawStory && typeof rawStory === 'object' && (rawStory.user_id || rawStory.userId || rawStory.userID)) || null;
+    const initialLegacyViews = rawStory && Array.isArray(rawStory?.views)
+        ? rawStory.views.filter(v => v && v !== user?.id)
+        : [];
+    const initialViewsCountValue = (rawStory && typeof rawStory === 'object' && (rawStory.views_count || rawStory.viewsCount))
+        ? (rawStory.views_count || rawStory.viewsCount)
+        : initialLegacyViews.length;
+    const [viewsCount, setViewsCount] = useState(initialViewsCountValue);
+    // Set (ref) de ids de usuarios que ya vimos para esta historia (solo historias propias)
+    const viewerIdsRef = useRef(new Set());
 
-    // Registro de vistas: evitar duplicados durante esta sesión en este componente
+    // Sincronizar al cambiar de historia
+    useEffect(() => {
+        const legacy = rawStory && Array.isArray(rawStory?.views)
+            ? rawStory.views.filter(v => v && v !== user?.id)
+            : [];
+        const fallback = (rawStory && typeof rawStory === 'object' && (rawStory.views_count || rawStory.viewsCount)) || legacy.length || 0;
+        setViewsCount(fallback);
+    }, [rawStory, user?.id]);
+
+    // Registro de vistas en tabla normalizada history_views
+    // Evitar duplicados en la sesión del modal con un Set local
     const viewedIdsRef = useRef(new Set());
-
     useEffect(() => {
         const registerView = async () => {
-            if (!user || !user.id) return;
+            if (!user?.id) return;
             if (!activeStoryId) return;
-            // No registrar si la historia es del mismo usuario
-            const ownerId = (rawStory && typeof rawStory === 'object' && (rawStory.user_id || rawStory.userId || rawStory.userID)) || null;
-            if (ownerId && ownerId === user.id) return;
-            // Evitar doble envío si ya se marcó en esta sesión del modal
-            if (viewedIdsRef.current.has(activeStoryId)) return;
-            viewedIdsRef.current.add(activeStoryId);
+            if (ownerId && ownerId === user.id) return; // no contar vistas propias
+            if (viewedIdsRef.current.has(activeStoryId)) return; // ya registrada localmente
             try {
-                // Intento: usar RPC-like update: añadir user.id si no está.
-                // Paso 1: obtener vistas actuales minimamente para evitar duplicado persistente
-                const { data: currentRow, error: fetchErr } = await supabase
-                    .from('histories')
-                    .select('views')
-                    .eq('id', activeStoryId)
-                    .single();
-                if (fetchErr) {
-                    console.warn('[views] fetch error', fetchErr.message);
+                // Verificar si ya existe registro en backend
+                const { data: existing, error: checkErr } = await supabase
+                    .from('history_views')
+                    .select('id')
+                    .eq('history_id', activeStoryId)
+                    .eq('user_id', user.id)
+                    .limit(1)
+                    .maybeSingle();
+                if (checkErr) {
+                    console.warn('[history_views] check error', checkErr.message);
                 }
-                const currentViews = Array.isArray(currentRow?.views) ? currentRow.views : [];
-                if (currentViews.includes(user.id)) {
-                    return; // ya registrado en servidor
+                if (existing) {
+                    viewedIdsRef.current.add(activeStoryId); // marcar para no reintentar
+                    return; // ya vista
                 }
-                // Actualizar agregando id
-                const newViews = [...currentViews, user.id];
-                const { error: updateErr } = await supabase
-                    .from('histories')
-                    .update({ views: newViews })
-                    .eq('id', activeStoryId);
-                if (updateErr) {
-                    console.warn('[views] update error', updateErr.message);
-                } else {
-                    if (typeof onViewedStory === 'function') {
-                        onViewedStory(activeStoryId);
-                    }
+                // Insertar nueva vista
+                const { error: insertErr } = await supabase
+                    .from('history_views')
+                    .insert({ history_id: activeStoryId, user_id: user.id, viewed_at: new Date().toISOString() });
+                if (insertErr) {
+                    console.warn('[history_views] insert error', insertErr.message);
+                    return;
                 }
+                viewedIdsRef.current.add(activeStoryId);
+                setViewsCount(prev => prev + 1);
+                if (typeof onViewedStory === 'function') onViewedStory(activeStoryId);
             } catch (err) {
-                console.warn('[views] unexpected error', err);
+                console.warn('[history_views] unexpected error', err);
             }
         };
         registerView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeStoryId, rawStory]);
+    }, [activeStoryId, ownerId, rawStory]);
 
-    // Cargar viewers (perfiles) cuando se abre el modal de vistas
+    // Fetch inicial de conteo de vistas para historias propias (antes de abrir el modal) para que el botón muestre el número correcto
+    useEffect(() => {
+        if (!isOwnStory) return;
+        if (!activeStoryId) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('history_views')
+                    .select('user_id')
+                    .eq('history_id', activeStoryId);
+                if (error) throw error;
+                if (cancelled) return;
+                const filtered = (data || []).map(r => r.user_id).filter(uid => uid && uid !== user?.id);
+                viewerIdsRef.current = new Set(filtered);
+                setViewsCount(filtered.length);
+            } catch (e) {
+                // silencioso: si falla, dejamos el valor previo
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [isOwnStory, activeStoryId, user?.id]);
+
+    // Cargar viewers (perfiles) desde history_views al abrir modal
     useEffect(() => {
         const loadViewers = async () => {
             if (!showViewsModal) return;
-            if (!isOwnStory) return; // solo dueño puede ver
+            if (!isOwnStory) return; // solo dueño ve el listado
             if (!activeStoryId) return;
             setViewsLoading(true);
             setViewsError(null);
             try {
-                // Tomar el array de views actual del rawStory (excluyendo al dueño)
-                const toFetch = viewsArray.filter(v => v && v !== user.id);
-                if (toFetch.length === 0) {
+                const { data: viewRows, error: hvErr } = await supabase
+                    .from('history_views')
+                    .select('user_id, viewed_at')
+                    .eq('history_id', activeStoryId);
+                if (hvErr) throw hvErr;
+                const userIds = (viewRows || [])
+                    .map(r => r.user_id)
+                    .filter(id => id && id !== user.id);
+                if (userIds.length === 0) {
                     setViewersData([]);
+                    setViewsCount(0); // ninguno externo
                     setViewsLoading(false);
                     return;
                 }
-                const { data, error } = await supabase
+                const { data: profilesData, error: profErr } = await supabase
                     .from('profiles')
                     .select('id, username, avatar_url')
-                    .in('id', toFetch);
-                if (error) throw error;
-                const enhanced = (data || []).map(p => {
+                    .in('id', userIds);
+                if (profErr) throw profErr;
+                const byIdViewedAt = Object.fromEntries((viewRows || []).map(r => [r.user_id, r.viewed_at]));
+                const enhanced = (profilesData || []).map(p => {
                     const shortId = p.id ? p.id.slice(0, 6) : '??????';
                     const displayName = p.username || `user_${shortId}`;
-                    return { ...p, displayName, shortId };
+                    return { ...p, displayName, shortId, viewed_at: byIdViewedAt[p.id] };
                 });
                 const sorted = enhanced.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||''));
                 setViewersData(sorted);
+                setViewsCount(sorted.length);
+                // Sincronizar set de ids para evitar duplicados en realtime posterior
+                viewerIdsRef.current = new Set(sorted.map(v => v.id));
             } catch (e) {
                 setViewsError(e?.message || 'Error al cargar vistas');
             } finally {
@@ -331,7 +378,52 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
         };
         loadViewers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showViewsModal, activeStoryId]);
+    }, [showViewsModal, activeStoryId, isOwnStory]);
+
+    // Suscripción realtime a nuevas vistas para la historia activa (solo si es propia)
+    useEffect(() => {
+        if (!isOwnStory) return;
+        if (!activeStoryId) return;
+        const channel = supabase.channel(`story_views_${activeStoryId}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'history_views',
+                filter: `history_id=eq.${activeStoryId}`
+            }, async (payload) => {
+                const row = payload?.new;
+                if (!row) return;
+                if (row.user_id === user?.id) return; // ignorar propia
+                if (viewerIdsRef.current.has(row.user_id)) return; // ya contabilizado
+                viewerIdsRef.current.add(row.user_id);
+                setViewsCount(prev => prev + 1);
+                // Si el modal de vistas está abierto, anexar perfil en caliente
+                if (showViewsModal) {
+                    try {
+                        const { data: prof, error: profErr } = await supabase
+                            .from('profiles')
+                            .select('id, username, avatar_url')
+                            .eq('id', row.user_id)
+                            .single();
+                        if (profErr) return;
+                        setViewersData(curr => {
+                            if (curr.some(v => v.id === prof.id)) return curr; // carrera
+                            const shortId = prof.id ? prof.id.slice(0,6) : '??????';
+                            const displayName = prof.username || `user_${shortId}`;
+                            const next = [...curr, { ...prof, displayName, shortId, viewed_at: row.viewed_at }];
+                            // ordenar alfabéticamente para mantener consistencia
+                            return next.sort((a,b) => (a.displayName||'').localeCompare(b.displayName||''));
+                        });
+                    } catch (e) {
+                        // silencioso
+                    }
+                }
+            });
+        channel.subscribe();
+        return () => {
+            try { supabase.removeChannel(channel); } catch {}
+        };
+    }, [isOwnStory, activeStoryId, showViewsModal, user?.id]);
 
     useEffect(() => {}, [currentUserIndex, currentStoryInUser, rawStory, normalized, activeType, activeStoryUrl, activeText]);
 
@@ -816,7 +908,7 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
                                     <circle cx="12" cy="12" r="3" />
                                 </svg>
-                                <span>Vistas: {totalExternalViews || 0}</span>
+                                <span>Vistas: {viewsCount || 0}</span>
                             </button>
                         )}
                         {/* Historias ajenas: botón Responder */}
@@ -937,6 +1029,8 @@ const StoryViewerModal = ({ stories, startIndex, initialInnerIndex = 0, onClose,
                 loading={viewsLoading}
                 error={viewsError}
                 viewers={viewersData}
+                storyId={activeStoryId}
+                isOwner={isOwnStory}
             />
             {/* Composer de respuesta a historia */}
             {showReplyComposer && !isOwnStory && !!activeStoryId && (
