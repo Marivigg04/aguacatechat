@@ -86,6 +86,26 @@ body {
 
 .chat-container {
     height: calc(100vh - 140px);
+    width: 100%; /* Asegura que el área de chat ocupe todo el ancho disponible */
+}
+
+/* Mejores ajustes en móviles: ocupar 100% del ancho, reducir padding efectivo (el padding viene del p-4 del componente) */
+@media (max-width: 640px) {
+  .chat-container {
+    height: calc(100vh - 128px); /* Ligeramente menos para acomodar variaciones del header/composer */
+    width: 100%;
+  }
+  #chatArea { /* id usado en el componente ChatArea */
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+  .chat-composer-container { /* contenedor de la barra de entrada */
+    padding: 0.55rem 0.6rem !important;
+  }
+  .chat-composer-container textarea#messageInput { /* reducir aún más el padding lateral en pantallas pequeñas */
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+  }
 }
 
 @media (max-width: 768px) {

@@ -3,10 +3,9 @@ import ChatSkeleton from '../skeletons/ChatSkeleton.jsx';
 
 export default function ChatShell({ children }) {
   return (
-    <div style={{ height: '100vh', width: '100vw', margin: 0, padding: 0 }}>
-      <Suspense fallback={<ChatSkeleton />}>
-        {children}
-      </Suspense>
+    // contenedor principal: asegura no overflow X y ocupa el viewport
+    <div className="flex flex-col h-screen w-screen max-w-screen overflow-x-hidden m-0 p-0" style={{ minHeight: '100vh' }}>
+      <Suspense fallback={<ChatSkeleton />}>{children}</Suspense>
     </div>
   );
 }

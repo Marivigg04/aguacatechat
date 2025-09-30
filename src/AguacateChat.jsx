@@ -3824,8 +3824,8 @@ const AguacateChat = () => {
                 />
 
                 {selectedContact && !isConvBlocked && (
-                <div className="theme-bg-secondary theme-border border-t p-3 sm:p-4">
-                    <div className="flex items-center gap-2 sm:gap-3 w-full mx-auto px-1 sm:px-0">
+                <div className="theme-bg-secondary theme-border border-t p-2.5 sm:p-4 chat-composer-container">
+                    <div className="flex items-center gap-2 sm:gap-3 w-full mx-auto px-0 sm:px-0">
                         {/* 4. REEMPLAZO DEL ICONO DE ADJUNTAR */}
                         <button 
                             onClick={() => {
@@ -4195,13 +4195,13 @@ const AguacateChat = () => {
                                     </div>
                                 </div>
                             )}
-                            <div className="flex w-full items-center gap-3">
+                            <div className="flex w-full items-center gap-3 min-w-0 chat-composer-wrapper">
                                 <textarea
                                     ref={messageInputRef}
                                     id="messageInput"
-                                    className="flex-1 px-7 py-3 rounded-xl theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary resize-none leading-relaxed"
+                                    className="flex-1 w-full min-w-0 px-5 py-2.5 rounded-xl theme-bg-chat theme-text-primary focus:outline-none focus:ring-2 focus:ring-teal-primary resize-none leading-relaxed"
                                     style={{
-                                        minHeight: '44px',
+                                        minHeight: '40px',
                                         maxHeight: '160px',
                                         lineHeight: '1.5',
                                         background: 'var(--bg-chat, #222)'
@@ -4209,7 +4209,7 @@ const AguacateChat = () => {
                                     value={messageInput}
                                     onChange={handleMessageInputChange}
                                     onInput={e => {
-                                        e.target.style.height = '44px';
+                                        e.target.style.height = '40px';
                                         const fullScrollHeight = e.target.scrollHeight;
                                         const capped = Math.min(fullScrollHeight, 160);
                                         e.target.style.height = capped + 'px';
