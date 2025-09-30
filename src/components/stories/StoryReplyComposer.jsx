@@ -110,8 +110,12 @@ const StoryReplyComposer = ({ storyOwnerId, storyId, storyData, onClose, onSent,
           const { error: upErr } = await supabase.storage.from('chatimages').upload(path, preview.file, { upsert: false, contentType: preview.file.type });
           if (upErr) throw upErr;
           const { data: pub } = supabase.storage.from('chatimages').getPublicUrl(path);
-            mediaUrl = pub?.publicUrl;
-            type = 'image';
+          mediaUrl = pub?.publicUrl;
+          innerContentType = 'image';
+          if (!mediaUrl) {
+            console.error('No se obtuvo publicUrl al subir imagen', { path, pub });
+            throw new Error('No se obtuvo URL pública tras subir la imagen');
+          }
         } else if (preview.type === 'video') {
           const { publicUrl } = await uploadVideoToBucket({ file: preview.file, userId: user.id, conversationId, bucket: 'chatvideos' });
           mediaUrl = publicUrl;
@@ -139,14 +143,14 @@ const StoryReplyComposer = ({ storyOwnerId, storyId, storyData, onClose, onSent,
           };
         }
       } catch {}
-      // Nuevo requerimiento: eliminar prefijo de metadata, solo guardar el texto del usuario o URL media.
-      // Conservamos metadata en memoria para callback onSent si se requiere en UI, pero NO se persiste en content.
-      const finalContent = mediaUrl || content || ' ';
+  // Nuevo requerimiento: eliminar prefijo de metadata, solo guardar el texto del usuario o URL media.
+  // Conservamos metadata en memoria para callback onSent si se requiere en UI, pero NO se persiste en content.
+  const finalContent = mediaUrl || content || '';
+  console.log('StoryReplyComposer: mediaUrl, finalContent, innerContentType', mediaUrl, finalContent, innerContentType);
       // Guardar type='stories' y replyng_to=storyId para poder reconstruir metadata luego (buscando la historia por id)
     const payload = { conversationId, senderId: user.id, content: finalContent, type: 'stories', replyng_to: storyId, _storyMeta: storyMeta };
-    // Persistimos story_meta oculto en la fila (nuevo requerimiento)
-    const { insertMessage } = await import('../../services/db');
-    await insertMessage({ conversationId, senderId: user.id, content: payload.content, type: payload.type, replyng_to: payload.replyng_to, story_meta: storyMeta });
+  const { insertMessage } = await import('../../services/db');
+  await insertMessage({ conversationId, senderId: user.id, content: payload.content, type: payload.type, replyng_to: payload.replyng_to });
       onSent?.(payload);
       setText('');
       clearPreview();

@@ -603,6 +603,45 @@ const AguacateChat = () => {
             return audioCtxRef.current;
         } catch { return null; }
     };
+    // Helper: fetch story metadata by story id and derive replyContentType
+    const fetchStoryMeta = async (storyId, rawContent = '', msgType = '') => {
+        if (!storyId) return null;
+        try {
+            const { data: hist, error: histErr } = await supabase
+                .from('histories')
+                .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
+                .eq('id', storyId)
+                .single();
+            if (histErr || !hist) return null;
+            // Determine reply content type: prefer the history content_type when available,
+            // otherwise infer from the message content or msgType fallback.
+            let replyContentType = 'text';
+            if (hist.content_type && typeof hist.content_type === 'string') {
+                // Normalize common values
+                const ct = hist.content_type.toLowerCase();
+                if (ct.includes('video') || ct === 'video') replyContentType = 'video';
+                else if (ct.includes('image') || ct === 'image') replyContentType = 'image';
+                else replyContentType = 'text';
+            } else if (rawContent && typeof rawContent === 'string' && rawContent.startsWith('http')) {
+                if (/\.(mp4|webm)(\?|$)/i.test(rawContent)) replyContentType = 'video';
+                else if (/\.(jpe?g|png|webp|gif)(\?|$)/i.test(rawContent)) replyContentType = 'image';
+                else replyContentType = 'text';
+            } else if (msgType === 'audio') replyContentType = 'audio';
+
+            return {
+                storyId: hist.id,
+                ownerId: hist.user_id,
+                contentType: hist.content_type,
+                contentUrl: hist.content_url,
+                caption: hist.caption,
+                bg_color: hist.bg_color,
+                font_color: hist.font_color,
+                replyContentType,
+            };
+        } catch (e) {
+            return null;
+        }
+    };
     const playNotificationSound = (conversationId) => {
         // If conversation is muted, skip sound
         if (conversationId && isConversationMuted(conversationId)) return;
@@ -1320,21 +1359,15 @@ const AguacateChat = () => {
                                         // Asegurar variable local para evitar ReferenceError
                                         let storyReply = null;
                                         // Intentar extraer metadata para mostrar un snippet más claro
-                                        // Prioridad 1: nuevo campo persistido story_meta
-                                        if (m.story_meta && typeof m.story_meta === 'object') {
-                                            try {
-                                                storyReply = { ...m.story_meta };
-                                            } catch {}
-                                        }
-                                        // Legacy prefix (solo si aún no lo obtuvimos de story_meta)
-                                        if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                        // Legacy prefix takes precedence if present
+                                        if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                             try {
                                                 const rest = m.content.substring('::storyreply::'.length);
                                                 const sepIdx = rest.indexOf('::');
                                                 if (sepIdx > -1) {
                                                     const metaStr = rest.slice(0, sepIdx);
-                                                    storyMeta = JSON.parse(metaStr);
-                                                    const replyType = storyMeta.replyContentType || 'text';
+                                                    const parsed = JSON.parse(metaStr);
+                                                    const replyType = parsed.replyContentType || 'text';
                                                     if (replyType === 'image') label = 'Respuesta (imagen) a historia';
                                                     else if (replyType === 'video') label = 'Respuesta (video) a historia';
                                                     else if (replyType === 'audio') label = 'Respuesta (audio) a historia';
@@ -1346,6 +1379,7 @@ const AguacateChat = () => {
                                                 label = 'Respuesta a historia';
                                             }
                                         } else {
+                                            // No legacy prefix: generic label for stories. We'll fetch story metadata later when chat is opened.
                                             label = 'Respuesta a historia';
                                         }
                                     }
@@ -1406,12 +1440,8 @@ const AguacateChat = () => {
                                         let storyReply = null; let cleanContent = m.content;
                                         try {
                                             if (m.type === 'stories') {
-                                                // Prioridad 1: story_meta
-                                                if (m.story_meta && typeof m.story_meta === 'object') {
-                                                    try { storyReply = { ...m.story_meta }; } catch {}
-                                                }
                                                 // Legacy prefix fallback
-                                                if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                                if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                                     const rest = m.content.substring('::storyreply::'.length);
                                                     const sepIdx = rest.indexOf('::');
                                                     if (sepIdx > -1) {
@@ -1420,29 +1450,17 @@ const AguacateChat = () => {
                                                         cleanContent = rest.slice(sepIdx + 2);
                                                     }
                                                 } else {
-                                                    // Nuevo formato: buscar historia usando replyng_to
+                                                    // Nuevo formato: buscar historia usando replyng_to/reply_to/replyTo
                                                     const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
                                                     if (storyId) {
+                                                        // fetchStoryMeta y aplicar cuando llegue
                                                         (async () => {
                                                             try {
-                                                                const { data: hist, error: histErr } = await supabase
-                                                                    .from('histories')
-                                                                    .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
-                                                                    .eq('id', storyId)
-                                                                    .single();
-                                                                if (!histErr && hist) {
-                                                                    storyReply = {
-                                                                        storyId: hist.id,
-                                                                        ownerId: hist.user_id,
-                                                                        contentType: hist.content_type,
-                                                                        contentUrl: hist.content_url,
-                                                                        caption: hist.caption,
-                                                                        bg_color: hist.bg_color,
-                                                                        font_color: hist.font_color,
-                                                                        replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
-                                                                    };
+                                                                const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                                                if (meta) {
+                                                                    const sr = { ...meta };
                                                                     // Forzar actualización del mensaje ya mapeado
-                                                                    setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                                    setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply: sr } : mm));
                                                                 }
                                                             } catch {}
                                                         })();
@@ -1454,7 +1472,7 @@ const AguacateChat = () => {
                                             id: m.id,
                                             type: 'sent',
                                             created_at: m.created_at,
-                                            messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'),
+                                            messageType: m.type || 'text',
                                             seen: (typeof m.seen === 'string' ? m.seen : null),
                                             replyTo: msg.replyTo || m.replyng_to || m.reply_to || m.replyTo || null,
                                             storyReply,
@@ -1471,12 +1489,8 @@ const AguacateChat = () => {
                                     let storyReply = null; let cleanContent = m.content;
                                     try {
                                         if (m.type === 'stories') {
-                                            // Prioridad 1: story_meta
-                                            if (m.story_meta && typeof m.story_meta === 'object') {
-                                                try { storyReply = { ...m.story_meta }; } catch {}
-                                            }
                                             // Legacy prefix
-                                            if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                            if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                                 const rest = m.content.substring('::storyreply::'.length);
                                                 const sepIdx = rest.indexOf('::');
                                                 if (sepIdx > -1) {
@@ -1489,23 +1503,10 @@ const AguacateChat = () => {
                                                 if (storyId) {
                                                     (async () => {
                                                         try {
-                                                            const { data: hist, error: histErr } = await supabase
-                                                                .from('histories')
-                                                                .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
-                                                                .eq('id', storyId)
-                                                                .single();
-                                                            if (!histErr && hist) {
-                                                                storyReply = {
-                                                                    storyId: hist.id,
-                                                                    ownerId: hist.user_id,
-                                                                    contentType: hist.content_type,
-                                                                    contentUrl: hist.content_url,
-                                                                    caption: hist.caption,
-                                                                    bg_color: hist.bg_color,
-                                                                    font_color: hist.font_color,
-                                                                    replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
-                                                                };
-                                                                setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                            const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                                            if (meta) {
+                                                                storyReply = { ...meta };
+                                                                setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply } : mm));
                                                             }
                                                         } catch {}
                                                     })();
@@ -1513,7 +1514,7 @@ const AguacateChat = () => {
                                             }
                                         }
                                     } catch {}
-                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'), seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
+                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type || 'text', seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
                                     if (m.type === 'audio') mapped.push({ ...base, audioUrl: cleanContent, text: '(Audio)' });
                                     else mapped.push({ ...base, text: cleanContent });
                                 }
@@ -1524,12 +1525,8 @@ const AguacateChat = () => {
                             let storyReply = null; let cleanContent = m.content;
                             try {
                                 if (m.type === 'stories') {
-                                            // Prioridad 1: story_meta
-                                            if (m.story_meta && typeof m.story_meta === 'object') {
-                                                try { storyReply = { ...m.story_meta }; } catch {}
-                                            }
-                                            // Legacy prefix
-                                            if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                    // Legacy prefix
+                                    if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                         const rest = m.content.substring('::storyreply::'.length);
                                         const sepIdx = rest.indexOf('::');
                                         if (sepIdx > -1) {
@@ -1542,23 +1539,10 @@ const AguacateChat = () => {
                                         if (storyId) {
                                             (async () => {
                                                 try {
-                                                    const { data: hist, error: histErr } = await supabase
-                                                        .from('histories')
-                                                        .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
-                                                        .eq('id', storyId)
-                                                        .single();
-                                                    if (!histErr && hist) {
-                                                        storyReply = {
-                                                            storyId: hist.id,
-                                                            ownerId: hist.user_id,
-                                                            contentType: hist.content_type,
-                                                            contentUrl: hist.content_url,
-                                                            caption: hist.caption,
-                                                            bg_color: hist.bg_color,
-                                                            font_color: hist.font_color,
-                                                            replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
-                                                        };
-                                                        setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                    const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                                    if (meta) {
+                                                        storyReply = { ...meta };
+                                                        setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply } : mm));
                                                     }
                                                 } catch {}
                                             })();
@@ -1566,7 +1550,7 @@ const AguacateChat = () => {
                                     }
                                 }
                             } catch {}
-                            const effectiveType = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
+                            const effectiveType = m.type || 'text';
                             const receivedBase = { id: m.id, type: 'received', created_at: m.created_at, messageType: effectiveType, seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
                             if (effectiveType === 'audio') {
                                 return [...prev, { ...receivedBase, audioUrl: cleanContent, text: '(Audio)' }];
@@ -1956,11 +1940,30 @@ const AguacateChat = () => {
                         const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
                         let storyReply = null; let cleanContent = m.content;
                         if (m.type === 'stories') {
-                            if (m.story_meta && typeof m.story_meta === 'object') {
-                                storyReply = { ...m.story_meta };
+                            // Legacy prefix
+                            if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                try {
+                                    const rest = m.content.substring('::storyreply::'.length);
+                                    const sepIdx = rest.indexOf('::');
+                                    if (sepIdx > -1) {
+                                        const metaStr = rest.slice(0, sepIdx);
+                                        storyReply = JSON.parse(metaStr);
+                                        cleanContent = rest.slice(sepIdx + 2);
+                                    }
+                                } catch {}
+                            } else {
+                                const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
+                                if (storyId) {
+                                    (async () => {
+                                        try {
+                                            const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                            if (meta) setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply: meta } : mm));
+                                        } catch {}
+                                    })();
+                                }
                             }
                         }
-                        const effectiveInner = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
+                        const effectiveInner = m.type || 'text';
                         const base = {
                             id: m.id,
                             type: m.sender_id === user?.id ? 'sent' : 'received',
@@ -2012,11 +2015,30 @@ const AguacateChat = () => {
                 const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
                 let storyReply = null; let cleanContent = m.content;
                 if (m.type === 'stories') {
-                    if (m.story_meta && typeof m.story_meta === 'object') {
-                        storyReply = { ...m.story_meta };
+                    // Legacy prefix
+                    if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                        try {
+                            const rest = m.content.substring('::storyreply::'.length);
+                            const sepIdx = rest.indexOf('::');
+                            if (sepIdx > -1) {
+                                const metaStr = rest.slice(0, sepIdx);
+                                storyReply = JSON.parse(metaStr);
+                                cleanContent = rest.slice(sepIdx + 2);
+                            }
+                        } catch {}
+                    } else {
+                        const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
+                        if (storyId) {
+                            (async () => {
+                                try {
+                                    const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                    if (meta) setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply: meta } : mm));
+                                } catch {}
+                            })();
+                        }
                     }
                 }
-                const effectiveInner = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
+                const effectiveInner = m.type || 'text';
                 const base = {
                     id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
