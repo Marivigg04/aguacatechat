@@ -3261,7 +3261,9 @@ const AguacateChat = () => {
             {/* Componente para mostrar las notificaciones */}
             <Toaster position="top-center" reverseOrder={false} limit={3} />
 
-            {/* Sidebar compacto (iconos verticales). En móvil se oculta totalmente cuando hay un chat seleccionado */}
+            {/* Sidebar compacto (iconos verticales). En móvil se oculta visualmente cuando hay un chat seleccionado
+                o cuando la vista actual es 'stories' (usando compactInvisible). Importante: siempre montamos el componente
+                para que su menú extendido (overlay) pueda mostrarse desde cualquier vista cuando showSideMenu === true. */}
             {!(isMobile && selectedContact) && (
                 <Sidebar
                     showSideMenu={showSideMenu}
@@ -3280,7 +3282,9 @@ const AguacateChat = () => {
                     setConfigStopped={setConfigStopped}
                     currentView={currentView}
                     onViewChange={handleViewChange}
-                    compactInvisible={isMobile && !selectedContact}
+                    // Cuando estamos en mobile y la vista es stories, hacemos invisible la barra compacta
+                    // pero dejamos montado el componente para permitir abrir el overlay desde Stories
+                    compactInvisible={isMobile && (currentView === 'stories' || !selectedContact)}
                 />
             )}
             {/* Sidebar de contactos e Historias: se oculta en móvil si hay un chat seleccionado */}
@@ -3590,8 +3594,8 @@ const AguacateChat = () => {
                     </div>
                     )
                 ) : (
-                    <div className="w-80 theme-bg-secondary theme-border border-r flex flex-col h-full">
-                        {loadingStories ? <StoriesSkeleton /> : <StoriesView ref={storiesViewRef} />}
+                    <div className="w-full md:w-80 theme-bg-secondary theme-border md:border-r flex flex-col h-full">
+                        {loadingStories ? <StoriesSkeleton /> : <StoriesView ref={storiesViewRef} onOpenSidebar={() => setShowSideMenu(true)} />}
                     </div>
                 )
             )}

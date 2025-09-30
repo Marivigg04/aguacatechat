@@ -185,13 +185,16 @@ const Sidebar = ({
         }
     };
 
-    // Clases para invisibilidad suave: mantenemos ancho para evitar saltos de layout.
-    // pointer-events-none evita que se cliquee algo invisible; se reactiva cuando el menú extendido abre (overlay propio gestiona interacciones).
-    const compactBaseClasses = "relative z-40 w-16 h-full theme-bg-secondary theme-border border-r transition-opacity duration-300";
-    const compactVisibilityClasses = compactInvisible && !showSideMenu ? 'opacity-0 pointer-events-none select-none' : 'opacity-100';
+    // Cuando compactInvisible && !showSideMenu queremos QUE NO RESERVE espacio a la izquierda.
+    // Para ello hacemos que el contenedor sea absolute y tenga width 0 (w-0) y sin border.
+    // Seguimos montando el componente (necesario para permitir abrir el overlay) pero sin impacto en el layout.
+    const isCompactHidden = compactInvisible && !showSideMenu;
+    const compactClasses = isCompactHidden
+        ? 'absolute left-0 top-0 z-50 h-full w-0 pointer-events-none select-none opacity-0 transition-all duration-300'
+        : 'relative z-40 w-16 h-full theme-bg-secondary theme-border border-r transition-all duration-300';
 
     return (
-        <div className={`${compactBaseClasses} ${compactVisibilityClasses}`}> 
+    <div className={compactClasses}> 
             {/* Icono animado de las tres rayas SIEMPRE visible arriba */}
             <div className="flex flex-col items-center pt-6">
                 <button
