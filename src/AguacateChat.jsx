@@ -152,6 +152,8 @@ const AguacateChat = () => {
     const [showAttachMenu, setShowAttachMenu] = useState(false);
     // Animación modal de adjuntos
     const [isAttachClosing, setIsAttachClosing] = useState(false);
+    // Ayuda modal adjuntos
+    const [showAttachHelp, setShowAttachHelp] = useState(false);
     const [showSideMenu, setShowSideMenu] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
     // Datos del perfil de contacto (si se abre modal desde header de chat)
@@ -3701,6 +3703,48 @@ const AguacateChat = () => {
                                         </button>
                                     </div>
                                     <div className="p-4 overflow-y-auto">
+                                        {/* Bloque ayuda adjuntos */}
+                                        <div className="mb-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAttachHelp(h => !h)}
+                                                className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl theme-border border theme-bg-chat hover:bg-teal-600/10 transition-colors group"
+                                                aria-expanded={showAttachHelp}
+                                            >
+                                                <span className="flex items-center gap-2 text-sm font-medium tracking-wide theme-text-primary">
+                                                    <svg className={`w-4 h-4 transition-transform ${showAttachHelp ? 'rotate-90' : ''}`} stroke="currentColor" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                                                        <path d="M9 18l6-6-6-6" />
+                                                    </svg>
+                                                    Cómo usar este selector
+                                                </span>
+                                                <span className="text-[11px] uppercase tracking-wide font-semibold px-2 py-1 rounded-md bg-teal-500/15 text-teal-300 group-hover:bg-teal-500/25 transition-colors">{showAttachHelp ? 'Ocultar' : 'Ayuda'}</span>
+                                            </button>
+                                            {showAttachHelp && (
+                                                <div className="mt-3 px-4 py-4 rounded-xl bg-gradient-to-br from-slate-900/70 via-slate-900/60 to-slate-950/70 border border-white/10 shadow-inner text-[13px] leading-relaxed space-y-3 animate-[fadeIn_.35s_ease]">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">1</div>
+                                                        <p><strong className="text-teal-300 font-semibold">Pulsa "Ver más"</strong> para abrir tu explorador y elegir <span className="text-teal-200">imágenes o videos</span>.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">2</div>
+                                                        <p><strong className="text-teal-300 font-semibold">Haz clic</strong> en una miniatura reciente para <span className="text-teal-200">enviarla directamente</span> al chat.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">3</div>
+                                                        <p><strong className="text-teal-300 font-semibold">Selecciona varios archivos</strong> en el cuadro de diálogo (se irán agregando como recientes).</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">4</div>
+                                                        <p>Si es un <span className="text-teal-200">video grande</span>, espera a que se procese; se enviará tras subirse.</p>
+                                                    </div>
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-6 h-6 rounded-lg bg-teal-500/15 text-teal-300 flex items-center justify-center text-xs font-bold">?</div>
+                                                        <p>Formatos recomendados: JPG, PNG, MP4, WebM. Si algo no aparece, vuelve a pulsar "Ver más".</p>
+                                                    </div>
+                                                    <div className="pt-2 text-[11px] text-white/50 border-t border-white/10">Los elementos recientes viven sólo esta sesión.</div>
+                                                </div>
+                                            )}
+                                        </div>
                                         <p className="theme-text-secondary text-sm mb-3">Fotos y videos recientes de esta sesión</p>
                                         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
                                             {/* Ver más (siempre a la izquierda) */}
