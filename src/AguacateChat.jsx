@@ -603,6 +603,45 @@ const AguacateChat = () => {
             return audioCtxRef.current;
         } catch { return null; }
     };
+    // Helper: fetch story metadata by story id and derive replyContentType
+    const fetchStoryMeta = async (storyId, rawContent = '', msgType = '') => {
+        if (!storyId) return null;
+        try {
+            const { data: hist, error: histErr } = await supabase
+                .from('histories')
+                .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
+                .eq('id', storyId)
+                .single();
+            if (histErr || !hist) return null;
+            // Determine reply content type: prefer the history content_type when available,
+            // otherwise infer from the message content or msgType fallback.
+            let replyContentType = 'text';
+            if (hist.content_type && typeof hist.content_type === 'string') {
+                // Normalize common values
+                const ct = hist.content_type.toLowerCase();
+                if (ct.includes('video') || ct === 'video') replyContentType = 'video';
+                else if (ct.includes('image') || ct === 'image') replyContentType = 'image';
+                else replyContentType = 'text';
+            } else if (rawContent && typeof rawContent === 'string' && rawContent.startsWith('http')) {
+                if (/\.(mp4|webm)(\?|$)/i.test(rawContent)) replyContentType = 'video';
+                else if (/\.(jpe?g|png|webp|gif)(\?|$)/i.test(rawContent)) replyContentType = 'image';
+                else replyContentType = 'text';
+            } else if (msgType === 'audio') replyContentType = 'audio';
+
+            return {
+                storyId: hist.id,
+                ownerId: hist.user_id,
+                contentType: hist.content_type,
+                contentUrl: hist.content_url,
+                caption: hist.caption,
+                bg_color: hist.bg_color,
+                font_color: hist.font_color,
+                replyContentType,
+            };
+        } catch (e) {
+            return null;
+        }
+    };
     const playNotificationSound = (conversationId) => {
         // If conversation is muted, skip sound
         if (conversationId && isConversationMuted(conversationId)) return;
@@ -783,13 +822,13 @@ const AguacateChat = () => {
             // Derivados del último mensaje
             const lastId = c?.last_message?.id ?? null;
             const lastAudioUrl = lastType === 'audio' ? c?.last_message?.content : undefined;
-            // Asegurar que pasamos el array de 'seen' del último mensaje cuando exista
-            const lastMessageSeenArr = Array.isArray(c?.last_message?.seen) ? c.last_message.seen : [];
+            // `seen` is stored as a single user id (string) or null for direct conversations
+            const lastMessageSeenId = (c?.last_message?.seen && typeof c.last_message.seen === 'string') ? c.last_message.seen : null;
             // Determinar si la otra persona (otherProfile.id) vio el último mensaje (solo aplica si el último mensaje lo enviaste tú)
             let lastMessageSeen = false;
             try {
                 if (c?.last_message?.sender_id && user?.id && String(c.last_message.sender_id) === String(user.id) && c?.otherProfile?.id) {
-                    lastMessageSeen = lastMessageSeenArr.includes(c.otherProfile.id);
+                    lastMessageSeen = lastMessageSeenId === c.otherProfile.id;
                 }
             } catch (e) { /* ignore */ }
             // Debug: loguear el estado de visto para ayudar a depuración
@@ -826,9 +865,9 @@ const AguacateChat = () => {
                 last_message_at: lastAt,
                 lastConex: c?.otherProfile?.lastConex,
                 last_message: c?.last_message ? { ...c.last_message, type: lastType } : null,
-                // Exponer 'seen' y un booleano útil para la UI
+                // Exponer 'seen' (single id) y un booleano útil para la UI
                 lastMessageSeen: privacy?.readReceipts ? lastMessageSeen : false,
-                lastMessageSeenArr: privacy?.readReceipts ? lastMessageSeenArr : [],
+                lastMessageSeenId: privacy?.readReceipts ? lastMessageSeenId : null,
                 unread,
             };
         });
@@ -1320,21 +1359,15 @@ const AguacateChat = () => {
                                         // Asegurar variable local para evitar ReferenceError
                                         let storyReply = null;
                                         // Intentar extraer metadata para mostrar un snippet más claro
-                                        // Prioridad 1: nuevo campo persistido story_meta
-                                        if (m.story_meta && typeof m.story_meta === 'object') {
-                                            try {
-                                                storyReply = { ...m.story_meta };
-                                            } catch {}
-                                        }
-                                        // Legacy prefix (solo si aún no lo obtuvimos de story_meta)
-                                        if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                        // Legacy prefix takes precedence if present
+                                        if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                             try {
                                                 const rest = m.content.substring('::storyreply::'.length);
                                                 const sepIdx = rest.indexOf('::');
                                                 if (sepIdx > -1) {
                                                     const metaStr = rest.slice(0, sepIdx);
-                                                    storyMeta = JSON.parse(metaStr);
-                                                    const replyType = storyMeta.replyContentType || 'text';
+                                                    const parsed = JSON.parse(metaStr);
+                                                    const replyType = parsed.replyContentType || 'text';
                                                     if (replyType === 'image') label = 'Respuesta (imagen) a historia';
                                                     else if (replyType === 'video') label = 'Respuesta (video) a historia';
                                                     else if (replyType === 'audio') label = 'Respuesta (audio) a historia';
@@ -1346,6 +1379,7 @@ const AguacateChat = () => {
                                                 label = 'Respuesta a historia';
                                             }
                                         } else {
+                                            // No legacy prefix: generic label for stories. We'll fetch story metadata later when chat is opened.
                                             label = 'Respuesta a historia';
                                         }
                                     }
@@ -1372,7 +1406,7 @@ const AguacateChat = () => {
                                     }
                                     return {
                                         ...c,
-                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t, seen: Array.isArray(m.seen) ? m.seen : [] },
+                                        last_message: { id: m.id, content: m.content, sender_id: m.sender_id, type: t, seen: (typeof m.seen === 'string' ? m.seen : null) },
                                         last_message_at: m.created_at,
                                         lastMessage: label,
                                         lastMessageType: t,
@@ -1406,12 +1440,8 @@ const AguacateChat = () => {
                                         let storyReply = null; let cleanContent = m.content;
                                         try {
                                             if (m.type === 'stories') {
-                                                // Prioridad 1: story_meta
-                                                if (m.story_meta && typeof m.story_meta === 'object') {
-                                                    try { storyReply = { ...m.story_meta }; } catch {}
-                                                }
                                                 // Legacy prefix fallback
-                                                if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                                if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                                     const rest = m.content.substring('::storyreply::'.length);
                                                     const sepIdx = rest.indexOf('::');
                                                     if (sepIdx > -1) {
@@ -1420,29 +1450,17 @@ const AguacateChat = () => {
                                                         cleanContent = rest.slice(sepIdx + 2);
                                                     }
                                                 } else {
-                                                    // Nuevo formato: buscar historia usando replyng_to
+                                                    // Nuevo formato: buscar historia usando replyng_to/reply_to/replyTo
                                                     const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
                                                     if (storyId) {
+                                                        // fetchStoryMeta y aplicar cuando llegue
                                                         (async () => {
                                                             try {
-                                                                const { data: hist, error: histErr } = await supabase
-                                                                    .from('histories')
-                                                                    .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
-                                                                    .eq('id', storyId)
-                                                                    .single();
-                                                                if (!histErr && hist) {
-                                                                    storyReply = {
-                                                                        storyId: hist.id,
-                                                                        ownerId: hist.user_id,
-                                                                        contentType: hist.content_type,
-                                                                        contentUrl: hist.content_url,
-                                                                        caption: hist.caption,
-                                                                        bg_color: hist.bg_color,
-                                                                        font_color: hist.font_color,
-                                                                        replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
-                                                                    };
+                                                                const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                                                if (meta) {
+                                                                    const sr = { ...meta };
                                                                     // Forzar actualización del mensaje ya mapeado
-                                                                    setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                                    setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply: sr } : mm));
                                                                 }
                                                             } catch {}
                                                         })();
@@ -1454,8 +1472,8 @@ const AguacateChat = () => {
                                             id: m.id,
                                             type: 'sent',
                                             created_at: m.created_at,
-                                            messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'),
-                                            seen: Array.isArray(m.seen) ? m.seen : [],
+                                            messageType: m.type || 'text',
+                                            seen: (typeof m.seen === 'string' ? m.seen : null),
                                             replyTo: msg.replyTo || m.replyng_to || m.reply_to || m.replyTo || null,
                                             storyReply,
                                         };
@@ -1471,12 +1489,8 @@ const AguacateChat = () => {
                                     let storyReply = null; let cleanContent = m.content;
                                     try {
                                         if (m.type === 'stories') {
-                                            // Prioridad 1: story_meta
-                                            if (m.story_meta && typeof m.story_meta === 'object') {
-                                                try { storyReply = { ...m.story_meta }; } catch {}
-                                            }
                                             // Legacy prefix
-                                            if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                            if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                                 const rest = m.content.substring('::storyreply::'.length);
                                                 const sepIdx = rest.indexOf('::');
                                                 if (sepIdx > -1) {
@@ -1489,23 +1503,10 @@ const AguacateChat = () => {
                                                 if (storyId) {
                                                     (async () => {
                                                         try {
-                                                            const { data: hist, error: histErr } = await supabase
-                                                                .from('histories')
-                                                                .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
-                                                                .eq('id', storyId)
-                                                                .single();
-                                                            if (!histErr && hist) {
-                                                                storyReply = {
-                                                                    storyId: hist.id,
-                                                                    ownerId: hist.user_id,
-                                                                    contentType: hist.content_type,
-                                                                    contentUrl: hist.content_url,
-                                                                    caption: hist.caption,
-                                                                    bg_color: hist.bg_color,
-                                                                    font_color: hist.font_color,
-                                                                    replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
-                                                                };
-                                                                setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                            const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                                            if (meta) {
+                                                                storyReply = { ...meta };
+                                                                setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply } : mm));
                                                             }
                                                         } catch {}
                                                     })();
@@ -1513,7 +1514,7 @@ const AguacateChat = () => {
                                             }
                                         }
                                     } catch {}
-                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text'), seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
+                                    const base = { id: m.id, type: 'sent', created_at: m.created_at, messageType: m.type || 'text', seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
                                     if (m.type === 'audio') mapped.push({ ...base, audioUrl: cleanContent, text: '(Audio)' });
                                     else mapped.push({ ...base, text: cleanContent });
                                 }
@@ -1524,12 +1525,8 @@ const AguacateChat = () => {
                             let storyReply = null; let cleanContent = m.content;
                             try {
                                 if (m.type === 'stories') {
-                                            // Prioridad 1: story_meta
-                                            if (m.story_meta && typeof m.story_meta === 'object') {
-                                                try { storyReply = { ...m.story_meta }; } catch {}
-                                            }
-                                            // Legacy prefix
-                                            if (!storyReply && typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                    // Legacy prefix
+                                    if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
                                         const rest = m.content.substring('::storyreply::'.length);
                                         const sepIdx = rest.indexOf('::');
                                         if (sepIdx > -1) {
@@ -1542,23 +1539,10 @@ const AguacateChat = () => {
                                         if (storyId) {
                                             (async () => {
                                                 try {
-                                                    const { data: hist, error: histErr } = await supabase
-                                                        .from('histories')
-                                                        .select('id, user_id, content_url, content_type, caption, bg_color, font_color')
-                                                        .eq('id', storyId)
-                                                        .single();
-                                                    if (!histErr && hist) {
-                                                        storyReply = {
-                                                            storyId: hist.id,
-                                                            ownerId: hist.user_id,
-                                                            contentType: hist.content_type,
-                                                            contentUrl: hist.content_url,
-                                                            caption: hist.caption,
-                                                            bg_color: hist.bg_color,
-                                                            font_color: hist.font_color,
-                                                            replyContentType: (m.content && m.content.startsWith('http') ? (/(\.mp4|\.webm)/i.test(m.content) ? 'video' : (/(\.jpg|\.jpeg|\.png|\.webp)/i.test(m.content) ? 'image' : 'text')) : (m.type === 'audio' ? 'audio' : 'text'))
-                                                        };
-                                                        setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply, messageType: storyReply.replyContentType || 'text' } : mm));
+                                                    const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                                    if (meta) {
+                                                        storyReply = { ...meta };
+                                                        setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply } : mm));
                                                     }
                                                 } catch {}
                                             })();
@@ -1566,8 +1550,8 @@ const AguacateChat = () => {
                                     }
                                 }
                             } catch {}
-                            const effectiveType = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
-                            const receivedBase = { id: m.id, type: 'received', created_at: m.created_at, messageType: effectiveType, seen: Array.isArray(m.seen) ? m.seen : [], replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
+                            const effectiveType = m.type || 'text';
+                            const receivedBase = { id: m.id, type: 'received', created_at: m.created_at, messageType: effectiveType, seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: m.replyng_to || m.reply_to || m.replyTo || null, storyReply };
                             if (effectiveType === 'audio') {
                                 return [...prev, { ...receivedBase, audioUrl: cleanContent, text: '(Audio)' }];
                             }
@@ -1588,7 +1572,8 @@ const AguacateChat = () => {
                                             // Solo actualizamos campos que puedan haber cambiado
                                             type: row.type || c.last_message.type || 'text',
                                             content: row.content != null ? row.content : c.last_message.content,
-                                            seen: Array.isArray(row.seen) ? row.seen : c.last_message.seen,
+                                            // `seen` is single user id or null
+                                            seen: (typeof row.seen === 'string' ? row.seen : c.last_message.seen),
                                         }
                                     };
                                 }
@@ -1618,7 +1603,8 @@ const AguacateChat = () => {
                                     }
                                 }
                                 if (row.created_at) next.created_at = row.created_at;
-                                if (Array.isArray(row.seen)) next.seen = row.seen;
+                                // `seen` is a single user id or null
+                                if (typeof row.seen === 'string' || row.seen === null) next.seen = (typeof row.seen === 'string' ? row.seen : null);
                                 if (row.reply_to != null && typeof next.replyTo === 'undefined') next.replyTo = row.reply_to;
                                 return next;
                             }));
@@ -1653,7 +1639,10 @@ const AguacateChat = () => {
         return () => {
             try { supabase.removeChannel(channel); } catch {}
         };
-    }, [user?.id]);
+    // Re-run this effect when privacy settings change so that toggling
+    // `showLastConex` or `showStatus` takes effect immediately without
+    // needing a full reload (it will update the profiles table).
+    }, [user?.id, privacySettings]);
 
     // Suscripción focalizada a la conversación seleccionada: refuerza updates de 'seen'
     useEffect(() => {
@@ -1670,7 +1659,7 @@ const AguacateChat = () => {
                     // Solo nos interesa cuando cambie 'seen'
                     if (typeof row.seen === 'undefined') return;
                     // Debug toast eliminado
-                    setChatMessages(prev => prev.map(m => m.id === row.id ? { ...m, seen: Array.isArray(row.seen) ? row.seen : m.seen } : m));
+                    setChatMessages(prev => prev.map(m => m.id === row.id ? { ...m, seen: (typeof row.seen === 'string' ? row.seen : m.seen) } : m));
                 }
             )
             .subscribe();
@@ -1875,7 +1864,10 @@ const AguacateChat = () => {
                 setSelectedContact(updatedContact);
             }
         }
-    }, [conversations, selectedContact?.conversationId]);
+    // También re-ejecutar cuando cambian las privacySettings para que el
+    // `selectedContact` se actualice inmediatamente (por ejemplo al activar
+    // "Mostrar Última Conexión").
+    }, [conversations, selectedContact?.conversationId, privacySettings]);
 
     const toggleTheme = () => {
         setIsDarkMode(!isDarkMode);
@@ -1948,17 +1940,36 @@ const AguacateChat = () => {
                         const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
                         let storyReply = null; let cleanContent = m.content;
                         if (m.type === 'stories') {
-                            if (m.story_meta && typeof m.story_meta === 'object') {
-                                storyReply = { ...m.story_meta };
+                            // Legacy prefix
+                            if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                                try {
+                                    const rest = m.content.substring('::storyreply::'.length);
+                                    const sepIdx = rest.indexOf('::');
+                                    if (sepIdx > -1) {
+                                        const metaStr = rest.slice(0, sepIdx);
+                                        storyReply = JSON.parse(metaStr);
+                                        cleanContent = rest.slice(sepIdx + 2);
+                                    }
+                                } catch {}
+                            } else {
+                                const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
+                                if (storyId) {
+                                    (async () => {
+                                        try {
+                                            const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                            if (meta) setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply: meta } : mm));
+                                        } catch {}
+                                    })();
+                                }
                             }
                         }
-                        const effectiveInner = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
+                        const effectiveInner = m.type || 'text';
                         const base = {
                             id: m.id,
                             type: m.sender_id === user?.id ? 'sent' : 'received',
                             created_at: m.created_at,
                             messageType: effectiveInner,
-                            seen: Array.isArray(m.seen) ? m.seen : [],
+                            seen: (typeof m.seen === 'string' ? m.seen : null),
                             replyTo: replyNormalized,
                             storyReply,
                         };
@@ -2004,17 +2015,36 @@ const AguacateChat = () => {
                 const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
                 let storyReply = null; let cleanContent = m.content;
                 if (m.type === 'stories') {
-                    if (m.story_meta && typeof m.story_meta === 'object') {
-                        storyReply = { ...m.story_meta };
+                    // Legacy prefix
+                    if (typeof m.content === 'string' && m.content.startsWith('::storyreply::')) {
+                        try {
+                            const rest = m.content.substring('::storyreply::'.length);
+                            const sepIdx = rest.indexOf('::');
+                            if (sepIdx > -1) {
+                                const metaStr = rest.slice(0, sepIdx);
+                                storyReply = JSON.parse(metaStr);
+                                cleanContent = rest.slice(sepIdx + 2);
+                            }
+                        } catch {}
+                    } else {
+                        const storyId = m.replyng_to || m.reply_to || m.replyTo || null;
+                        if (storyId) {
+                            (async () => {
+                                try {
+                                    const meta = await fetchStoryMeta(storyId, m.content, m.type);
+                                    if (meta) setChatMessages(cur => cur.map(mm => mm.id === m.id ? { ...mm, storyReply: meta } : mm));
+                                } catch {}
+                            })();
+                        }
                     }
                 }
-                const effectiveInner = m.type === 'stories' ? (storyReply?.replyContentType || 'text') : (m.type || 'text');
+                const effectiveInner = m.type || 'text';
                 const base = {
                     id: m.id,
                     type: m.sender_id === user?.id ? 'sent' : 'received',
                     created_at: m.created_at,
                     messageType: effectiveInner,
-                    seen: Array.isArray(m.seen) ? m.seen : [],
+                    seen: (typeof m.seen === 'string' ? m.seen : null),
                     replyTo: replyNormalized,
                     storyReply,
                 };
@@ -2117,7 +2147,8 @@ const AguacateChat = () => {
                 // find message in state
                 const msg = chatMessages.find(m => String(m.id) === String(id))
                 if (!msg) return
-                const alreadySeen = Array.isArray(msg.seen) && msg.seen.includes(user.id)
+                // `seen` is single user id or null
+                const alreadySeen = (typeof msg.seen === 'string' && String(msg.seen) === String(user.id));
                 if (alreadySeen) return
                 if (!isMessageVisible(node)) return
                 const key = `${id}:${user.id}`
@@ -2127,10 +2158,11 @@ const AguacateChat = () => {
             })
             // Apply updates sequentially to avoid RLS/race issues
             for (const u of updates) {
-                try {
+                    try {
                     const res = await appendUserToMessageSeen(u.id, user.id)
                     if (res?.updated) {
-                        setChatMessages(prev => prev.map(m => m.id === u.id ? { ...m, seen: Array.isArray(m.seen) ? [...m.seen, user.id] : [user.id] } : m))
+                        // Set seen to the single user id
+                        setChatMessages(prev => prev.map(m => m.id === u.id ? { ...m, seen: user.id } : m))
                     }
                 } catch (err) {
                     // allow retry in future
@@ -2408,8 +2440,8 @@ const AguacateChat = () => {
         for (let i = chatMessages.length - 1; i >= 0; i--) {
             const m = chatMessages[i];
             if (m?.type === 'sent') {
-                const seenArr = Array.isArray(m?.seen) ? m.seen : [];
-                if (seenArr.includes(otherUserId)) return i;
+                const seenId = (typeof m?.seen === 'string') ? m.seen : null;
+                if (seenId && String(seenId) === String(otherUserId)) return i;
             }
         }
         return -1;
@@ -2535,7 +2567,7 @@ const AguacateChat = () => {
                     const r = map.get(m.id);
                     if (!r) return m;
                     // Si hay novedad en 'seen', aplícala
-                    const incomingSeen = Array.isArray(r.seen) ? r.seen : m.seen;
+                    const incomingSeen = (typeof r.seen === 'string' ? r.seen : m.seen);
                     if (JSON.stringify(incomingSeen) !== JSON.stringify(m.seen)) {
                         return { ...m, seen: incomingSeen };
                     }
@@ -2585,7 +2617,7 @@ const AguacateChat = () => {
                     const { messages, hasMore, nextCursor } = await fetchMessagesPage(selectedContact.conversationId, { limit: PAGE_SIZE, afterMessageId: afterMessageId2, afterTimestamp: afterTimestamp2 });
                     const mapped = messages.map(m => {
                         const replyNormalized = m.replyng_to || m.reply_to || m.replyTo || null;
-                        const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: Array.isArray(m.seen) ? m.seen : [], replyTo: replyNormalized };
+                        const base = { id: m.id, type: m.sender_id === user?.id ? 'sent' : 'received', created_at: m.created_at, messageType: m.type || 'text', seen: (typeof m.seen === 'string' ? m.seen : null), replyTo: replyNormalized };
                         if (m.type === 'audio') return { ...base, audioUrl: m.content, text: '(Audio)' };
                         if (m.type === 'video') return { ...base, text: m.content };
                         if (m.type === 'image') return { ...base, text: m.content };

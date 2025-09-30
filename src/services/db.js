@@ -197,7 +197,8 @@ export async function fetchUserConversations(currentUserId) {
       acepted: conv.acepted, // puede venir null/false
       otherUserId: otherId,
       otherProfile: prof,
-      last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id, type: last.type || 'text', seen: Array.isArray(last.seen) ? last.seen : [] } : null,
+      // `seen` stored as a single user id or null in direct conversations
+      last_message: last ? { id: last.id, content: last.content, sender_id: last.sender_id, type: last.type || 'text', seen: (typeof last.seen === 'string' ? last.seen : null) } : null,
       last_message_at: last?.created_at || conv.created_at,
     })
   }
@@ -213,7 +214,7 @@ export async function fetchUserConversations(currentUserId) {
 }
 
 // Messages helpers
-export async function insertMessage({ conversationId, senderId, content, type, replyng_to, reply_to, replyTo, story_meta }) {
+export async function insertMessage({ conversationId, senderId, content, type, replyng_to, reply_to, replyTo }) {
   if (!conversationId || !senderId || !content?.trim()) {
     throw new Error('Datos de mensaje incompletos')
   }
@@ -225,7 +226,6 @@ export async function insertMessage({ conversationId, senderId, content, type, r
     content: content.trim(),
     ...(type ? { type } : {}),
     ...(normalizedReply ? { replyng_to: normalizedReply } : {}),
-    ...(story_meta ? { story_meta } : {}), // JSON oculto con metadata de historia
   }
   console.log('Inserting message:', payload);
   const { error } = await supabase.from('messages').insert(payload)
@@ -241,7 +241,7 @@ export async function fetchMessagesByConversation(conversationId, { limit } = {}
   if (!conversationId) return []
   let query = supabase
     .from('messages')
-  .select('id, sender_id, content, created_at, type, replyng_to, story_meta')
+  .select('id, sender_id, content, created_at, type, replyng_to')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
   if (limit) query = query.limit(limit)
@@ -258,7 +258,7 @@ export async function fetchMessagesPage(conversationId, { limit = 30, before = n
   if (!conversationId) return { messages: [], hasMore: false, nextCursor: null }
   let query = supabase
     .from('messages')
-  .select('id, sender_id, content, type, created_at, seen, replyng_to, story_meta')
+  .select('id, sender_id, content, type, created_at, seen, replyng_to')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit + 1) // fetch one extra to detect if there are more
@@ -347,29 +347,32 @@ export async function uploadVideoToBucket({ file, conversationId, userId, bucket
   return { publicUrl, path }
 }
 
-// Append a userId to messages.seen array, without overwriting the whole array.
-// It first reads current seen, avoids duplicates, and updates only if needed.
+// Mark a message as seen by a single user. For direct conversations only there
+// will be at most one viewer, so the `messages.seen` column is treated as a
+// single user id (string) or null. This function will set `seen` to the
+// provided userId if it isn't already set to that value.
 export async function appendUserToMessageSeen(messageId, userId) {
   if (!messageId || !userId) return { updated: false }
-  // 1) Read current seen
+  // 1) Read current seen value
   const { data: row, error: selErr } = await supabase
     .from('messages')
     .select('id, seen')
     .eq('id', messageId)
     .single()
   if (selErr) throw selErr
-  const current = Array.isArray(row?.seen) ? row.seen : []
-  if (current.includes(userId)) {
-    return { updated: false }
+  const current = row?.seen || null
+  // If already marked by the same user, nothing to do
+  if (current === userId) {
+    return { updated: false, seen: current }
   }
-  const next = [...current, userId]
-  // 2) Update with merged array
-  const { error: updErr } = await supabase
+  // 2) Update with single userId
+  const { error: updErr, data: updated } = await supabase
     .from('messages')
-    .update({ seen: next })
+    .update({ seen: userId })
     .eq('id', messageId)
+    .select('id, seen')
   if (updErr) throw updErr
-  return { updated: true, seen: next }
+  return { updated: true, seen: updated?.[0]?.seen ?? userId }
 }
 
 // Toggle blocked state of a conversation. If conversation blocked is true -> set false (and clear blocked_by), else true (and set blocked_by=userId).

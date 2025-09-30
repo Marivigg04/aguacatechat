@@ -1,3 +1,4 @@
+import { isColorLight } from '../../utils/colorUtils';
 import React, { useEffect } from 'react';
 import CenterNoticeBox from '../common/CenterNoticeBox.jsx';
 import ChatImage from './ChatImage.jsx';
@@ -183,6 +184,11 @@ const ChatArea = ({
           )}
           {chatMessages.map((message, index) => {
             const isOwn = message.type === 'sent';
+            const bubbleColor = isOwn ? personalization.bubbleColors.sent : personalization.bubbleColors.received;
+            const menuIconColor = isColorLight(bubbleColor) ? 'text-gray-800' : 'text-gray-200';
+            const menuIconHoverColor = isColorLight(bubbleColor) ? 'hover:text-black' : 'hover:text-white';
+            const menuBgHoverColor = isColorLight(bubbleColor) ? 'hover:bg-black/10' : 'hover:bg-white/10';
+            const menuBgActiveColor = isColorLight(bubbleColor) ? 'bg-black/10' : 'bg-white/10';
             const currentDate = message.created_at ? new Date(message.created_at) : null;
             const prevMsg = index > 0 ? chatMessages[index - 1] : null;
             const prevDate = prevMsg?.created_at ? new Date(prevMsg.created_at) : null;
@@ -375,7 +381,7 @@ const ChatArea = ({
                   {isOwn && (
                     <div className="flex items-center mr-2 select-none order-first">
                       <button
-                        className={`menu-trigger w-8 h-8 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none rounded-full transition-all duration-150 opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 ${(messageMenuOpenId === index && messageMenuType==='own') ? 'opacity-100 bg-black/5 dark:bg-white/10' : ''}`}
+                        className={`menu-trigger w-8 h-8 flex items-center justify-center ${menuIconColor} ${menuIconHoverColor} focus:outline-none rounded-full transition-all duration-150 opacity-0 group-hover:opacity-100 ${menuBgHoverColor} ${(messageMenuOpenId === index && messageMenuType==='own') ? `opacity-100 ${menuBgActiveColor}` : ''}`}
                         aria-label="Más opciones"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -400,7 +406,7 @@ const ChatArea = ({
                   {!isOwn && (
                     <div className="flex items-center ml-2 select-none">
                       <button
-                        className={`menu-trigger w-8 h-8 flex items-center justify-center text-gray-400 hover:text-teal-500 focus:outline-none rounded-full transition-all duration-150 opacity-0 group-hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 ${(messageMenuOpenId === index && messageMenuType==='received') ? 'opacity-100 bg-black/5 dark:bg-white/10' : ''}`}
+                        className={`menu-trigger w-8 h-8 flex items-center justify-center ${menuIconColor} ${menuIconHoverColor} focus:outline-none rounded-full transition-all duration-150 opacity-0 group-hover:opacity-100 ${menuBgHoverColor} ${(messageMenuOpenId === index && messageMenuType==='received') ? `opacity-100 ${menuBgActiveColor}` : ''}`}
                         aria-label="Más opciones"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -423,25 +429,19 @@ const ChatArea = ({
                   )}
                   {/* Menú contextual propios */}
       {isOwn && messageMenuOpenId === index && messageMenuType==='own' && (
-                    (() => {
-                      const isLastOwn = index === chatMessages.length - 1; // última burbuja enviada por el usuario
-                      return (
-                        <div
-        className={`message-menu absolute w-40 theme-bg-chat theme-border rounded-lg shadow-lg animate-fade-in ${isLastOwn ? 'right-5 bottom-full mb-2' : 'right-5 top-6'} `}
-                          style={{ zIndex: 9999 }}
-                        >
-                      <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType }); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Responder</button>
-                      <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Ver información</button>
-                      <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Fijar mensaje</button>
-                      <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Editar mensaje</button>
-                      <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { openDeleteMessageModal(message, true); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Eliminar mensaje</button>
-                        </div>
-                      );
-                    })()
-                  )}
+        <div
+          className="message-menu absolute w-40 theme-bg-chat theme-border rounded-lg shadow-lg animate-fade-in right-5 bottom-full mb-2"
+          style={{ zIndex: 9999 }}
+        >
+          <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType }); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Responder</button>
+          <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Fijar mensaje</button>
+          <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Editar mensaje</button>
+          <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { openDeleteMessageModal(message, true); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Eliminar mensaje</button>
+        </div>
+      )}
                   {/* Menú contextual recibidos */}
                   {!isOwn && messageMenuOpenId === index && messageMenuType==='received' && (
-                    <div className="message-menu absolute left-5 top-6 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in" style={{ zIndex: 9999 }}>
+                    <div className="message-menu absolute left-5 bottom-full mb-2 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in" style={{ zIndex: 9999 }}>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType }); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Responder</button>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { try { navigator.clipboard.writeText(message.text || ''); } catch{}; setMessageMenuOpenId(null); setMessageMenuType(null); }}>Copiar</button>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Fijar</button>
