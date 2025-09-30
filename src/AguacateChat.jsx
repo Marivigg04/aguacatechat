@@ -4118,6 +4118,7 @@ const AguacateChat = () => {
                                         });
                                     }}
                                     onClose={() => setShowEmojiPicker(false)}
+                                    keepOpenOnMobile={true}
                                 />
                             )}
                         </div>
