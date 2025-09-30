@@ -1651,7 +1651,10 @@ const AguacateChat = () => {
         return () => {
             try { supabase.removeChannel(channel); } catch {}
         };
-    }, [user?.id]);
+    // Re-run this effect when privacy settings change so that toggling
+    // `showLastConex` or `showStatus` takes effect immediately without
+    // needing a full reload (it will update the profiles table).
+    }, [user?.id, privacySettings]);
 
     // Suscripción focalizada a la conversación seleccionada: refuerza updates de 'seen'
     useEffect(() => {
@@ -1873,7 +1876,10 @@ const AguacateChat = () => {
                 setSelectedContact(updatedContact);
             }
         }
-    }, [conversations, selectedContact?.conversationId]);
+    // También re-ejecutar cuando cambian las privacySettings para que el
+    // `selectedContact` se actualice inmediatamente (por ejemplo al activar
+    // "Mostrar Última Conexión").
+    }, [conversations, selectedContact?.conversationId, privacySettings]);
 
     const toggleTheme = () => {
         setIsDarkMode(!isDarkMode);
