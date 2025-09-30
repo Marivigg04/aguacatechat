@@ -2262,21 +2262,30 @@ const AguacateChat = () => {
             toast.info('Espera a que el otro usuario responda para continuar la conversación.');
             return;
         }
-        // Detectar si el usuario estaba al fondo antes de agregar el mensaje para decidir auto-scroll
+        // Detectar la posición del scroll para decidir comportamiento al enviar
         let wasAtBottom = false;
+        let wasFarFromBottom = false;
         try {
             const el = chatAreaRef.current;
             if (el) {
                 const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-                wasAtBottom = distance < 60; // tolerancia
+                wasAtBottom = distance < 60; // tolerancia para considerar "al fondo"
+                // Si el usuario está muy arriba (ej. >300px del fondo) forzamos transporte al final
+                wasFarFromBottom = distance > 300;
             }
         } catch {}
         const tempId = `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const optimistic = { id: tempId, type: 'sent', text: content, created_at: new Date().toISOString(), messageType: 'text', replyTo: replyToMessage ? replyToMessage.id : null };
         setChatMessages(prev => [...prev, optimistic]);
+        // Si estaba al fondo, seguir con scroll suave. Si estaba muy arriba, forzar salto inmediato
         if (wasAtBottom) {
             shouldScrollToBottomRef.current = true;
             stickToBottomRef.current = true; // continuar siguiendo
+        } else if (wasFarFromBottom) {
+            // Forzar salto inmediato al final para que el autor vea su propio mensaje
+            shouldScrollToBottomRef.current = true;
+            jumpToBottomImmediateRef.current = true;
+            stickToBottomRef.current = true;
         }
         setMessageInput('');
         setReplyToMessage(null);
@@ -2342,6 +2351,21 @@ const AguacateChat = () => {
             const tempId = `tmp-img-${Date.now()}-${Math.random().toString(16).slice(2)}`;
             const localPreviewUrl = URL.createObjectURL(fileToUpload);
             setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localPreviewUrl, created_at: new Date().toISOString(), messageType: 'image', replyTo: replyToMessage ? replyToMessage.id : null }]);
+            // Comportamiento de scroll al enviar desde posición alta
+            try {
+                const el = chatAreaRef.current;
+                if (el) {
+                    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+                    if (distance > 300) {
+                        shouldScrollToBottomRef.current = true;
+                        jumpToBottomImmediateRef.current = true;
+                        stickToBottomRef.current = true;
+                    } else if (distance < 60) {
+                        shouldScrollToBottomRef.current = true;
+                        stickToBottomRef.current = true;
+                    }
+                }
+            } catch {}
 
             const { error: uploadError } = await supabase.storage
                 .from('chatphotos')
@@ -2419,6 +2443,21 @@ const AguacateChat = () => {
             const localUrl = URL.createObjectURL(file);
             // Mensaje optimista
             setChatMessages(prev => [...prev, { id: tempId, type: 'sent', text: localUrl, created_at: new Date().toISOString(), messageType: 'video', uploading: true, replyTo: replyToMessage ? replyToMessage.id : null }]);
+            // Comportamiento de scroll al enviar desde posición alta
+            try {
+                const el = chatAreaRef.current;
+                if (el) {
+                    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+                    if (distance > 300) {
+                        shouldScrollToBottomRef.current = true;
+                        jumpToBottomImmediateRef.current = true;
+                        stickToBottomRef.current = true;
+                    } else if (distance < 60) {
+                        shouldScrollToBottomRef.current = true;
+                        stickToBottomRef.current = true;
+                    }
+                }
+            } catch {}
 
             // Subir al bucket
             const { uploadVideoToBucket } = await import('./services/db');
