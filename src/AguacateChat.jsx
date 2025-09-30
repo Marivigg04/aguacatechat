@@ -2227,6 +2227,17 @@ const AguacateChat = () => {
     // Estado para respuesta a un mensaje
     const [replyToMessage, setReplyToMessage] = useState(null); // {id, text, messageType}
 
+    // Enfocar y seleccionar el input de mensaje al cambiar de conversación
+    useEffect(() => {
+        try {
+            if (selectedContact && messageInputRef?.current) {
+                const el = messageInputRef.current;
+                if (typeof el.focus === 'function') el.focus();
+                try { if (typeof el.select === 'function') el.select(); } catch (e) {}
+            }
+        } catch (e) {}
+    }, [selectedContact?.conversationId]);
+
     // --- Restricción: creador solo puede enviar 1 mensaje hasta que el otro responda ---
     // isConversationCreator ya se setea al seleccionar la conversación (cuando created_by === user.id)
     // Calculamos si el creador debe quedar bloqueado para seguir enviando.
@@ -3692,7 +3703,28 @@ const AguacateChat = () => {
                     messageMenuType={messageMenuType}
                     setMessageMenuOpenId={setMessageMenuOpenId}
                     setMessageMenuType={setMessageMenuType}
-                    setReplyToMessage={setReplyToMessage}
+                    setReplyToMessage={(payload) => {
+                        try {
+                            setReplyToMessage(payload);
+                        } catch (e) {
+                            try { setReplyToMessage(payload); } catch {}
+                        }
+                        // Focus & select the message input when replying
+                        try {
+                            const el = messageInputRef?.current;
+                            if (el) {
+                                // some inputs are textarea or contenteditable-like; attempt focus and select
+                                if (typeof el.focus === 'function') el.focus();
+                                if (typeof el.select === 'function') el.select();
+                                // for non-standard elements try selecting via setSelectionRange when possible
+                                try {
+                                    if (el.setSelectionRange && typeof el.value === 'string') {
+                                        el.setSelectionRange(el.value.length, el.value.length);
+                                    }
+                                } catch (err) {}
+                            }
+                        } catch (err) {}
+                    }}
                     blockedBy={blockedBy}
                     handleToggleConversationBlocked={handleToggleConversationBlocked}
                     isTogglingBlocked={isTogglingBlocked}
