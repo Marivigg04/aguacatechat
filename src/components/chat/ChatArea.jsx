@@ -434,8 +434,7 @@ const ChatArea = ({
           style={{ zIndex: 9999 }}
         >
           <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType }); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Responder</button>
-          <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Fijar mensaje</button>
-          <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Editar mensaje</button>
+          <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { try { navigator.clipboard.writeText(message.audioUrl || message.text || ''); } catch{}; setMessageMenuOpenId(null); setMessageMenuType(null); }}>Copiar</button>
           <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { openDeleteMessageModal(message, true); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Eliminar mensaje</button>
         </div>
       )}
@@ -444,7 +443,6 @@ const ChatArea = ({
                     <div className="message-menu absolute left-5 bottom-full mb-2 w-40 theme-bg-chat theme-border rounded-lg shadow-lg z-50 animate-fade-in" style={{ zIndex: 9999 }}>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setReplyToMessage({ id: message.id, text: message.text, messageType: message.messageType }); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Responder</button>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { try { navigator.clipboard.writeText(message.text || ''); } catch{}; setMessageMenuOpenId(null); setMessageMenuType(null); }}>Copiar</button>
-                      <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { setMessageMenuOpenId(null); setMessageMenuType(null); }}>Fijar</button>
                       <button className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-200 rounded-lg" onClick={() => { openDeleteMessageModal(message, false); setMessageMenuOpenId(null); setMessageMenuType(null); }}>Eliminar</button>
                     </div>
                   )}
