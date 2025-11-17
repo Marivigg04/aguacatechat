@@ -11,6 +11,7 @@ import ChatShell from './components/chat/ChatShell.jsx';
 // Utilidades y hooks
 import { withMinDelay } from './utils/js/withMinDelay.js';
 import { useAuth } from './context/AuthContext.jsx';
+import { ensurePushRegistered } from './services/pushNotifications.js';
 import useAuthDelay from './hooks/useAuthDelay';
 
 // Lazy imports
@@ -25,6 +26,17 @@ function App() {
   const { isAuthenticated, loading } = useAuth();
   // Forzar que la pantalla de carga de auth dure al menos 600ms
   const authDelayDone = useAuthDelay(loading, 600);
+
+  // Registro de notificaciones push cuando el usuario se autentica.
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Pequeño timeout para garantizar que el contexto y user estén listos
+      const t = setTimeout(() => {
+        ensurePushRegistered();
+      }, 250);
+      return () => clearTimeout(t);
+    }
+  }, [isAuthenticated]);
 
   // La navegación y transiciones entre AuthPage y PasswordReset
   // ahora están encapsuladas en `AuthContainer`.
