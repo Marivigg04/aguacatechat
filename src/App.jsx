@@ -23,20 +23,20 @@ import './Login/styles/AuthPage.css';
 
 function App() {
   // Autenticación derivada del contexto global
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
   // Forzar que la pantalla de carga de auth dure al menos 600ms
   const authDelayDone = useAuthDelay(loading, 600);
 
   // Registro de notificaciones push cuando el usuario se autentica.
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && user) {
       // Pequeño timeout para garantizar que el contexto y user estén listos
       const t = setTimeout(() => {
-        ensurePushRegistered();
+        ensurePushRegistered(user);
       }, 250);
       return () => clearTimeout(t);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   // La navegación y transiciones entre AuthPage y PasswordReset
   // ahora están encapsuladas en `AuthContainer`.

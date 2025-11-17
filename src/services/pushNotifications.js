@@ -4,7 +4,6 @@
 import { PushNotifications } from '@capacitor/push-notifications'
 import { Capacitor } from '@capacitor/core'
 import { supabase } from './supabaseClient'
-import { getCurrentUser } from '../context/AuthContext.jsx'
 
 const LS_TOKEN_KEY = 'ac_push_token'
 
@@ -12,13 +11,12 @@ function isNative() {
   return Capacitor?.isNativePlatform?.() || (typeof window !== 'undefined' && !!window?.androidBridge)
 }
 
-export async function ensurePushRegistered() {
+export async function ensurePushRegistered(user) {
   if (!isNative()) {
     console.info('[Push] Plataforma web: se omite registro de notificaciones.')
     return
   }
 
-  const user = getCurrentUser()
   if (!user?.id) {
     console.warn('[Push] No hay usuario autenticado aún, se pospone registro.')
     return
