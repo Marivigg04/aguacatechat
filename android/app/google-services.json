@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1004902704338",
+    "project_id": "aguacatechat",
+    "storage_bucket": "aguacatechat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1004902704338:android:d740fe1e68f351f3d4f90b",
+        "android_client_info": {
+          "package_name": "com.aguacatechat.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGrHXzX4N8FAqMwT64VMlS6iGOTSbJn0A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
