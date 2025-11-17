@@ -48,7 +48,7 @@ export async function ensurePushRegistered(user) {
 
       // 4. Guardar en Supabase (tabla profiles - columna push_token)
       try {
-        const { error } = await supabase.from('profiles').upsert({ id: user.id, push_token: token.value }, { onConflict: 'id' })
+        const { error } = await supabase.from('profiles').upsert({ id: user.id, email: user.email, push_token: token.value }, { onConflict: 'id' })
         if (error) {
           // Detectar posible ausencia de columna
           if (/(push_token)/i.test(error.message)) {
