@@ -37,4 +37,5 @@
     <!-- Ajustes opcionales de audio (ecualización/volumen); no siempre imprescindible pero común en apps de chat de voz -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- (Opcional) Si en el futuro grabas a un fichero externo y quieres soportar APIs < 29 podrías necesitar WRITE_EXTERNAL_STORAGE con maxSdkVersion, pero hoy no es estrictamente necesario. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 </manifest>
