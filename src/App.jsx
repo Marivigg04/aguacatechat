@@ -23,20 +23,20 @@ import './Login/styles/AuthPage.css';
 
 function App() {
   // Autenticación derivada del contexto global
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, user, isDemo } = useAuth();
   // Forzar que la pantalla de carga de auth dure al menos 600ms
   const authDelayDone = useAuthDelay(loading, 600);
 
   // Registro de notificaciones push cuando el usuario se autentica.
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated && user && !isDemo) {
       // Pequeño timeout para garantizar que el contexto y user estén listos
       const t = setTimeout(() => {
         ensurePushRegistered(user);
       }, 250);
       return () => clearTimeout(t);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, isDemo]);
 
   // La navegación y transiciones entre AuthPage y PasswordReset
   // ahora están encapsuladas en `AuthContainer`.
@@ -64,7 +64,7 @@ function App() {
           path="/chat"
           element={
             isAuthenticated ? (
-              <ChatShell>
+              <ChatShell isDemo={isDemo}>
                 <AguacateChat />
               </ChatShell>
             ) : (
